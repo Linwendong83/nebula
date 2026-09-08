@@ -121,7 +121,7 @@ public class BuildToolManager : IDisposable
                 if (packet.PrebuildId != Multiplayer.Session.Factories.GetNextPrebuildId(packet.PlanetId))
                 {
                     var warningText =
-                        $"(Desync) PrebuildId mismatch {packet.PrebuildId} != {Multiplayer.Session.Factories.GetNextPrebuildId(planet.factory)} on planet {planet.displayName}. Please reconnect!";
+                        string.Format("(Desync) PrebuildId mismatch {0} != {1} on planet {2}. Please reconnect!".Translate(), packet.PrebuildId, Multiplayer.Session.Factories.GetNextPrebuildId(planet.factory), planet.displayName);
                     Log.WarnInform(warningText);
                     WarningManager.DisplayTemporaryWarning(warningText, 15000);
                 }

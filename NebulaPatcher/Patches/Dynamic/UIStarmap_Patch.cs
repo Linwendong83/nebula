@@ -47,7 +47,7 @@ internal class UIStarmap_Patch
         {
             return true;
         }
-        InGamePopup.ShowWarning("Unavailable", "Cannot teleport to gas giant", "OK");
+        InGamePopup.ShowWarning("Unavailable".Translate(), "Cannot teleport to gas giant".Translate(), "OK".Translate());
         return false;
     }
 

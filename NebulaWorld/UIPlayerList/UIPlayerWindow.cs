@@ -74,19 +74,24 @@ namespace NebulaWorld.UIPlayerList
 
             var localPlayer = GameMain.mainPlayer;
 
+            UIStyles.LabelStyles.HeaderLabelStyle.font = ChatLocalization.Font;
+            UIStyles.LabelStyles.CenterLabelLarge.font = ChatLocalization.Font;
+            UIStyles.LabelStyles.RowHeaderLabelsStyle.font = ChatLocalization.Font;
+            UIStyles.LabelStyles.RowLabelStyle.font = ChatLocalization.Font;
+
             try
             {
                 GUILayout.BeginArea(new Rect(5f, 20f, windowSize.width - 10f, windowSize.height - 55f)); areaBegins++;
                 GUILayout.BeginHorizontal(); horizontalBegins++;
                 GUILayout.Space(2);
-                GUILayout.Label("Online Players", UIStyles.LabelStyles.HeaderLabelStyle, new GUILayoutOption[] { GUILayout.ExpandHeight(false), GUILayout.ExpandWidth(true) });
+                GUILayout.Label("Online Players".Translate(), UIStyles.LabelStyles.HeaderLabelStyle, new GUILayoutOption[] { GUILayout.ExpandHeight(false), GUILayout.ExpandWidth(true) });
                 GUILayout.EndHorizontal(); horizontalBegins--;
 
 
                 // If the player is alone in their save, then do not draw the scoreboard proper
                 if (AmIAlone())
                 {
-                    GUILayout.Label("It's Just You", UIStyles.LabelStyles.CenterLabelLarge, new GUILayoutOption[] { GUILayout.ExpandHeight(true), GUILayout.ExpandWidth(true) });
+                    GUILayout.Label("It's Just You".Translate(), UIStyles.LabelStyles.CenterLabelLarge, new GUILayoutOption[] { GUILayout.ExpandHeight(true), GUILayout.ExpandWidth(true) });
                     GUILayout.EndArea();
                     return;
                 }
@@ -96,9 +101,9 @@ namespace NebulaWorld.UIPlayerList
 
                 // Headers
                 GUILayout.BeginHorizontal(); horizontalBegins++;
-                GUILayout.Label("Name", UIStyles.LabelStyles.RowHeaderLabelsStyle, GUILayout.Width(300));
-                GUILayout.Label("Location", UIStyles.LabelStyles.RowHeaderLabelsStyle, GUILayout.Width(600));
-                GUILayout.Label("Distance", UIStyles.LabelStyles.RowHeaderLabelsStyle, GUILayout.Width(100));
+                GUILayout.Label("Name".Translate(), UIStyles.LabelStyles.RowHeaderLabelsStyle, GUILayout.Width(300));
+                GUILayout.Label("Location".Translate(), UIStyles.LabelStyles.RowHeaderLabelsStyle, GUILayout.Width(600));
+                GUILayout.Label("Distance".Translate(), UIStyles.LabelStyles.RowHeaderLabelsStyle, GUILayout.Width(100));
                 GUILayout.EndHorizontal(); horizontalBegins--;
 
                 // Horizontal bar
@@ -132,7 +137,7 @@ namespace NebulaWorld.UIPlayerList
                                 pLocation = $"{pPlanet.displayName}";
 
                             if (pPlanet == null)
-                                pLocation = "In Space";
+                                pLocation = "In Space".Translate();
 
                             var pPosition = player.PlayerTransform.position;
                             var distance = Vector3.Distance(localPlayer.position, pPosition);

@@ -248,7 +248,7 @@ public class Server : IServer
         catch (InvalidOperationException e)
         {
             Log.Warn(e.ToString());
-            InGamePopup.ShowError("Error", "An error occurred while hosting the game: ".Translate() + e.Message,
+            InGamePopup.ShowError("Error".Translate(), "An error occurred while hosting the game: ".Translate() + e.Message,
                 "Close".Translate());
             Stop();
             Multiplayer.LeaveGame();

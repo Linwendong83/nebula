@@ -27,13 +27,13 @@ public class DevCommandHandler : IChatCommandHandler
                 {
                     GameMain.sandboxToolsEnabled = !GameMain.sandboxToolsEnabled;
                     GameMain.data.gameDesc.isSandboxMode = GameMain.sandboxToolsEnabled;
-                    chatService.AddMessage("SandboxTool enable: " + GameMain.sandboxToolsEnabled, ChatMessageType.CommandOutputMessage);
+                    chatService.AddMessage("SandboxTool enable: ".Translate() + (GameMain.sandboxToolsEnabled ? "Enabled".Translate() : "Disabled".Translate()), ChatMessageType.CommandOutputMessage);
                     return;
                 }
             case "load-cfg":
                 {
                     // Adjust combat settings or make resources infinite
-                    chatService.AddMessage("Overwrite settings from nebulaGameDescSettings.cfg", ChatMessageType.CommandOutputMessage);
+                    chatService.AddMessage("Overwrite settings from nebulaGameDescSettings.cfg".Translate(), ChatMessageType.CommandOutputMessage);
                     var gameDesc = GameMain.data.gameDesc;
                     var starCount = gameDesc.starCount;
                     var galaxySeed = gameDesc.galaxySeed;
@@ -54,17 +54,17 @@ public class DevCommandHandler : IChatCommandHandler
                 {
                     if (Multiplayer.Session.IsServer)
                     {
-                        chatService.AddMessage("this command is only available for client", ChatMessageType.CommandOutputMessage);
+                        chatService.AddMessage("this command is only available for client".Translate(), ChatMessageType.CommandOutputMessage);
                     }
                     else if (GameMain.localPlanet != null)
                     {
-                        chatService.AddMessage("can only unload when in space", ChatMessageType.CommandOutputMessage);
+                        chatService.AddMessage("can only unload when in space".Translate(), ChatMessageType.CommandOutputMessage);
                     }
                     else
                     {
                         var factoryCount = GameMain.data.factoryCount;
                         PlanetManager.UnloadAllFactories();
-                        chatService.AddMessage($"unload factory count: {factoryCount}", ChatMessageType.CommandOutputMessage);
+                        chatService.AddMessage(string.Format("unload factory count: {0}".Translate(), factoryCount), ChatMessageType.CommandOutputMessage);
                     }
                     return;
                 }
@@ -76,7 +76,7 @@ public class DevCommandHandler : IChatCommandHandler
                         _ = DelayedResponse(value);
                         return;
                     }
-                    chatService.AddMessage("Pong", ChatMessageType.CommandOutputMessage);
+                    chatService.AddMessage("Pong".Translate(), ChatMessageType.CommandOutputMessage);
                 }
                 return;
 
@@ -86,7 +86,7 @@ public class DevCommandHandler : IChatCommandHandler
                 }
 
             default:
-                chatService.AddMessage("Unknown command: " + parameters[0], ChatMessageType.CommandOutputMessage);
+                chatService.AddMessage("Unknown command: ".Translate() + parameters[0], ChatMessageType.CommandOutputMessage);
                 return;
         }
     }
@@ -106,7 +106,7 @@ public class DevCommandHandler : IChatCommandHandler
         await Task.Delay(time * 1000);
         ThreadingHelper.Instance.StartSyncInvoke(() =>
         {
-            ChatManager.Instance.SendChatMessage("Pong", ChatMessageType.CommandOutputMessage);
+            ChatManager.Instance.SendChatMessage("Pong".Translate(), ChatMessageType.CommandOutputMessage);
         });
     }
 }

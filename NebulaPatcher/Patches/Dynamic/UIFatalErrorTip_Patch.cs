@@ -33,7 +33,7 @@ internal class UIFatalErrorTip_Patch
         {
             return;
         }
-        UIFatalErrorTip.instance.ShowError("[Nebula Error] " + Log.LastErrorMsg, "");
+        UIFatalErrorTip.instance.ShowError("[Nebula Error] ".Translate() + Log.LastErrorMsg, "");
         Log.LastErrorMsg = null;
     }
 
@@ -138,7 +138,7 @@ internal class UIFatalErrorTip_Patch
         {
             return;
         }
-        var log = "Server report an error: \n" + UIFatalErrorTip.instance.errorLogText.text;
+        var log = "Server report an error: \n".Translate() + UIFatalErrorTip.instance.errorLogText.text;
         Log.Warn(log);
         Multiplayer.Session.Network.SendPacket(new NewChatMessagePacket(ChatMessageType.SystemWarnMessage, log,
             DateTime.Now, ""));
@@ -148,18 +148,13 @@ internal class UIFatalErrorTip_Patch
     {
         var stringBuilder = new StringBuilder();
 
-        stringBuilder.Append("Error report: Game version ");
-        stringBuilder.Append(GameConfig.gameVersion.ToString());
-        stringBuilder.Append('.');
-        stringBuilder.Append(GameConfig.gameVersion.Build);
-        stringBuilder.Append(" with ");
-        stringBuilder.Append(Chainloader.PluginInfos.Values.Count);
-        stringBuilder.Append(" mods used. ");
+        stringBuilder.Append(string.Format("Error report: Game version {0} with {1} mods used. ".Translate(),
+            GameConfig.gameVersion.ToString() + "." + GameConfig.gameVersion.Build, Chainloader.PluginInfos.Values.Count));
         if (Multiplayer.IsActive)
         {
             stringBuilder.Append("Nebula");
             stringBuilder.Append(PluginInfo.PLUGIN_VERSION);
-            stringBuilder.Append(Multiplayer.Session.LocalPlayer.IsHost ? " (Host)" : " (Client)");
+            stringBuilder.Append(Multiplayer.Session.LocalPlayer.IsHost ? " (Host)".Translate() : " (Client)".Translate());
         }
 
         if (fullList)

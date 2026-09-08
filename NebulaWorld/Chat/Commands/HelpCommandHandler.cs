@@ -42,7 +42,7 @@ public class HelpCommandHandler : IChatCommandHandler
 
     public string[] GetUsage()
     {
-        return ["[command name]"];
+        return ["[command name]".Translate()];
     }
 
     private static string GetCommandDetailsOutput(string commandName)

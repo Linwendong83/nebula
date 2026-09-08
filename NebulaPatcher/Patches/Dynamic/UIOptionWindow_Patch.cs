@@ -12,6 +12,7 @@ using NebulaModel;
 using NebulaModel.Attributes;
 using NebulaModel.Logger;
 using NebulaWorld;
+using NebulaWorld.MonoBehaviours.Local;
 using NGPT;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -37,6 +38,7 @@ internal class UIOptionWindow_Patch
     private static RectTransform multiplayerContent;
     private static int multiplayerTabIndex;
     private static Dictionary<string, Action> tempToUICallbacks;
+    private static readonly List<Action> languageCallbacks = [];
     private static MultiplayerOptions tempMultiplayerOptions = new();
 
     // Sub tabs
@@ -53,6 +55,9 @@ internal class UIOptionWindow_Patch
     public static void _OnCreate_Postfix(UIOptionWindow __instance)
     {
         tempToUICallbacks = new();
+        languageCallbacks.Clear();
+        Localization.OnLanguageChange -= RefreshTranslations;
+        Localization.OnLanguageChange += RefreshTranslations;
         tempMultiplayerOptions = new();
 
         // Clear static lists from previous window creation
@@ -106,7 +111,7 @@ internal class UIOptionWindow_Patch
         // Update multiplayer tab text
         var tabText = multiplayerTab.GetComponentInChildren<Text>();
         tabText.GetComponent<Localizer>().enabled = false;
-        tabText.text = "Multiplayer".Translate();
+        NebulaLocalizedText.Set(tabText, "Multiplayer");
         var tabTexts = __instance.tabTexts;
         var newTabTexts = tabTexts.AddToArray(tabText);
         __instance.tabTexts = newTabTexts;
@@ -166,7 +171,7 @@ internal class UIOptionWindow_Patch
             subtabButtons.Add(subtab.GetComponent<UIButton>());
             subtab.name = $"tab-button-{subtabButtons.Count}";
             var subtabText = subtab.GetComponentInChildren<Text>();
-            subtabText.text = "General".Translate();
+            NebulaLocalizedText.Set(subtabText, "General");
             subtabTexts.Add(subtabText);
             subtabTemplate = subtab;
         }
@@ -261,6 +266,8 @@ internal class UIOptionWindow_Patch
     public static void _OnDestroy_Postfix()
     {
         tempToUICallbacks?.Clear();
+        Localization.OnLanguageChange -= RefreshTranslations;
+        languageCallbacks.Clear();
     }
 
     [HarmonyPrefix]
@@ -302,6 +309,11 @@ internal class UIOptionWindow_Patch
                 callback();
             }
         }
+    }
+
+    private static void RefreshTranslations()
+    {
+        foreach (var callback in languageCallbacks) callback();
     }
 
     private static void OnSubtabButtonClick(int idx)
@@ -355,7 +367,7 @@ internal class UIOptionWindow_Patch
                     index = subtabTexts.FindIndex(text => text.text.Translate() == categoryAttribute.Category.Translate());
                     if (index == -1)
                     {
-                        CreateSubtab(categoryAttribute.Category.Translate());
+                        CreateSubtab(categoryAttribute.Category);
                         index = subtabTexts.Count - 1;
                     }
                 }
@@ -404,7 +416,7 @@ internal class UIOptionWindow_Patch
         subtabButtons.Add(subtab.GetComponent<UIButton>());
         subtab.name = $"tab-button-{subtabButtons.Count}";
         var subtabText = subtab.GetComponentInChildren<Text>();
-        subtabText.text = subtabName;
+        NebulaLocalizedText.Set(subtabText, subtabName);
         subtabTexts.Add(subtabText);
 
         var content = new GameObject(subtabName, typeof(RectTransform));
@@ -458,7 +470,7 @@ internal class UIOptionWindow_Patch
         var labelLocalizer = label.GetComponentInChildren<Localizer>();
         if (labelLocalizer != null) labelLocalizer.enabled = false;
         var labelTextComp = label.GetComponentInChildren<Text>();
-        if (labelTextComp != null) labelTextComp.text = labelText;
+        if (labelTextComp != null) NebulaLocalizedText.Set(labelTextComp, labelText);
 
         // Add control
         var control = Object.Instantiate(controlTemplate, rowRect, false);
@@ -473,13 +485,13 @@ internal class UIOptionWindow_Patch
     private static void CreateBooleanControl(DisplayNameAttribute control, DescriptionAttribute descriptionAttr,
         PropertyInfo prop, Vector2 anchorPosition, Transform container)
     {
-        var row = CreateControlRow(checkboxTemplate, container, anchorPosition, control.DisplayName.Translate());
+        var row = CreateControlRow(checkboxTemplate, container, anchorPosition, control.DisplayName);
         row.name = prop.Name;
         if (descriptionAttr != null)
         {
             row.gameObject.AddComponent<Tooltip>();
-            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName.Translate();
-            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description.Translate();
+            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName;
+            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
         }
         var toggle = row.GetComponentInChildren<UIToggle>();
         toggle.toggle.onValueChanged.RemoveAllListeners();
@@ -514,13 +526,13 @@ internal class UIOptionWindow_Patch
         var rangeAttr = prop.GetCustomAttribute<UIRangeAttribute>();
         var sliderControl = rangeAttr is { Slider: true };
 
-        var row = CreateControlRow(sliderControl ? sliderTemplate : comboBoxTemplate, container, anchorPosition, control.DisplayName.Translate());
+        var row = CreateControlRow(sliderControl ? sliderTemplate : comboBoxTemplate, container, anchorPosition, control.DisplayName);
         row.name = prop.Name;
         if (descriptionAttr != null)
         {
             row.gameObject.AddComponent<Tooltip>();
-            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName.Translate();
-            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description.Translate();
+            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName;
+            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
         }
 
         var isFloatingPoint = prop.PropertyType == typeof(float) || prop.PropertyType == typeof(double);
@@ -596,13 +608,13 @@ internal class UIOptionWindow_Patch
         var characterLimitAttr = prop.GetCustomAttribute<UICharacterLimitAttribute>();
         var contentTypeAttr = prop.GetCustomAttribute<UIContentTypeAttribute>();
 
-        var row = CreateControlRow(comboBoxTemplate, container, anchorPosition, control.DisplayName.Translate());
+        var row = CreateControlRow(comboBoxTemplate, container, anchorPosition, control.DisplayName);
         row.name = prop.Name;
         if (descriptionAttr != null)
         {
             row.gameObject.AddComponent<Tooltip>();
-            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName.Translate();
-            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description.Translate();
+            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName;
+            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
         }
 
         // Replace combo with input field
@@ -641,16 +653,25 @@ internal class UIOptionWindow_Patch
     private static void CreateEnumControl(DisplayNameAttribute control, DescriptionAttribute descriptionAttr, PropertyInfo prop,
         Vector2 anchorPosition, Transform container)
     {
-        var row = CreateControlRow(comboBoxTemplate, container, anchorPosition, control.DisplayName.Translate());
+        var row = CreateControlRow(comboBoxTemplate, container, anchorPosition, control.DisplayName);
         row.name = prop.Name;
         if (descriptionAttr != null)
         {
             row.gameObject.AddComponent<Tooltip>();
-            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName.Translate();
-            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description.Translate();
+            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName;
+            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
         }
         var combo = row.GetComponentInChildren<UIComboBox>();
-        combo.Items = Enum.GetNames(prop.PropertyType).ToList();
+        var names = Enum.GetNames(prop.PropertyType);
+        void RefreshItems()
+        {
+            combo.Items = names.Select(name => name.Translate()).ToList();
+            combo.UpdateItems();
+            if (combo.itemIndex >= 0 && combo.itemIndex < combo.Items.Count)
+                combo.text = combo.Items[combo.itemIndex];
+        }
+        RefreshItems();
+        languageCallbacks.Add(RefreshItems);
         combo.ItemsData = Enum.GetValues(prop.PropertyType).OfType<int>().ToList();
         combo.onItemIndexChange.RemoveAllListeners();
         combo.onItemIndexChange.AddListener(() => { prop.SetValue(tempMultiplayerOptions, combo.itemIndex, null); });
@@ -664,14 +685,14 @@ internal class UIOptionWindow_Patch
     private static void CreateHotkeyControl(DisplayNameAttribute control, DescriptionAttribute descriptionAttr,
         PropertyInfo prop, Vector2 anchorPosition, Transform container)
     {
-        var element = KeyBinder.CreateKeyBinder(control.DisplayName.Translate());
+        var element = KeyBinder.CreateKeyBinder(control.DisplayName);
         element.SetParent(container);
         element.anchoredPosition = anchorPosition;
         if (descriptionAttr != null)
         {
             element.gameObject.AddComponent<Tooltip>();
-            element.gameObject.GetComponent<Tooltip>().Title = control.DisplayName.Translate();
-            element.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description.Translate();
+            element.gameObject.GetComponent<Tooltip>().Title = control.DisplayName;
+            element.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
         }
 
         var keybinder = element.GetComponent<KeyBinder>();
@@ -691,8 +712,8 @@ internal class UIOptionWindow_Patch
         if (descriptionAttr != null)
         {
             element.gameObject.AddComponent<Tooltip>();
-            element.gameObject.GetComponent<Tooltip>().Title = display.DisplayName.Translate();
-            element.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description.Translate();
+            element.gameObject.GetComponent<Tooltip>().Title = display.DisplayName;
+            element.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
         }
         var localizer = element.GetComponentInChildren<Localizer>();
         if (localizer != null)
@@ -702,7 +723,7 @@ internal class UIOptionWindow_Patch
         var text = element.GetComponentInChildren<Text>();
         if (text != null)
         {
-            text.text = display.DisplayName.Translate();
+            NebulaLocalizedText.Set(text, display.DisplayName);
         }
     }
 
@@ -722,7 +743,7 @@ internal class UIOptionWindow_Patch
 
         public void OnPointerEnter(PointerEventData eventData)
         {
-            tip = UIButtonTip.Create(true, Title, Text, 2, new Vector2(0, 0), 508, gameObject.transform, "", "");
+            tip = UIButtonTip.Create(true, Title.Translate(), Text.Translate(), 2, new Vector2(0, 0), 508, gameObject.transform, "", "");
         }
 
         public void OnPointerExit(PointerEventData eventData)
@@ -758,7 +779,7 @@ internal class UIOptionWindow_Patch
             var kb = go.AddComponent<KeyBinder>();
 
             kb.functionText = uikeyEntry.functionText;
-            kb.functionText.text = label;
+            NebulaLocalizedText.Set(kb.functionText, label);
             kb.functionText.fontSize = 18;
 
             kb.keyText = uikeyEntry.keyText;

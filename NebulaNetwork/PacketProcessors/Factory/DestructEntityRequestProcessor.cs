@@ -40,7 +40,7 @@ public class DestructEntityRequestProcessor : PacketProcessor<DestructEntityRequ
                 // Omit the first case. (Somehow area dismantle often trigger the first case)
                 if (localProtoId != 0)
                 {
-                    var log = $"DestructEntityRequest rejected on planet {packet.PlanetId} for object {packet.ObjId}: {localProtoId} != {packet.ProtoId}";
+                    var log = string.Format("DestructEntityRequest rejected on planet {0} for object {1}: {2} != {3}".Translate(), packet.PlanetId, packet.ObjId, localProtoId, packet.ProtoId);
                     if (IsHost)
                     {
                         Log.Warn(log);

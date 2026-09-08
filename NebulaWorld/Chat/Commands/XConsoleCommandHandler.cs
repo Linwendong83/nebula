@@ -39,6 +39,6 @@ public class XConsoleCommandHandler : IChatCommandHandler
 
     public string[] GetUsage()
     {
-        return new[] { "[XConsole command]" };
+        return new[] { "[XConsole command]".Translate() };
     }
 }

@@ -70,7 +70,7 @@ public static class DiscordManager
         Log.Info("Initialized Discord RPC");
         activity = new Activity
         {
-            State = "In Menus",
+            State = "In Menus".Translate(),
             Timestamps = { Start = DateTimeOffset.Now.ToUnixTimeSeconds() },
             Party = { Id = CreateSecret(), Size = new PartySize() },
             Instance = true
@@ -179,7 +179,7 @@ public static class DiscordManager
             activity.Timestamps.Start = DateTimeOffset.Now.ToUnixTimeSeconds();
         }
 
-        activity.State = Multiplayer.IsActive ? Multiplayer.Session.IsInLobby ? "In Lobby" : "In Game" : "In Menus";
+        activity.State = Multiplayer.IsActive ? Multiplayer.Session.IsInLobby ? "In Lobby".Translate() : "In Game".Translate() : "In Menus".Translate();
 
         if (ip != null)
         {

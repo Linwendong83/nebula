@@ -70,7 +70,7 @@ public class ChatWindow : MonoBehaviour, IChatView
 
         notifierMask.sizeDelta = new Vector2(chatPanel.rect.width, notifierMask.sizeDelta.y);
 
-        if (!Input.anyKey) return;
+        if (ChatInputState.IsComposing || !Input.anyKey) return;
 
         if (chatBox.isFocused)
         {

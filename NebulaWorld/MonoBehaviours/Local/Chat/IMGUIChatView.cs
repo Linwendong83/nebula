@@ -85,11 +85,14 @@ public class IMGUIChatView : MonoBehaviour, IChatView
     {
         var originSkin = GUI.skin;
         GUI.skin = null;
+        var originalFont = GUI.skin.font;
+        GUI.skin.font = ChatLocalization.Font;
 
         // Draw notifications when window is closed
         if (!IsActive)
         {
             DrawNotifications();
+            GUI.skin.font = originalFont;
             GUI.skin = originSkin;
             return;
         }
@@ -99,7 +102,7 @@ public class IMGUIChatView : MonoBehaviour, IChatView
             GetInstanceID(),
             windowRect,
             DrawChatWindow,
-            "Chat Window",
+            "Chat Window".Translate(),
             windowStyle ?? GUI.skin.window);
 
         // Draw resize handle
@@ -107,6 +110,7 @@ public class IMGUIChatView : MonoBehaviour, IChatView
 
         isPointerInside = windowRect.Contains(Event.current.mousePosition);
 
+        GUI.skin.font = originalFont;
         GUI.skin = originSkin;
     }
 
@@ -198,7 +202,7 @@ public class IMGUIChatView : MonoBehaviour, IChatView
         }
         hasInputFocus = GUI.GetNameOfFocusedControl() == "ChatInput";
 
-        if (GUILayout.Button("Send", GUILayout.ExpandWidth(false)))
+        if (GUILayout.Button("Send".Translate(), GUILayout.ExpandWidth(false)))
         {
             SubmitMessage();
         }
@@ -219,6 +223,7 @@ public class IMGUIChatView : MonoBehaviour, IChatView
     private void HandleKeyEvent()
     {
         var e = Event.current;
+        if (ChatInputState.IsComposing) return;
         if (e.type != EventType.KeyDown) return;
 
         if (e.keyCode == Config.Options.ChatHotkey.MainKey && Config.Options.ChatHotkey.MainKey != KeyCode.Return && Config.Options.ChatHotkey.MainKey != KeyCode.KeypadEnter)

@@ -12,6 +12,7 @@ using NebulaModel;
 using NebulaModel.Logger;
 using NebulaNetwork;
 using NebulaWorld;
+using NebulaWorld.MonoBehaviours.Local;
 using UnityEngine;
 using UnityEngine.Events;
 using UnityEngine.UI;
@@ -107,7 +108,7 @@ internal class UIMainMenu_Patch
         var anchoredPosition = multiplayerButton.anchoredPosition;
         multiplayerButton.anchoredPosition = new Vector2(anchoredPosition.x,
             anchoredPosition.y + multiplayerButton.sizeDelta.y + 10);
-        OverrideButton(multiplayerButton, "Multiplayer".Translate(), OnMultiplayerButtonClick);
+        OverrideButton(multiplayerButton, "Multiplayer", OnMultiplayerButtonClick);
     }
 
     public static void OnMultiplayerButtonClick()
@@ -124,12 +125,12 @@ internal class UIMainMenu_Patch
         multiplayerSubMenu.name = "multiplayer-menu";
 
         var newGameButton = OverrideButton(multiplayerSubMenu.Find("button-multiplayer").GetComponent<RectTransform>(),
-            "New Game (Host)".Translate(), OnMultiplayerNewGameButtonClick);
-        OverrideButton(multiplayerSubMenu.Find("button-new").GetComponent<RectTransform>(), "Load Game (Host)".Translate(),
+            "New Game (Host)", OnMultiplayerNewGameButtonClick);
+        OverrideButton(multiplayerSubMenu.Find("button-new").GetComponent<RectTransform>(), "Load Game (Host)",
             OnMultiplayerLoadGameButtonClick);
-        OverrideButton(multiplayerSubMenu.Find("button-continue").GetComponent<RectTransform>(), "Join Game".Translate(),
+        OverrideButton(multiplayerSubMenu.Find("button-continue").GetComponent<RectTransform>(), "Join Game",
             OnMultiplayerJoinGameButtonClick);
-        OverrideButton(multiplayerSubMenu.Find("button-load").GetComponent<RectTransform>(), "Back".Translate(),
+        OverrideButton(multiplayerSubMenu.Find("button-load").GetComponent<RectTransform>(), "Back",
             OnMultiplayerBackButtonClick);
 
         if (BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey("dsp.galactic-scale.2") && newGameButton != null)
@@ -184,9 +185,7 @@ internal class UIMainMenu_Patch
     {
         if (newText != null)
         {
-            // Remove the Localizer since we don't support translation for now and it will always revert the text otherwise
-            Object.Destroy(buttonObj.GetComponentInChildren<Localizer>());
-            buttonObj.GetComponentInChildren<Text>().text = newText;
+            NebulaLocalizedText.Set(buttonObj.GetComponentInChildren<Text>(), newText);
         }
 
         var button = buttonObj.GetComponent<Button>();
@@ -226,7 +225,7 @@ internal class UIMainMenu_Patch
                         {
                             case "top-title":
                                 child2.GetComponent<Localizer>().enabled = false;
-                                child2.GetComponent<Text>().text = "Multiplayer".Translate();
+                                NebulaLocalizedText.Set(child2.GetComponent<Text>(), "Multiplayer");
                                 break;
                             case "stretch-transform":
                                 for (var k = child2.childCount - 1; k >= 0; k--)
@@ -239,7 +238,7 @@ internal class UIMainMenu_Patch
                                     }
 
                                     child3.GetComponent<Localizer>().enabled = false;
-                                    child3.GetComponent<Text>().text = "Host IP Address".Translate();
+                                    NebulaLocalizedText.Set(child3.GetComponent<Text>(), "Host IP Address");
                                     child3.name = "Host IP Address";
                                     hostIPAddressInput = child3.GetComponentInChildren<InputField>();
                                     hostIPAddressInput.onEndEdit.RemoveAllListeners();
@@ -267,7 +266,7 @@ internal class UIMainMenu_Patch
                     }
                     break;
                 case "start-button":
-                    OverrideButton(multiplayerMenu.Find("start-button").GetComponent<RectTransform>(), "Join Game".Translate(),
+                    OverrideButton(multiplayerMenu.Find("start-button").GetComponent<RectTransform>(), "Join Game",
                         OnJoinGameButtonClick);
                     break;
                 case "cancel-button":
@@ -289,7 +288,7 @@ internal class UIMainMenu_Patch
         addressTransform.localPosition = new Vector3(0, 335, 0);
         var passwordTransform = Object.Instantiate(addressTransform, multiplayerMenu);
         passwordTransform.localPosition += new Vector3(0, -36, 0);
-        passwordTransform.GetComponent<Text>().text = "Password (optional)".Translate();
+        NebulaLocalizedText.Set(passwordTransform.GetComponent<Text>(), "Password (optional)");
         passwordTransform.name = "Password (optional)";
 
         passwordInput = passwordTransform.GetComponentInChildren<InputField>();

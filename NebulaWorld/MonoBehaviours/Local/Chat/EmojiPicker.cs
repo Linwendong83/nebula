@@ -55,6 +55,7 @@ public class EmojiPicker : MonoBehaviour, IPointerEnterHandler, IPointerExitHand
     public void Awake()
     {
         instance = this;
+        selectText.text = "Smile emoji".Translate();
         emojiDatas = new uint[1024];
         emojiBuffer = new ComputeBuffer(emojiDatas.Length, 4);
         emojiBuffer.SetData(emojiDatas);
@@ -79,6 +80,7 @@ public class EmojiPicker : MonoBehaviour, IPointerEnterHandler, IPointerExitHand
 
     private void OnEnable()
     {
+        selectText.text = currentCategory.Translate();
         RefreshIcons(lastSearch);
     }
 
@@ -187,7 +189,7 @@ public class EmojiPicker : MonoBehaviour, IPointerEnterHandler, IPointerExitHand
             if (index < lastUsedList.Count)
             {
                 var emoji = lastUsedList[index];
-                selectText.text = emoji.ShortName;
+                selectText.text = currentCategory.Translate() + " · " + emoji.ShortName;
 
                 currentSelection = index;
                 inspectTrans.anchoredPosition = new Vector2(40 * x - 2, -40 * y - 2);
@@ -217,7 +219,8 @@ public class EmojiPicker : MonoBehaviour, IPointerEnterHandler, IPointerExitHand
             else
             {
                 lastUsedList = value;
-                lastUsedList = lastUsedList.Where(emoji => emoji.ShortName.Contains(search, StringComparison.OrdinalIgnoreCase))
+                lastUsedList = lastUsedList.Where(emoji => emoji.ShortName.Contains(search, StringComparison.OrdinalIgnoreCase)
+                    || currentCategory.Translate().Contains(search, StringComparison.OrdinalIgnoreCase))
                     .ToList();
             }
 

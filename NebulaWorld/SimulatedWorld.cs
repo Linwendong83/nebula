@@ -595,12 +595,12 @@ public class SimulatedWorld : IDisposable
         if (!canPause)
         {
             pauseText.text = "--  Nebula Multiplayer  --".Translate();
-            pauseLocalizer.stringKey = "--  Nebula Multiplayer  --".Translate();
+            pauseLocalizer.stringKey = "--  Nebula Multiplayer  --";
         }
         else
         {
             pauseText.text = "游戏已暂停".Translate();
-            pauseLocalizer.stringKey = "游戏已暂停".Translate();
+            pauseLocalizer.stringKey = "游戏已暂停";
         }
     }
 

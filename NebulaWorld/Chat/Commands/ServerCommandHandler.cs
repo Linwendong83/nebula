@@ -41,7 +41,7 @@ public class ServerCommandHandler : IChatCommandHandler
                     break;
                 }
             case "load" when parameters.Length < 2:
-                throw new ChatCommandUsageException("Need to specify a save!");
+                throw new ChatCommandUsageException("Need to specify a save!".Translate());
             case "load":
                 {
                     var saveName = parameters.Length > 1 ? parameters[1] : "";
@@ -69,6 +69,6 @@ public class ServerCommandHandler : IChatCommandHandler
 
     public string[] GetUsage()
     {
-        return ["login <password>", "list [saveNum]", "save [saveName]", "load <saveName>", "info"];
+        return ["login <password>".Translate(), "list [saveNum]".Translate(), "save [saveName]".Translate(), "load <saveName>".Translate(), "info"];
     }
 }

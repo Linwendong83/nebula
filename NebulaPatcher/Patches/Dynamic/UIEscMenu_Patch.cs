@@ -43,7 +43,7 @@ internal class UIEscMenu_Patch
         var second = (int)(timeSinceSave);
         var minute = second / 60;
         var hour = minute / 60;
-        var saveBtnText = "存档时间".Translate() + $" {hour}h{minute % 60}m{second % 60}s ago";
+        var saveBtnText = "存档时间".Translate() + string.Format(" {0}h{1}m{2}s ago".Translate(), hour, minute % 60, second % 60);
         __instance.button2Text.text = saveBtnText;
     }
 

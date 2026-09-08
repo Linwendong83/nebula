@@ -189,12 +189,12 @@ public class NgrokManager
             _ = new ChildProcessLinker(_ngrokProcess, _ =>
             {
                 Log.WarnInform(
-                    "Failed to link Ngrok process to DSP process as a child! (This might result in a left over ngrok process if the DSP process uncleanly killed)");
+                    "Failed to link Ngrok process to DSP process as a child! (This might result in a left over ngrok process if the DSP process uncleanly killed)".Translate());
             });
         }
         else
         {
-            Log.WarnInform("Failed to start Ngrok process!");
+            Log.WarnInform("Failed to start Ngrok process!".Translate());
         }
 
         _ngrokProcess?.BeginOutputReadLine();

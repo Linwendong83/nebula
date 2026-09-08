@@ -40,7 +40,7 @@ public class PlayerDataCommandHandler : IChatCommandHandler
                     return;
                 }
             case "load" when parameters.Length < 2:
-                throw new ChatCommandUsageException("Need to specify hash string or name of a player!");
+                throw new ChatCommandUsageException("Need to specify hash string or name of a player!".Translate());
             case "load":
                 {
                     var input = parameters[1];
@@ -54,21 +54,21 @@ public class PlayerDataCommandHandler : IChatCommandHandler
                     {
                         if (input == pair.Key.Substring(0, input.Length) || input == pair.Value.Username)
                         {
-                            chatService.AddMessage($"Load [{pair.Key.Substring(0, 5)}] {pair.Value.Username}", ChatMessageType.CommandOutputMessage);
+                            chatService.AddMessage(string.Format("Load [{0}] {1}".Translate(), pair.Key.Substring(0, 5), pair.Value.Username), ChatMessageType.CommandOutputMessage);
                             LoadPlayerData(pair.Value);
                             return;
                         }
                     }
-                    chatService.AddMessage("Unable to find the target player data!", ChatMessageType.CommandOutputMessage);
+                    chatService.AddMessage("Unable to find the target player data!".Translate(), ChatMessageType.CommandOutputMessage);
                     return;
                 }
             case "remove" when parameters.Length < 2:
-                throw new ChatCommandUsageException("Need to specify hash string or name of a player!");
+                throw new ChatCommandUsageException("Need to specify hash string or name of a player!".Translate());
             case "remove":
                 {
                     if (Multiplayer.Session.IsClient)
                     {
-                        throw new ChatCommandUsageException("remove command is not available in client!");
+                        throw new ChatCommandUsageException("remove command is not available in client!".Translate());
                     }
 
                     var input = parameters[1];
@@ -77,14 +77,14 @@ public class PlayerDataCommandHandler : IChatCommandHandler
                     {
                         if (input == pair.Key.Substring(0, input.Length) || input == pair.Value.Username)
                         {
-                            chatService.AddMessage($"Remove [{pair.Key.Substring(0, 5)}] {pair.Value.Username}", ChatMessageType.CommandOutputMessage);
+                            chatService.AddMessage(string.Format("Remove [{0}] {1}".Translate(), pair.Key.Substring(0, 5), pair.Value.Username), ChatMessageType.CommandOutputMessage);
                             removeHash = pair.Key;
                             break;
                         }
                     }
                     if (!SaveManager.TryRemove(removeHash))
                     {
-                        chatService.AddMessage("Unable to find the target player data!", ChatMessageType.CommandOutputMessage);
+                        chatService.AddMessage("Unable to find the target player data!".Translate(), ChatMessageType.CommandOutputMessage);
                     }
                     break;
                 }
@@ -98,14 +98,14 @@ public class PlayerDataCommandHandler : IChatCommandHandler
 
     public string[] GetUsage()
     {
-        return ["list", "load <hashString>", "remove <hashString>"];
+        return ["list", "load <hashString>".Translate(), "remove <hashString>".Translate()];
     }
 
     public static string GetPlayerDataListString()
     {
         var playerSaves = SaveManager.PlayerSaves;
 
-        var resp = $"Player count in .server file: {playerSaves.Count}\n";
+        var resp = string.Format("Player count in .server file: {0}\n".Translate(), playerSaves.Count);
         foreach (var pair in playerSaves)
         {
             resp += $"[{pair.Key.Substring(0, 5)}] {pair.Value.Username}\n";

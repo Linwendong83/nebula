@@ -67,7 +67,7 @@ public class GameStatesManager : IDisposable
         var rtt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - sentTime;
         averageRTT = (int)(averageRTT * 0.8 + rtt * 0.2);
         averageUPS = averageUPS * 0.8f + unitsPerSecond * 0.2f;
-        Multiplayer.Session.World.UpdatePingIndicator($"Ping: {averageRTT}ms");
+        Multiplayer.Session.World.UpdatePingIndicator(string.Format("Ping: {0}ms".Translate(), averageRTT));
 
         // We offset the tick received to account for the time it took to receive the packet
         var tickOffsetSinceSent = (long)Math.Round(unitsPerSecond * rtt / 2 / 1000);
@@ -169,7 +169,7 @@ public class GameStatesManager : IDisposable
     public static string LoadingMessage()
     {
         var progress = bufferLength * 100f / FragmentSize;
-        return $"Downloading {FragmentSize / 1000:n0} KB ({progress:F1}%)";
+        return string.Format("Downloading {0:n0} KB ({1:F1}%)".Translate(), FragmentSize / 1000, progress);
     }
 
     public void ImportGlobalGameData(GlobalGameDataResponse packet)

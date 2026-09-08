@@ -48,7 +48,7 @@ public class ChatManager : MonoBehaviour
 
     private void Update()
     {
-        if (Config.Options.ChatHotkey.IsDown())
+        if (!ChatInputState.IsComposing && Config.Options.ChatHotkey.IsDown())
         {
             currentChatView.Toggle();
         }
@@ -238,6 +238,7 @@ public class ChatManager : MonoBehaviour
         }
 
         chatWindowGameObject = chatGo;
+        ChatLocalization.InitializeWindow(chatGo);
         chatWindowGameObject.SetActive(true);
 
         // Initialize both view types

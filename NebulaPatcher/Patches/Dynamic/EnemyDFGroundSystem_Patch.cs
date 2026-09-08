@@ -1,4 +1,4 @@
-#region
+﻿#region
 
 using System;
 using HarmonyLib;
@@ -228,7 +228,7 @@ internal class EnemyDFGroundSystem_Patch
             {
                 if (baseBuffer[enemyPool[builder.enemyId].owner] == null)
                 {
-                    var msg = $"Remove EnemyDFGroundSystem enemy[{builder.enemyId}]: owner = {enemyPool[builder.enemyId].owner}";
+                    var msg = string.Format("Remove EnemyDFGroundSystem enemy[{0}]: owner = {1}".Translate(), builder.enemyId, enemyPool[builder.enemyId].owner);
                     Log.WarnInform(msg);
 
                     __instance.factory.enemyPool[builder.enemyId].SetEmpty();

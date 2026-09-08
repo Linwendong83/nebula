@@ -112,6 +112,6 @@ public class NavigateCommandHandler : IChatCommandHandler
 
     public string[] GetUsage()
     {
-        return ["<planet name | planet id | star name | star id | clear>", "player <player id | player name>"];
+        return ["<planet name | planet id | star name | star id | clear>".Translate(), "player <player id | player name>".Translate()];
     }
 }

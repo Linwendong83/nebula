@@ -159,7 +159,7 @@ public static class SaveManager
         catch (Exception e)
         {
             playerSaves.Clear();
-            Log.WarnInform("Skipping server data due to exception:\n" + e.Message);
+            Log.WarnInform("Skipping server data due to exception:\n".Translate() + e.Message);
             Log.Warn(e);
             return;
         }

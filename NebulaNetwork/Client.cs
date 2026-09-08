@@ -363,7 +363,7 @@ public class Client : IClient
             {
                 InGamePopup.ShowWarning(
                     "Connection Lost".Translate(),
-                    "You have been disconnected from the server.".Translate() + "\n" + e.Reason,
+                    "You have been disconnected from the server.".Translate() + "\n" + e.Reason.Translate(),
                     "Quit",
                     Multiplayer.LeaveGame);
                 if (!Multiplayer.Session.IsInLobby)

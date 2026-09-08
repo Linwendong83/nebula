@@ -30,12 +30,12 @@ internal class PlayerDataCommmandProcessor : PacketProcessor<PlayerDataCommandPa
 
                 case "load":
                     var input = packet.Message;
-                    packet.Message = "Unable to find the target player data!";
+                    packet.Message = "Unable to find the target player data!".Translate();
                     foreach (var pair in playerSaves)
                     {
                         if (input == pair.Key.Substring(0, input.Length) || input == pair.Value.Username)
                         {
-                            packet.Message = $"Load [{pair.Key.Substring(0, 5)}] {pair.Value.Username}";
+                            packet.Message = string.Format("Load [{0}] {1}".Translate(), pair.Key.Substring(0, 5), pair.Value.Username);
                             packet.PlayerData = (NebulaModel.DataStructures.PlayerData)pair.Value;
                             break;
                         }
@@ -43,7 +43,7 @@ internal class PlayerDataCommmandProcessor : PacketProcessor<PlayerDataCommandPa
                     break;
 
                 default:
-                    packet.Message = "Unknown command: " + packet.Command;
+                    packet.Message = "Unknown command: ".Translate() + packet.Command;
                     break;
             }
             conn.SendPacket(packet);

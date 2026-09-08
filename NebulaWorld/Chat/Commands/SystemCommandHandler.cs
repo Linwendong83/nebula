@@ -42,6 +42,6 @@ public class SystemCommandHandler : IChatCommandHandler
 
     public string[] GetUsage()
     {
-        return ["[star name]"];
+        return ["[star name]".Translate()];
     }
 }

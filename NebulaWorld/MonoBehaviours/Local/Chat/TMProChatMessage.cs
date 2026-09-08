@@ -26,6 +26,7 @@ public class TMProChatMessage
     public TMProChatMessage(GameObject chatTextObj, RawChatMessage rawChatMessage)
     {
         chatText = chatTextObj.GetComponent<TMP_Text>();
+        ChatLocalization.ApplyFont(chatText);
         SetMessage(rawChatMessage);
     }
 

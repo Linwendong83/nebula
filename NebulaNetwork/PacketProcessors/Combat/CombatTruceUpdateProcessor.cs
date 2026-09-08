@@ -33,7 +33,7 @@ public class CombatTruceUpdateProcessor : PacketProcessor<CombatTruceUpdatePacke
                 userName = player.Username;
             }
         }
-        var message = userName + " set ";
+        var message = string.Format("{0} set ".Translate(), userName);
         var second = (int)(GameMain.history.dfTruceTimer / 60L);
         var minute = second / 60;
         var hour = minute / 60;

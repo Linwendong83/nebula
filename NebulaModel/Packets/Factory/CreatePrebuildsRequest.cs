@@ -57,7 +57,7 @@ public class CreatePrebuildsRequest
         }
         catch (System.Exception e)
         {
-            Logger.Log.WarnInform("DeserializeBuildPreview parse error\n" + e);
+            Logger.Log.WarnInform("DeserializeBuildPreview parse error\n".Translate() + e);
             return false;
         }
     }

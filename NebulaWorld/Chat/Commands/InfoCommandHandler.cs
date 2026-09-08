@@ -79,21 +79,21 @@ public class InfoCommandHandler : IChatCommandHandler
     {
         StringBuilder sb = new("Server info:".Translate());
 
-        var lan = ipInfo.LANAddress;
+        var lan = ipInfo.LANAddress.Translate();
         if (IPUtils.IsIPv4(lan))
         {
             lan = $"{FormatCopyString($"{ipInfo.LANAddress}:{server.Port}")}";
         }
         sb.Append("\n  ").Append("Local IP address: ".Translate()).Append(lan);
 
-        var wanv4 = ipInfo.WANv4Address;
+        var wanv4 = ipInfo.WANv4Address.Translate();
         if (IPUtils.IsIPv4(wanv4))
         {
             wanv4 = $"{FormatCopyString($"{ipInfo.WANv4Address}:{server.Port}", true, IPFilter)}";
         }
         sb.Append("\n  ").Append("WANv4 IP address: ".Translate()).Append(wanv4);
 
-        var wanv6 = ipInfo.WANv6Address;
+        var wanv6 = ipInfo.WANv6Address.Translate();
         if (IPUtils.IsIPv6(wanv6))
         {
             wanv6 = $"{FormatCopyString($"{ipInfo.WANv6Address}:{server.Port}", true, IPFilter)}";
@@ -118,8 +118,8 @@ public class InfoCommandHandler : IChatCommandHandler
             }
         }
 
-        sb.Append("\n  ").Append("Port status: ".Translate()).Append(ipInfo.PortStatus);
-        sb.Append("\n  ").Append("Data state: ".Translate()).Append(ipInfo.DataState);
+        sb.Append("\n  ").Append("Port status: ".Translate()).Append((ipInfo.PortStatus ?? "").Replace("Open", "Open".Translate()).Replace("Closed", "Closed".Translate()).Translate());
+        sb.Append("\n  ").Append("Data state: ".Translate()).Append(ipInfo.DataState.ToString().Translate());
         var timeSpan = DateTime.Now.Subtract(Multiplayer.Session.StartTime);
         sb.Append("\n  ").Append("Uptime: ".Translate())
             .Append($"{(int)Math.Round(timeSpan.TotalHours)}:{timeSpan.Minutes}:{timeSpan.Seconds}");

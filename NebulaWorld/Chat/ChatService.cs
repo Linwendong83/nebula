@@ -161,14 +161,16 @@ public class ChatService
             catch (ChatCommandUsageException e)
             {
                 AddMessage(
-                    $"Invalid usage: {e.Message}! Usage: {ChatCommandRegistry.CommandPrefix}{commandName} {handler.GetUsage()}",
+                    string.Format("Invalid usage: {0}\n{1}".Translate(), e.Message,
+                        string.Join("\n", handler.GetUsage().Select(usage =>
+                            "Usage: ".Translate() + ChatCommandRegistry.CommandPrefix + commandName + " " + usage))),
                     ChatMessageType.CommandUsageMessage);
             }
         }
         else
         {
             AddMessage(
-                $"Unknown command {commandName}. Use /help to get list of commands",
+                string.Format("Unknown command {0}. Use /help to get list of commands".Translate(), commandName),
                 ChatMessageType.CommandUsageMessage);
         }
     }

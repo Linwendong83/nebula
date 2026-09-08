@@ -33,14 +33,14 @@ public class ILSAddStationComponentProcessor : PacketProcessor<ILSAddStationComp
                 stationPool[packet.StationId].gid = packet.StationGId;
                 if (galacticTransport.AddStationComponent(packet.PlanetId, stationPool[packet.StationId]) != packet.StationGId)
                 {
-                    Log.WarnInform($"AddStationComponent gid mismatch: {stationPool[packet.StationId].gid} => packet.StationGId");
+                    Log.WarnInform(string.Format("AddStationComponent gid mismatch: {0} => {1}".Translate(), stationPool[packet.StationId].gid, packet.StationGId));
                     galacticTransport.stationPool[packet.StationGId] = stationPool[packet.StationId];
                 }
                 galacticTransport.stationCursor = Math.Max(galacticTransport.stationCursor, packet.StationGId + 1);
 
                 if (stationPool[packet.StationId].entityId != packet.EntityId)
                 {
-                    Log.WarnInform($"Station gid {packet.StationGId} entityId mismatch: {stationPool[packet.StationId].entityId} => {packet.EntityId}");
+                    Log.WarnInform(string.Format("Station gid {0} entityId mismatch: {1} => {2}".Translate(), packet.StationGId, stationPool[packet.StationId].entityId, packet.EntityId));
                 }
             }
             else
