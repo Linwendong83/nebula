@@ -212,6 +212,8 @@ public class Client : IClient
 
         if (Multiplayer.Session.IsGameLoaded)
         {
+            Multiplayer.Session.PowerTowers.SendLocalStateIfChanged();
+
             mechaSynchonizationTimer += Time.deltaTime;
             if (mechaSynchonizationTimer > MECHA_SYNCHONIZATION_INTERVAL)
             {

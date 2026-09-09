@@ -154,7 +154,7 @@ public class Server : IServer
 
         PlayerIdPool.Enqueue(player.Id);
 
-        Multiplayer.Session.PowerTowers.ResetAndBroadcast();
+        Multiplayer.Session.PowerTowers.RemovePlayer(player.Id);
         Multiplayer.Session.Statistics.UnRegisterPlayer(player.Id);
         Multiplayer.Session.DysonSpheres.UnRegisterPlayer(conn);
 
@@ -409,6 +409,8 @@ public class Server : IServer
         {
             return;
         }
+
+        Multiplayer.Session.PowerTowers.SendLocalStateIfChanged();
 
         gameResearchHashUpdateTimer += Time.deltaTime;
         dysonLaunchUpateTimer += Time.deltaTime;

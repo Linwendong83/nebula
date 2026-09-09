@@ -79,7 +79,7 @@ Most of the battle aspects are sync, only few features are still work in progres
 - [x] Planet Memo syncing
 - [ ] Goal system (currently not available in client)
 - [ ] Custom dashboard (clients will lost their custom stats when they leave the star system)
-- [ ] Wireless charge tower (power will not sync when mecha is charging)
+- [x] Wireless charge tower (power will not sync when mecha is charging)
 
 </details>
 

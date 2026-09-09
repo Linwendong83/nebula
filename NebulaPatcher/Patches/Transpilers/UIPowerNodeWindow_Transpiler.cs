@@ -1,15 +1,10 @@
-﻿#region
-
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 using NebulaModel.Logger;
 using NebulaWorld;
-
-#endregion
 
 namespace NebulaPatcher.Patches.Transpilers;
 
@@ -20,51 +15,46 @@ internal class UIPowerNodeWindow_Transpiler
     [HarmonyPatch(nameof(UIPowerNodeWindow._OnUpdate))]
     public static IEnumerable<CodeInstruction> OnUpdate_Transpiler(IEnumerable<CodeInstruction> instructions)
     {
-        var codeInstructions = instructions as CodeInstruction[] ?? instructions.ToArray();
+        var original = instructions.ToArray();
         try
         {
+            var code = original.Select(i => new CodeInstruction(i)).ToArray();
+            var matcher = new CodeMatcher(code)
+                .MatchForward(true,
+                    new CodeMatch(OpCodes.Ldfld, AccessTools.Field(typeof(Mecha), nameof(Mecha.energyChanges))),
+                    new CodeMatch(OpCodes.Ldc_I4_2),
+                    new CodeMatch(OpCodes.Ldelem_R8));
+            if (matcher.IsInvalid) throw new InvalidOperationException("Charger UI energy check was not found.");
+            matcher.Advance(1).InsertAndAdvance(
+                new CodeInstruction(OpCodes.Ldarg_0),
+                new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(UIPowerNodeWindow_Transpiler), nameof(ChargingEnergy))));
 
-            // from: if (powerNodeComponent.requiredEnergy > powerNodeComponent.idleEnergyPerTick && this.player.mecha.energyChanges[2] > 0.0)
-            // to:   if (powerNodeComponent.requiredEnergy > powerNodeComponent.idleEnergyPerTick)
-            var codeMatcher = new CodeMatcher(codeInstructions)
-                .MatchForward(false,
-                    new CodeMatch(OpCodes.Ldarg_0),
-                    new CodeMatch(OpCodes.Ldfld),
-                    new CodeMatch(i => i.opcode == OpCodes.Callvirt && ((MethodInfo)i.operand).Name == "get_mecha"),
-                    new CodeMatch(i => i.opcode == OpCodes.Ldfld && ((FieldInfo)i.operand).Name == "energyChanges")
-                )
-                .RemoveInstructions(8);
-
-            // from: this.chargeStateValueText.text = "正在充电".Translate();
-            // to:   this.chargeStateValueText.text = ChargeStateText("正在充电".Translate());
-            codeMatcher.MatchForward(false,
-                    new CodeMatch(i => i.opcode == OpCodes.Ldfld && ((FieldInfo)i.operand).Name == "chargeStateValueText"))
-                .MatchForward(false,
-                    new CodeMatch(i => i.opcode == OpCodes.Callvirt && ((MethodInfo)i.operand).Name == "set_text")
-                )
-                .Insert(
-                    new CodeInstruction(OpCodes.Ldarg_0),
-                    new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(UIPowerNodeWindow_Transpiler), nameof(ChargeStateText)))
-                );
-
-            return codeMatcher.InstructionEnumeration();
+            matcher.MatchForward(true,
+                new CodeMatch(OpCodes.Ldstr, "正在充电"),
+                new CodeMatch(i => i.opcode == OpCodes.Call));
+            if (matcher.IsInvalid) throw new InvalidOperationException("Charger UI state text was not found.");
+            matcher.Advance(1).Insert(
+                new CodeInstruction(OpCodes.Ldarg_0),
+                new CodeInstruction(OpCodes.Call, AccessTools.Method(typeof(UIPowerNodeWindow_Transpiler), nameof(ChargeStateText))));
+            return matcher.InstructionEnumeration();
         }
         catch (Exception e)
         {
-            Log.Warn("UIPowerNodeWindow._OnUpdate Transpiler failed. Charger UI will be unchanged.");
+            Log.Warn("UIPowerNodeWindow._OnUpdate transpiler failed. Charger UI will be unchanged.");
             Log.Warn(e);
-            return codeInstructions;
+            return original;
         }
     }
 
-    private static string ChargeStateText(string oringalValue, UIPowerNodeWindow powerNodeWindow)
+    private static double ChargingEnergy(double localEnergy, UIPowerNodeWindow window) =>
+        Multiplayer.IsActive
+            ? Multiplayer.Session.PowerTowers.GetChargerCount(window.factory.planetId, window.nodeId)
+            : localEnergy;
+
+    private static string ChargeStateText(string originalValue, UIPowerNodeWindow window)
     {
-        if (!Multiplayer.IsActive)
-        {
-            return oringalValue;
-        }
-        var hashId = ((long)powerNodeWindow.factory.planetId << 32) | (long)powerNodeWindow.nodeId;
-        Multiplayer.Session.PowerTowers.RemoteChargerHashIds.TryGetValue(hashId, out var count);
-        return oringalValue + '[' + count + ']';
+        if (!Multiplayer.IsActive) return originalValue;
+        var count = Multiplayer.Session.PowerTowers.GetChargerCount(window.factory.planetId, window.nodeId);
+        return originalValue + '[' + count + ']';
     }
 }

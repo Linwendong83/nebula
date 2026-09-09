@@ -360,7 +360,7 @@ internal class GameData_Patch
         if (Multiplayer.IsActive)
         {
             Multiplayer.Session.Trashes.Refresh();
-            Multiplayer.Session.PowerTowers.ResetAndBroadcast();
+            Multiplayer.Session.PowerTowers.ClearLocalState();
             Multiplayer.Session.Enemies.OnLeavePlanet();
         }
     }
