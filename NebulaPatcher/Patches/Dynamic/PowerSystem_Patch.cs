@@ -1,6 +1,7 @@
 ﻿#region
 
 using HarmonyLib;
+using NebulaPatcher.Patches.Transpilers;
 using NebulaWorld;
 
 #endregion
@@ -12,9 +13,14 @@ internal class PowerSystem_Patch
 {
     [HarmonyPrefix]
     [HarmonyPatch(nameof(PowerSystem.GameTick))]
-    public static void PowerSystem_GameTick_Prefix(PowerSystem __instance, long time, ref bool isActive)
+    public static void PowerSystem_GameTick_Prefix(PowerSystem __instance, long time, bool multithreaded, ref bool isActive)
     {
         if (!Multiplayer.IsActive) return;
+
+        if (PowerSystem_Transpiler.ChargerSyncEnabled)
+        {
+            Multiplayer.Session.PowerTowers.UpdateLocalState(__instance, multithreaded);
+        }
 
         // Enable signType update on remote planet every 64 tick
         if ((time & 63) == 0 && Multiplayer.Session.IsServer)
@@ -41,9 +47,7 @@ internal class PowerSystem_Patch
         }
         // as the destruct is synced across players this event is too
         // and as such we can safely remove power demand for every player        
-        Multiplayer.Session.PowerTowers.LocalChargerIds.Remove(id);
-        var hashId = (long)__instance.factory.planetId << 32 | (long)id;
-        Multiplayer.Session.PowerTowers.RemoteChargerHashIds.Remove(hashId);
+        Multiplayer.Session.PowerTowers.RemoveNode(__instance.factory.planetId, id);
 
         return true;
     }

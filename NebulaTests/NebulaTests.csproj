@@ -11,10 +11,20 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="15.3.0"/>
         <PackageReference Include="MSTest.TestFramework" Version="4.0.*"/>
+        <PackageReference Include="MSTest.TestAdapter" Version="4.0.*"/>
     </ItemGroup>
 
     <ItemGroup>
       <ProjectReference Include="..\NebulaModel\NebulaModel.csproj" />
+      <ProjectReference Include="..\NebulaPatcher\NebulaPatcher.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!-- Transpiler tests inspect game types; real method bodies can be supplied by the verification script. -->
+        <PackageReference Update="DysonSphereProgram.GameLibs" IncludeAssets="compile;runtime" />
+        <PackageReference Update="UnityEngine.Modules" IncludeAssets="compile;runtime" />
+        <!-- The test runner does not have BepInEx's runtime assemblies preloaded. -->
+        <PackageReference Update="BepInEx.Core" ExcludeAssets="build" />
     </ItemGroup>
 
 </Project>

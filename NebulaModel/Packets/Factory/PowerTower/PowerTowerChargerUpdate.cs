@@ -4,14 +4,14 @@ public class PowerTowerChargerUpdate
 {
     public PowerTowerChargerUpdate() { }
 
-    public PowerTowerChargerUpdate(int planetId, int nodeId, bool charging)
+    public PowerTowerChargerUpdate(ushort playerId, int planetId, int[] nodeIds)
     {
+        PlayerId = playerId;
         PlanetId = planetId;
-        NodeId = nodeId;
-        Charging = charging;
+        NodeIds = nodeIds;
     }
 
+    public ushort PlayerId { get; set; }
     public int PlanetId { get; set; }
-    public int NodeId { get; set; }
-    public bool Charging { get; set; }
+    public int[] NodeIds { get; set; } = [];
 }

@@ -19,5 +19,6 @@ public class PlayerDisconnectedProcessor : PacketProcessor<PlayerDisconnected>
         Multiplayer.Session.NumPlayers = packet.NumPlayers;
         DiscordManager.UpdateRichPresence();
         Multiplayer.Session.World.DestroyRemotePlayerModel(packet.PlayerId);
+        Multiplayer.Session.PowerTowers.RemovePlayer(packet.PlayerId);
     }
 }
