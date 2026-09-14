@@ -1,4 +1,4 @@
-# Nebula 多人联机 Mod [![Build - Win x64](https://github.com/Linwendong83/nebula/actions/workflows/build-winx64.yml/badge.svg)](https://github.com/Linwendong83/nebula/actions/workflows/build-winx64.yml)
+# Nebula 多人联机 Mod [![Build - Win x64](https://github.com/Linwendong83/nebula/actions/workflows/build-winx64.yml/badge.svg)](https://github.com/Linwendong83/nebula/actions/workflows/build-winx64.yml) [![QQ群: 587702629](https://img.shields.io/badge/QQ%E7%BE%A4-587702629-12B7F5?logo=qq&logoColor=white)](https://qun.qq.com/universal-share/share?ac=1&authKey=aqcKfS15Bl5nLEWhfmkiskMj65QyEsdWPCsMGYducyVdZhqNPrGeilcYSgaENhs%2F&busi_data=eyJncm91cENvZGUiOiI1ODc3MDI2MjkiLCJ0b2tlbiI6Ik1HbXppTWRHYmNlVUlSSCtaN1BkaUVXWU9ud3ZMOElJdGplaitmL21OWkorNllYaCtBbXduc2hKdGlzUnlrVksiLCJ1aW4iOiI1NDU1NTg1MzgifQ%3D%3D&data=ZYdt-PQo-JrmmYsIyy4D3s8XTbPjqzGZTrjxiTlbr9uAivSvyvqc_KyXatfb7YTjGqF5O7FONbKh1QpxuEen5A&svctype=4&tempid=h5_group_info)
 
 [English](README.md) | [简体中文](README_zh-CN.md)
 
