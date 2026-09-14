@@ -78,7 +78,8 @@ Most battle aspects are synchronized, with only a few features still work in pro
 - [x] Logistics Control Panel (I) syncing (entry list and detail panel)
 - [x] Planet Memo syncing
 - [ ] Goal system (currently not available in client)
-- [ ] Custom dashboard (clients will lost their custom stats when they leave the star system)
+- [x] Custom dashboard (persisted across reconnects and star system warps)
+- [x] Tutorial and advisor tips syncing (progress preserved across reconnects)
 - [x] Wireless charge tower (power will not sync when mecha is charging)
 
 </details>
