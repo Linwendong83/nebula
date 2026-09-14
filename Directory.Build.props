@@ -32,6 +32,12 @@
         <GitVersionBaseDirectory>$(MSBuildThisFileDirectory)</GitVersionBaseDirectory>
     </PropertyGroup>
 
+    <PropertyGroup Label="Fork Properties">
+        <ForkDevTag>dev.1</ForkDevTag>
+        <ForkDevRevision>1</ForkDevRevision>
+        <DefineConstants Condition="'$(ForkDevTag)' != ''">$(DefineConstants);NEBULA_FORK</DefineConstants>
+    </PropertyGroup>
+
     <PropertyGroup Label="API Properties" Condition=" '$(MSBuildProjectName)' == 'NebulaAPI' ">
         <OutputPath Condition="Exists('$(DSPGameDir)') Or Exists('$(PropSheetPath).remoteBuild')">$(OutputPath)..\nebula-NebulaMultiplayerModApi</OutputPath>
     </PropertyGroup>

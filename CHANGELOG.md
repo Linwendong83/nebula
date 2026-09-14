@@ -1,5 +1,16 @@
 ## Changelog
 
+0.9.22-dev.1:
+- Sync wireless power tower charging for mecha
+- Sync tutorial and advisor progress
+- Persist player custom dashboard across reconnects
+- Add built-in Chinese localization support
+
+- 同步无线输电塔为机甲充电
+- 同步新手指引与导师进度
+- 跨重连持久化玩家自定义监控面板
+- 内置中文本地化支持
+
 0.9.22:
 - Compatible with game version 0.10.34.28518
 

@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.Diagnostics.CodeAnalysis;
@@ -152,8 +152,8 @@ internal class UIFatalErrorTip_Patch
             GameConfig.gameVersion.ToString() + "." + GameConfig.gameVersion.Build, Chainloader.PluginInfos.Values.Count));
         if (Multiplayer.IsActive)
         {
-            stringBuilder.Append("Nebula");
-            stringBuilder.Append(PluginInfo.PLUGIN_VERSION);
+            stringBuilder.Append("Nebula ");
+            stringBuilder.Append(PluginInfo.PLUGIN_DISPLAY_VERSION);
             stringBuilder.Append(Multiplayer.Session.LocalPlayer.IsHost ? " (Host)".Translate() : " (Client)".Translate());
         }
 

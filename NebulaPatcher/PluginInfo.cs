@@ -1,4 +1,4 @@
-﻿namespace NebulaPatcher;
+namespace NebulaPatcher;
 
 /// <summary>
 ///     The main metadata of the plugin.
@@ -27,20 +27,29 @@ internal static class PluginInfo
     public const string PLUGIN_ID = "dsp.nebula-multiplayer";
 
     /// <summary>
-    ///     Version of the plugin. Must be in form
-    ///     <major>
-    ///         .
-    ///         <minor>
-    ///             .
-    ///             <build>
-    ///                 .
-    ///                 <revision>
-    ///                     .
-    ///                     Major and minor versions are mandatory, but build and revision can be left unspecified.
+    ///     Fork-specific dev suffix and revision number.
+    ///     Empty string means pure upstream release build.
+    /// </summary>
+    public const string FORK_SUFFIX = "-dev.1";
+    public const int FORK_REVISION = 1;
+
+    /// <summary>
+    ///     Base version from upstream (e.g. "0.9.22").
+    /// </summary>
+    public static readonly string BASE_VERSION = ThisAssembly.AssemblyVersion.EndsWith(".0")
+        ? ThisAssembly.AssemblyVersion.Substring(0, ThisAssembly.AssemblyVersion.Length - 2)
+        : ThisAssembly.AssemblyVersion;
+
+    /// <summary>
+    ///     Version of the plugin for BepInEx. Must be in form
+    ///     <major>.<minor>.<build>.<revision>.
+    ///     Major and minor versions are mandatory, but build and revision can be left unspecified.
+    ///     BepInEx uses System.Version to parse this string, so it CANNOT contain non-numeric characters like "-dev.1".
     /// </summary>
     public const string PLUGIN_VERSION = ThisAssembly.AssemblyFileVersion;
 
-    public const string PLUGIN_DISPLAY_VERSION =
-        // ReSharper disable once HeuristicUnreachableCode
-        ThisAssembly.IsPublicRelease ? ThisAssembly.AssemblyVersion : ThisAssembly.AssemblyInformationalVersion;
+    /// <summary>
+    ///     Human-readable display version shown in UI, logs, error dialogs, and network handshake (e.g. "0.9.22-dev.1").
+    /// </summary>
+    public static readonly string PLUGIN_DISPLAY_VERSION = $"{BASE_VERSION}{FORK_SUFFIX}";
 }

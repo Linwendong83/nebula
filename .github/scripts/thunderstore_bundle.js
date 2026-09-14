@@ -93,11 +93,15 @@ async function main() {
 
 function getPluginInfo() {
   const pluginInfoRaw = readFileSync(PLUGIN_INFO_PATH).toString("utf-8");
-  const versionInfoRaw = readFileSync("version.json").toString("utf-8");
+  const baseVersion = JSON.parse(readFileSync("version.json").toString("utf-8")).version;
+  const forkMatch = pluginInfoRaw.match(/FORK_SUFFIX\s*=\s*"([^"]*)";/);
+  const forkSuffix = forkMatch ? forkMatch[1] : "";
+  const fullVersion = forkSuffix ? `${baseVersion}${forkSuffix}` : baseVersion;
   return {
     name: pluginInfoRaw.match(/PLUGIN_NAME = "(.*)";/)[1],
     id: pluginInfoRaw.match(/PLUGIN_ID = "(.*)";/)[1],
-    version: JSON.parse(versionInfoRaw).version,
+    baseVersion: baseVersion,
+    version: fullVersion,
   };
 }
 
@@ -118,7 +122,7 @@ function generateManifest() {
     name: pluginInfo.name,
     description:
       "With this mod you will be able to play with your friends in the same game! Now supports combat mode in game version 0.10.34",
-    version_number: pluginInfo.version,
+    version_number: pluginInfo.baseVersion,
     dependencies: [
       BEPINEX_DEPENDENCY,
       `nebula-${apiPluginInfo.name}-${apiPluginInfo.version}`,
@@ -216,7 +220,7 @@ function copyFolderContent(src, dst, excludedExts) {
 function generateReleaseBody() {
   const changelog = readFileSync(CHANGELOG_PATH, "utf-8");
   const versionRegExp = new RegExp(
-    "\\b[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:\\.[0-9]+)?(?=:)\\b",
+    "\\b[0-9]+\\.[0-9]+(?:\\.[0-9]+)?(?:\\.[0-9]+)?(?:-[a-zA-Z0-9.]+)?(?=:)\\b",
     "g"
   );
 
@@ -225,18 +229,12 @@ function generateReleaseBody() {
   const currentVersion = versions[0][0];
 
   if (pluginInfo.version != currentVersion) {
-    throw `CHANGELOG.md latest version (${currentVersion}) does not match version.json (${pluginInfo.version}) !`;
+    throw `CHANGELOG.md latest version (${currentVersion}) does not match version (${pluginInfo.version}) !`;
   }
 
-  const body = changelog
-    .substr(
-      versions[0].index + versions[0][0].length + 1,
-      versions[1].index -
-        versions[0].index -
-        versions[0][0].length -
-        versions[1][0].length
-    )
-    .trim();
+  const startIndex = versions[0].index + versions[0][0].length + 1;
+  const endIndex = versions.length > 1 ? versions[1].index : changelog.length;
+  const body = changelog.substring(startIndex, endIndex).trim();
 
   writeFileSync(
     join(DIST_RELEASE_FOLDER, "BODY.md"),

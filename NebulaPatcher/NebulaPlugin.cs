@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.IO;
@@ -56,11 +56,41 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
         }
     }
 
-    public string Version => NebulaModel.Config.ModVersion;
+    public string Version => PluginInfo.PLUGIN_DISPLAY_VERSION;
 
     public bool CheckVersion(string hostVersion, string clientVersion)
     {
-        return hostVersion.Equals(clientVersion);
+        if (string.Equals(hostVersion, clientVersion, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        string Normalize(string ver)
+        {
+            if (string.IsNullOrEmpty(ver)) return string.Empty;
+            int plusIndex = ver.IndexOf('+');
+            return plusIndex >= 0 ? ver.Substring(0, plusIndex).Trim() : ver.Trim();
+        }
+
+        string normHost = Normalize(hostVersion);
+        string normClient = Normalize(clientVersion);
+
+        if (string.Equals(normHost, normClient, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        bool hostIsDev = normHost.Contains("-dev");
+        bool clientIsDev = normClient.Contains("-dev");
+
+        if (hostIsDev != clientIsDev)
+        {
+            Log.Warn($"[Nebula] Connection rejected due to mod version mismatch: Host ({hostVersion}) and Client ({clientVersion}). Official and Fork-dev versions cannot play together due to custom synchronization features.");
+            return false;
+        }
+
+        Log.Warn($"[Nebula] Connection rejected due to mod version mismatch: Host ({hostVersion}) vs Client ({clientVersion}).");
+        return false;
     }
 
     private static void Initialize()

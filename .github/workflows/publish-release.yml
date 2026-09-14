@@ -6,6 +6,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
 
     env:
       NEBULA_FOLDER : dist\\release\\nebula\\
@@ -81,8 +83,11 @@ jobs:
       # Get Version
       - id: getver
         run: |
-          $ver = (Get-Content version.json | ConvertFrom-Json).version
-          echo "::set-output name=ver::$ver"
+          $baseVer = (Get-Content version.json | ConvertFrom-Json).version
+          $pluginInfo = Get-Content NebulaPatcher\PluginInfo.cs -Raw
+          $forkSuffix = if ($pluginInfo -match 'FORK_SUFFIX\s*=\s*"([^"]+)"') { $matches[1] } else { "" }
+          $fullVer = "$baseVer$forkSuffix"
+          "ver=$fullVer" >> $env:GITHUB_OUTPUT
 
       # Create release
       - uses: NebulaModTeam/release-action@v1
