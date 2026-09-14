@@ -1,46 +1,46 @@
-# Nebula Multiplayer Mod [![GitHub Release](https://img.shields.io/github/v/release/NebulaModTeam/nebula)](https://github.com/NebulaModTeam/nebula/releases/latest) [![Nightly Build](https://img.shields.io/badge/nightly-Build-8A2BE2?link=https%3A%2F%2Fnightly.link%2FNebulaModTeam%2Fnebula%2Fworkflows%2Fbuild-winx64%2Fmaster%2Fbuild-artifacts-Release.zip)](https://nightly.link/NebulaModTeam/nebula/workflows/build-winx64/master/build-artifacts-Release.zip) [![Build - Win x64](https://github.com/NebulaModTeam/nebula/actions/workflows/build-winx64.yml/badge.svg)](https://github.com/NebulaModTeam/nebula/actions/workflows/build-winx64.yml)
+# Nebula Multiplayer Mod [![Build - Win x64](https://github.com/Linwendong83/nebula/actions/workflows/build-winx64.yml/badge.svg)](https://github.com/Linwendong83/nebula/actions/workflows/build-winx64.yml)
+
+[English](README.md) | [简体中文](README_zh-CN.md)
 
 An open-source, multiplayer mod for the game [Dyson Sphere Program](https://store.steampowered.com/app/1366540/Dyson_Sphere_Program/).
 
-## Download Prerelease
+## Releases & Downloads
 
-[![Build - Win x64](https://github.com/NebulaModTeam/nebula/actions/workflows/build-winx64.yml/badge.svg?branch=master)](https://nightly.link/NebulaModTeam/nebula/workflows/build-winx64/master/build-artifacts-Release.zip) 
-Note: This is the bleeding edge build, for the more stable build see below. You can use this one if you want to try out the latest development builds, which may contain bugs and unfinished features.
-
-You will also need some extra steps to get this installed, see 2nd point in ["How can I play this mod?"](#how-can-i-play-this-mod).
+- You can download the latest builds from this repository's [Releases](https://github.com/Linwendong83/nebula/releases) or [Actions](https://github.com/Linwendong83/nebula/actions).
+- Stable builds of the original mod can also be found on [Thunderstore](https://dsp.thunderstore.io/package/nebula/NebulaMultiplayerMod/).
+- For manual installation instructions, please refer to the [Installation Guide](https://github.com/Linwendong83/nebula/wiki/Installation#manual-installation).
 
 ## FAQ
 
-### Where can I get mod support?
+### Where can I get mod support or report issues?
 
-Please join our [Discord Server](https://discord.gg/UHeB2QvgDa) and ask your question in the `support` channel.  
+Please open an issue on our [GitHub Issues](https://github.com/Linwendong83/nebula/issues) page.  
 The mod often becomes incompatible after game updates. A temporary version rollback may be needed.  
 Some mods are not compatible with multiplayer. Check the [NebulaCompatibilityAssist](https://thunderstore.io/c/dyson-sphere-program/p/starfi5h/NebulaCompatibilityAssist/) mod page to learn more.  
 
 ### How can I play this mod?
 
-Please do keep in mind that this mod is still in development to keep up with game changes, it may still contain bugs.
+Please do keep in mind that this mod is still in active development to keep up with game changes, it may still contain bugs.
 
-- Stable version of the mod can be downloaded from [Thunderstore](https://dsp.thunderstore.io/package/nebula/NebulaMultiplayerMod/) (Recommended).
-- If you want to install the latest version of the mod, you can install pre-release versions be following the [installation guide](https://github.com/NebulaModTeam/nebula/wiki/Installation#manual-installation).
-- To connect, check [hosting and joining guide](https://github.com/NebulaModTeam/nebula/wiki/Hosting-and-Joining). The mod uses TCP for direct connections, with the default port set to 8469.
-
+- Pre-release and development builds can be downloaded from [Releases](https://github.com/Linwendong83/nebula/releases).
+- For step-by-step setup, see the [Installation Guide](https://github.com/Linwendong83/nebula/wiki/Installation#manual-installation).
+- To connect, check the [Hosting and Joining Guide](https://github.com/Linwendong83/nebula/wiki/Hosting-and-Joining). The mod uses TCP for direct connections, with the default port set to `8469`.
 
 ### Chat 
 
-The chat window can opened/closed using `Alt + Backtick` (configurable in Settings - Multiplayer - Chat). Also in settings is an option to disable the chat window from automatically opening when a message is received.  
-Type `/help` to view all commands, or view [Chat Commands](https://github.com/NebulaModTeam/nebula/wiki/Chat-Commands) wiki page for more info.  
+The chat window can be opened/closed using `Alt + Backtick` (configurable in Settings - Multiplayer - Chat). Also in settings is an option to disable the chat window from automatically opening when a message is received.  
+Type `/help` to view all commands, or view the [Chat Commands](https://github.com/Linwendong83/nebula/wiki/Chat-Commands) wiki page for more info.  
 
 ### Dedicated Server
 
-The mod supports running the server in non-GPU environment. Check [the wiki page](https://github.com/NebulaModTeam/nebula/wiki/Setup-Headless-Server) to learn how to setup and the command-line arguments.  
+The mod supports running the server in a non-GPU environment. Check [the wiki page](https://github.com/Linwendong83/nebula/wiki/Setup-Headless-Server) to learn how to set it up and view available command-line arguments.  
 
 ### What is the current status?
 
-Major refactors will happen while the project grows or game updates. Join the [Discord Server](https://discord.gg/UHeB2QvgDa) if you want to see to latest state of our development. Check [Wiki](https://github.com/NebulaModTeam/nebula/wiki/About-Nebula) for overview of features.  
+Check the [Wiki](https://github.com/Linwendong83/nebula/wiki/About-Nebula) for an overview of features.  
 
-The multiplayer mod now supports Dark Fog combat mode in the latest game version (0.10.34.x).  
-Most of the battle aspects are sync, only few features are still work in progress.  
+The multiplayer mod currently supports the Dark Fog combat mode in the latest game version (0.10.34.x).  
+Most battle aspects are synchronized, with only a few features still work in progress.  
 
 <details>
 <summary>List of peace mode syncing features (click to expand)</summary>
@@ -128,12 +128,8 @@ Most of the battle aspects are sync, only few features are still work in progres
 
 ### API Documentation
 
-This mod has an API, that makes it easier for other mod developers to make their mods compatible with Nebula. If you are a mod developer and you want your mods to be compatible, follow the instructions [here](https://github.com/NebulaModTeam/nebula/wiki/Nebula-mod-API). Also you can always join our [Discord Server](https://discord.gg/UHeB2QvgDa) for help with using the API.
+This mod has an API that makes it easier for other mod developers to make their mods compatible with Nebula. If you are a mod developer and you want your mods to be compatible, follow the instructions [here](https://github.com/Linwendong83/nebula/wiki/Nebula-mod-API).
 
 ### How can I contribute?
 
-Please join our [Discord Server](https://discord.gg/UHeB2QvgDa) to ask if someone is already working on the task that you want to do. Once, you are done with your modification, simply submit a pull request. Contribution documentation can be found here: [Wiki](https://github.com/NebulaModTeam/nebula/wiki/Setting-up-a-development-environment).
-
-### How can I support the team?
-
-If you like what we do and would like to support us, you can donate through our [Patreon](https://www.patreon.com/nebula_mod_team). Thanks for the support <3
+Contributions are welcome! Please feel free to open an issue or submit a pull request. Contribution documentation can be found here: [Wiki](https://github.com/Linwendong83/nebula/wiki/Setting-up-a-development-environment).
