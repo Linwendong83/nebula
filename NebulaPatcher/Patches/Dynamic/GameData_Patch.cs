@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.IO;
@@ -230,6 +230,21 @@ internal class GameData_Patch
             catch (Exception e)
             {
                 Log.Error("NebulaModAPI.OnPlanetLoadFinished error:\n" + e);
+            }
+
+            if (PlanetManager.PreservedDashboardData != null && PlanetManager.PreservedDashboardData.Length > 0 && GameMain.data?.statistics?.charts != null)
+            {
+                try
+                {
+                    using var ms = new MemoryStream(PlanetManager.PreservedDashboardData);
+                    using var reader = new BinaryReader(ms);
+                    GameMain.data.statistics.charts.Import(reader);
+                    PlanetManager.PreservedDashboardData = null;
+                }
+                catch (Exception e)
+                {
+                    Log.Warn($"Failed to restore preserved dashboard: {e}");
+                }
             }
         }
 

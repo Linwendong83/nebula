@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using NebulaAPI.DataStructures;
 using NebulaAPI.Interfaces;
@@ -23,6 +23,7 @@ public interface IPlayerData : INetSerializable
     MechaAppearance DIYAppearance { get; set; }
     int[] DIYItemId { get; set; }
     int[] DIYItemValue { get; set; }
+    byte[] DashboardData { get; set; }
 
     IPlayerData CreateCopyWithoutMechaData();
 }

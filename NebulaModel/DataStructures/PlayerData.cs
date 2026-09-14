@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.IO;
@@ -20,6 +20,7 @@ public class PlayerData : IPlayerData
         DIYAppearance = null;
         DIYItemId = Array.Empty<int>();
         DIYItemValue = Array.Empty<int>();
+        DashboardData = null;
     }
 
     public PlayerData(ushort playerId, int localPlanetId, string username = null, Float3 localPlanetPosition = new(),
@@ -37,6 +38,7 @@ public class PlayerData : IPlayerData
         DIYAppearance = null;
         DIYItemId = Array.Empty<int>();
         DIYItemValue = Array.Empty<int>();
+        DashboardData = null;
     }
 
     public string Username { get; set; }
@@ -52,6 +54,7 @@ public class PlayerData : IPlayerData
     public MechaAppearance DIYAppearance { get; set; }
     public int[] DIYItemId { get; set; }
     public int[] DIYItemValue { get; set; }
+    public byte[] DashboardData { get; set; }
 
     public void Serialize(INetDataWriter writer)
     {
@@ -92,6 +95,12 @@ public class PlayerData : IPlayerData
         {
             writer.Put(DIYItemId[i]);
             writer.Put(DIYItemValue[i]);
+        }
+        writer.Put(DashboardData != null);
+        if (DashboardData != null)
+        {
+            writer.Put(DashboardData.Length);
+            writer.Put(DashboardData);
         }
     }
 
@@ -138,11 +147,24 @@ public class PlayerData : IPlayerData
             DIYItemId[i] = reader.GetInt();
             DIYItemValue[i] = reader.GetInt();
         }
+        var isDashboardPresent = reader.GetBool();
+        if (isDashboardPresent)
+        {
+            var len = reader.GetInt();
+            DashboardData = new byte[len];
+            reader.GetBytes(DashboardData, len);
+        }
+        else
+        {
+            DashboardData = null;
+        }
     }
 
     public IPlayerData CreateCopyWithoutMechaData()
     {
-        return new PlayerData(PlayerId, LocalPlanetId, Username, LocalPlanetPosition, UPosition, Rotation, BodyRotation);
+        var copy = new PlayerData(PlayerId, LocalPlanetId, Username, LocalPlanetPosition, UPosition, Rotation, BodyRotation);
+        copy.DashboardData = DashboardData;
+        return copy;
     }
 
     // Backward compatiblity for older versions

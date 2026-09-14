@@ -1,6 +1,7 @@
-﻿#region
+#region
 
 using System;
+using System.Collections.Generic;
 using NebulaModel;
 using NebulaModel.Logger;
 using NebulaModel.Networking;
@@ -16,7 +17,39 @@ public class GameStatesManager : IDisposable
     public const float MaxUPS = 240f;
     public const float MinUPS = 30f;
     public static bool DuringReconnect { get; set; }
+    private static readonly HashSet<int> preservedFeatureKeys = new();
+    private static readonly HashSet<int> preservedTutorialUnlocked = new();
     private static int bufferLength;
+
+    public static bool IsAdvisorOrTutorialFeatureKey(int featureId)
+    {
+        return (featureId >= FeatureID.ADVISOR_TIP_START && featureId < FeatureID.GOAL_STATE) ||
+               (featureId >= FeatureID.VEIN_SCAN && featureId <= FeatureID.HIDE_GRID_SPLIT_TIP);
+    }
+
+    public static void PreserveFeatureKey(int featureId)
+    {
+        if (IsAdvisorOrTutorialFeatureKey(featureId))
+        {
+            preservedFeatureKeys.Add(featureId);
+        }
+    }
+
+    public static void UnpreserveFeatureKey(int featureId)
+    {
+        if (IsAdvisorOrTutorialFeatureKey(featureId))
+        {
+            preservedFeatureKeys.Remove(featureId);
+        }
+    }
+
+    public static void PreserveTutorial(int tutorialId)
+    {
+        if (tutorialId > 0)
+        {
+            preservedTutorialUnlocked.Add(tutorialId);
+        }
+    }
 
     public static long RealGameTick => GameMain.gameTick;
     public static float RealUPS => (float)FPSController.currentUPS;
@@ -46,6 +79,12 @@ public class GameStatesManager : IDisposable
 
     public void Dispose()
     {
+        if (!DuringReconnect)
+        {
+            preservedFeatureKeys.Clear();
+            preservedTutorialUnlocked.Clear();
+        }
+
         LastSaveTime = FragmentSize = 0;
         sandboxToolsEnabled = false;
         historyBinaryData = null;
@@ -221,16 +260,140 @@ public class GameStatesManager : IDisposable
 
     public void OverwriteGlobalGameData(GameData data)
     {
+        if (data == null)
+        {
+            return;
+        }
+
         if (historyBinaryData != null)
         {
             Log.Info("Parsing History data from the server...");
             GameMain.sandboxToolsEnabled = sandboxToolsEnabled;
+
+            if (data.history != null)
+            {
+                if (data.history.featureKeys != null)
+                {
+                    foreach (int key in data.history.featureKeys)
+                    {
+                        PreserveFeatureKey(key);
+                    }
+                }
+                if (data.history.tutorialUnlocked != null)
+                {
+                    foreach (int tutorialId in data.history.tutorialUnlocked)
+                    {
+                        PreserveTutorial(tutorialId);
+                    }
+                }
+            }
+
+            if (data.history == null)
+            {
+                data.history = new GameHistoryData();
+            }
+
             data.history.Init(data);
             using (var reader = new BinaryUtils.Reader(historyBinaryData))
             {
                 data.history.Import(reader.BinaryReader);
             }
             historyBinaryData = null;
+
+            data.history.featureKeys ??= new HashSet<int>();
+            data.history.tutorialUnlocked ??= new HashSet<int>();
+
+            if (preservedFeatureKeys.Count > 0)
+            {
+                var keysToRestore = new List<int>(preservedFeatureKeys);
+                foreach (int key in keysToRestore)
+                {
+                    if (!data.history.HasFeatureKey(key))
+                    {
+                        data.history.RegFeatureKey(key);
+                    }
+                }
+            }
+            if (preservedTutorialUnlocked.Count > 0)
+            {
+                var tutorialsToRestore = new List<int>(preservedTutorialUnlocked);
+                foreach (int tutorialId in tutorialsToRestore)
+                {
+                    if (tutorialId > 0 && !data.history.TutorialUnlocked(tutorialId))
+                    {
+                        data.history.UnlockTutorial(tutorialId);
+                    }
+                }
+            }
+
+            if (data.history.featureKeys != null)
+            {
+                foreach (int key in data.history.featureKeys)
+                {
+                    PreserveFeatureKey(key);
+                }
+            }
+            if (data.history.tutorialUnlocked != null)
+            {
+                foreach (int tutorialId in data.history.tutorialUnlocked)
+                {
+                    PreserveTutorial(tutorialId);
+                }
+            }
+
+            using (Multiplayer.Session.History.IsIncomingRequest.On())
+            {
+                if (data.history.featureKeys != null)
+                {
+                    int maxAdvisorUsedKey = FeatureID.ADVISOR_TIP_USED_START + (FeatureID.ADVISOR_TIP_USED_START - FeatureID.ADVISOR_TIP_START);
+                    foreach (int key in data.history.featureKeys)
+                    {
+                        if (key >= FeatureID.ADVISOR_TIP_START && key < FeatureID.ADVISOR_TIP_USED_START)
+                        {
+                            int tipId = key - FeatureID.ADVISOR_TIP_START;
+                            GameMain.gameScenario?.advisorLogic?.SetAdvisorTipFinished(tipId);
+                        }
+                        else if (key >= FeatureID.ADVISOR_TIP_USED_START && key < maxAdvisorUsedKey)
+                        {
+                            int tipId = key - FeatureID.ADVISOR_TIP_USED_START;
+                            GameMain.gameScenario?.advisorLogic?.SetAdvisorTipUsed(tipId);
+                        }
+                    }
+                }
+            }
+
+            var advisorTip = UIRoot.instance?.uiGame?.advisorTip;
+            if (advisorTip != null)
+            {
+                if (advisorTip.playingTip != null &&
+                    (data.history.HasFeatureKey(FeatureID.ADVISOR_TIP_START + advisorTip.playingTip.ID) ||
+                     data.history.HasFeatureKey(FeatureID.ADVISOR_TIP_USED_START + advisorTip.playingTip.ID)))
+                {
+                    advisorTip.StopAdvisorTip();
+                }
+                advisorTip.requests?.RemoveAll(id =>
+                    data.history.HasFeatureKey(FeatureID.ADVISOR_TIP_START + id) ||
+                    data.history.HasFeatureKey(FeatureID.ADVISOR_TIP_USED_START + id));
+                if (advisorTip.nextTip != null &&
+                    (data.history.HasFeatureKey(FeatureID.ADVISOR_TIP_START + advisorTip.nextTip.ID) ||
+                     data.history.HasFeatureKey(FeatureID.ADVISOR_TIP_USED_START + advisorTip.nextTip.ID)))
+                {
+                    advisorTip.nextTip = null;
+                }
+            }
+
+            var tutorialTip = UIRoot.instance?.uiGame?.tutorialTip;
+            if (tutorialTip != null && tutorialTip.entryShowed != null)
+            {
+                for (int i = tutorialTip.entryShowed.Count - 1; i >= 0; i--)
+                {
+                    var entry = tutorialTip.entryShowed[i];
+                    if (entry != null && data.history.TutorialUnlocked(entry.tutorialId))
+                    {
+                        tutorialTip.CloseTip(entry.tutorialId);
+                    }
+                }
+            }
         }
         if (galacticTransportBinaryData != null)
         {

@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using NebulaAPI.GameState;
 using NebulaAPI.Networking;
@@ -114,6 +114,12 @@ public class SyncCompleteProcessor : PacketProcessor<SyncComplete>
             player.Data.DIYAppearance.Export(writer.BinaryWriter);
             player.SendPacket(new PlayerMechaDIYArmor(writer.CloseAndGetBytes(), player.Data.DIYItemId,
                 player.Data.DIYItemValue));
+        }
+
+        // if the client has custom dashboard data saved on server, send it to them
+        if (player.Data.DashboardData != null && player.Data.DashboardData.Length > 0)
+        {
+            player.SendPacket(new PlayerDashboardPacket(player.Id, player.Data.DashboardData));
         }
 
         Multiplayer.Session.World.OnAllPlayersSyncCompleted();
