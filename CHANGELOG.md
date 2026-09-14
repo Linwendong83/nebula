@@ -5,6 +5,7 @@
 - Sync tutorial and advisor progress
 - Persist player custom dashboard across reconnects
 - Add built-in Chinese localization support
+<br>
 
 - 同步无线输电塔为机甲充电
 - 同步新手指引与导师进度

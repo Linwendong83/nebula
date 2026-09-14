@@ -51,7 +51,8 @@ if (!(Test-Path $distRelease)) {
 
 $bodyFile = Join-Path $distRelease "BODY.md"
 $bodyContent = "# Alpha Version $fullVersion`n`n### Changes`n$body"
-[System.IO.File]::WriteAllText($bodyFile, $bodyContent, [System.Text.Encoding]::UTF8)
+$utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+[System.IO.File]::WriteAllText($bodyFile, $bodyContent, $utf8NoBom)
 Write-Host "BODY.md written to: $bodyFile" -ForegroundColor Green
 
 # 4. Create Release Zip (Nebula_<version>.zip)
