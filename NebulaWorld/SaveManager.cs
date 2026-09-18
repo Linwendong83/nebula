@@ -19,6 +19,9 @@ public static class SaveManager
     private const ushort REVISION = 8;
 
     private static readonly Dictionary<string, IPlayerData> playerSaves = new();
+    private static string pendingLoadFileName;
+    private static bool pendingLoadSaveFile;
+    private static bool hasPendingLoad;
     public static IReadOnlyDictionary<string, IPlayerData> PlayerSaves => playerSaves;
 
     public static void SaveServerData(string saveName)
@@ -92,13 +95,43 @@ public static class SaveManager
 
     public static void LoadServerData(bool loadSaveFile)
     {
+        // A dedicated server opens its session before the world is created, so GameMain.data is still
+        // null here and player data cannot be deserialized (CombatModuleComponent.Init needs GameData).
+        // Remember the request and finish it in EnsureServerDataLoaded() once the world exists.
+        // GameData.Import() resets DSPGame.LoadFile to "" while reading the save, so capture the name
+        // now instead of relying on it later.
+        if (loadSaveFile && GameMain.data == null)
+        {
+            pendingLoadFileName = DSPGame.LoadFile;
+            pendingLoadSaveFile = true;
+            hasPendingLoad = true;
+            return;
+        }
+
+        LoadServerDataNow(loadSaveFile, DSPGame.LoadFile);
+    }
+
+    // Completes a LoadServerData() call that had to wait for the world to be created.
+    public static void EnsureServerDataLoaded()
+    {
+        if (!hasPendingLoad || GameMain.data == null)
+        {
+            return;
+        }
+
+        hasPendingLoad = false;
+        LoadServerDataNow(pendingLoadSaveFile, pendingLoadFileName);
+    }
+
+    private static void LoadServerDataNow(bool loadSaveFile, string saveName)
+    {
         playerSaves.Clear();
 
         if (!loadSaveFile)
         {
             return;
         }
-        var path = GameConfig.gameSaveFolder + DSPGame.LoadFile + FILE_EXTENSION;
+        var path = GameConfig.gameSaveFolder + saveName + FILE_EXTENSION;
         if (!File.Exists(path))
         {
             Log.Info($"No server file");

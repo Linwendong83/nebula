@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
+using System.Threading;
 using HarmonyLib;
 using NebulaModel;
 using NebulaModel.Logger;
@@ -24,6 +25,9 @@ internal class Dedicated_Server_Patches
     [HarmonyPatch(typeof(GameMain), nameof(GameMain.Begin))]
     public static void GameMainBegin_Postfix()
     {
+        Log.Info($"[headless] GameMain.Begin call #{Interlocked.Increment(ref gameMainBeginCount)} completed");
+        // Server.Start() could not restore the saved player data because the world did not exist yet.
+        SaveManager.EnsureServerDataLoaded();
         if (!Multiplayer.IsActive)
         {
             return;
@@ -46,6 +50,21 @@ internal class Dedicated_Server_Patches
         }
     }
 
+    // VFPreload.PreloadThread starts a background "menu demo" game via DSPGame.StartDemoGame right
+    // before it calls InvokeOnLoadWorkEnded(), and that call is what starts the dedicated server.
+    // In headless mode the splash gates are skipped, so StartGameSkipPrologue runs before the demo
+    // loader ever ticks. Both GameLoader instances then walk frames 1..10 and each call
+    // GameMain.Begin(): the second call throws in UIAchievementPanel.LoadData (duplicate key),
+    // GameLoader.SelfDestroy() is never reached, and the server loops on that exception forever
+    // with port 8469 left unbound. A dedicated server has no main menu, so it needs no demo game.
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(DSPGame), nameof(DSPGame.StartDemoGame))]
+    public static bool StartDemoGame_Prefix()
+    {
+        Log.Info("[headless] Skipping DSPGame.StartDemoGame (main menu demo game)");
+        return false;
+    }
+
     // Stop game rendering
     [HarmonyPrefix]
     [HarmonyPatch(typeof(GameLogic), nameof(GameLogic.Draw))]
@@ -55,6 +74,22 @@ internal class Dedicated_Server_Patches
     public static bool OnDraw_Prefix()
     {
         return false;
+    }
+
+    private static int gameMainBeginCount;
+
+    // A dedicated server must keep simulating even while the host mecha is dead. GameMainBegin_Postfix
+    // kills the host player so it cannot interact with enemies, but DSP applies a death slow-motion
+    // afterwards and returns 0 logic frames per FixedUpdate once Player.timeSinceKilled reaches 320.
+    // The world then freezes: gameTick stops advancing, autosave never fires and clients desync.
+    [HarmonyPostfix]
+    [HarmonyPatch(typeof(GameMain), nameof(GameMain.DetermineGameTickRate))]
+    public static void DetermineGameTickRate_Postfix(ref int __result)
+    {
+        if (Multiplayer.IsDedicated && __result < 1)
+        {
+            __result = 1;
+        }
     }
 
     [HarmonyPrefix]

@@ -260,7 +260,7 @@ public class Server : IServer
         ((LocalPlayer)Multiplayer.Session.LocalPlayer).SetPlayerData(new PlayerData(
                 GetNextPlayerId(),
                 GameMain.localPlanet?.id ?? -1,
-                !string.IsNullOrWhiteSpace(Config.Options.Nickname) ? Config.Options.Nickname : GameMain.data.account.userName),
+                !string.IsNullOrWhiteSpace(Config.Options.Nickname) ? Config.Options.Nickname : GameMain.data?.account.userName ?? string.Empty),
             loadSaveFile);
 
         Task.Run(async () =>

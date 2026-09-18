@@ -40,6 +40,74 @@ internal class VFPreload_Patch
     }
 
     [HarmonyPostfix]
+    [HarmonyPatch(typeof(VFPreload), nameof(VFPreload.Start))]
+    public static void Start_Postfix(VFPreload __instance)
+    {
+        if (!Multiplayer.IsDedicated)
+        {
+            return;
+        }
+        // The splash screen waits for the language selection panel to fade out, which requires a click.
+        // Nothing can click it in headless mode, so the preload coroutine would never finish.
+        if (__instance.languageSelectGroup != null)
+        {
+            __instance.languageSelectGroup.gameObject.SetActive(false);
+        }
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(VFPreload), nameof(VFPreload.IsSplashSolid))]
+    public static bool IsSplashSolid_Prefix(ref bool __result)
+    {
+        if (!Multiplayer.IsDedicated)
+        {
+            return true;
+        }
+        // Splash animation state never settles without a real display, so skip the gate.
+        __result = true;
+        return false;
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(VFPreload), nameof(VFPreload.IsMusicReached))]
+    public static bool IsMusicReached_Prefix(ref bool __result)
+    {
+        if (!Multiplayer.IsDedicated)
+        {
+            return true;
+        }
+        // No audio device is available in headless mode, so this gate would wait 80 seconds.
+        __result = true;
+        return false;
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(VFPreload), nameof(VFPreload.IsMenuDemoLoaded))]
+    public static bool IsMenuDemoLoaded_Prefix(ref bool __result)
+    {
+        if (!Multiplayer.IsDedicated)
+        {
+            return true;
+        }
+        // The menu demo needs a graphics device to finish loading.
+        __result = true;
+        return false;
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(VFPreload), nameof(VFPreload.IsLogined))]
+    public static bool IsLogined_Prefix(ref bool __result)
+    {
+        if (!Multiplayer.IsDedicated)
+        {
+            return true;
+        }
+        // Steam login callbacks are not always delivered under a headless Wine prefix.
+        __result = true;
+        return false;
+    }
+
+    [HarmonyPostfix]
     [HarmonyPatch(nameof(VFPreload.InvokeOnLoadWorkEnded))]
     public static void InvokeOnLoadWorkEnded_Postfix()
     {

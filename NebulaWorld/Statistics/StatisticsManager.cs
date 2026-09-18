@@ -22,7 +22,9 @@ public class StatisticsManager : IDisposable
     private readonly ThreadSafe threadSafe = new();
     private Dictionary<int, int> factoryIndexMap = new();
 
-    private PlanetData[] planetDataMap = new PlanetData[GameMain.data.factories.Length];
+    // A dedicated server creates its session before the world exists, so GameMain.data is not
+    // available yet. Size this lazily when the first statistics snapshot is imported instead.
+    private PlanetData[] planetDataMap = [];
 
     private List<StatisticalSnapShot> statisticalSnapShots = [];
     private long lastUpdateTime;
@@ -226,6 +228,10 @@ public class StatisticsManager : IDisposable
     {
         var Stats = GameMain.statistics;
         FactoryCount = br.ReadInt32();
+        if (planetDataMap.Length < FactoryCount)
+        {
+            Array.Resize(ref planetDataMap, FactoryCount);
+        }
 
         //Import planet data
         for (var i = 0; i < FactoryCount; i++)
