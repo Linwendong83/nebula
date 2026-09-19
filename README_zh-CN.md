@@ -8,7 +8,7 @@
 
 - 您可以从本仓库的 [Releases](https://github.com/Linwendong83/nebula/releases) 或 [Actions](https://github.com/Linwendong83/nebula/actions) 页面下载最新的构建版本。
 - 原版稳定版本也可以在 [Thunderstore](https://dsp.thunderstore.io/package/nebula/NebulaMultiplayerMod/) 获取。
-- 有关手动安装的详细步骤，请参阅[安装指南](https://github.com/Linwendong83/nebula/wiki/Installation#manual-installation)。
+- 有关手动安装的详细步骤，请参阅[安装指南](https://github.com/NebulaModTeam/nebula/wiki/Installation#manual-installation)。
 
 ## 常见问题 (FAQ)
 
@@ -23,21 +23,21 @@
 请注意，为了紧跟游戏本体的更新，该 Mod 目前仍在积极开发中，可能仍存在一些问题与缺陷。
 
 - 您可以从本仓库的 [Releases](https://github.com/Linwendong83/nebula/releases) 获取开发构建版本。
-- 关于安装步骤，请参考[手动安装指南](https://github.com/Linwendong83/nebula/wiki/Installation#manual-installation)。
-- 关于局域网/互联网联机连接方式，请查阅[建主与加入联机指南](https://github.com/Linwendong83/nebula/wiki/Hosting-and-Joining)。本 Mod 采用 TCP 直连协议，默认通信端口为 `8469`。
+- 关于安装步骤，请参考[手动安装指南](https://github.com/NebulaModTeam/nebula/wiki/Installation#manual-installation)。
+- 关于局域网/互联网联机连接方式，请查阅[建主与加入联机指南](https://github.com/NebulaModTeam/nebula/wiki/Hosting-and-Joining)。本 Mod 采用 TCP 直连协议，默认通信端口为 `8469`。
 
 ### 聊天系统 (Chat)
 
 聊天窗口可以通过快捷键 `Alt + ~`（反引号键）打开或关闭（可在游戏内“设置 - 多人模式 - 聊天”中自定义配置）。设置中还提供了“收到新消息时是否自动弹出聊天窗口”的选项开关。  
-在聊天框中输入 `/help` 可查看所有可用指令，或参阅 [Chat Commands](https://github.com/Linwendong83/nebula/wiki/Chat-Commands) Wiki 页面了解更多信息。  
+在聊天框中输入 `/help` 可查看所有可用指令，或参阅 [Chat Commands](https://github.com/NebulaModTeam/nebula/wiki/Chat-Commands) Wiki 页面了解更多信息。  
 
 ### 独立/专用服务器 (Dedicated Server)
 
-该 Mod 支持在无 GPU 的纯服务端环境下运行（Headless Server）。请查阅 [Wiki 页面](https://github.com/Linwendong83/nebula/wiki/Setup-Headless-Server)了解如何配置以及可用的命令行启动参数。  
+该 Mod 支持在无 GPU 的纯服务端环境下运行（Headless Server）。请查阅 [Wiki 页面](https://github.com/NebulaModTeam/nebula/wiki/Setup-Headless-Server)了解如何配置以及可用的命令行启动参数。  
 
 ### 目前的开发状态与同步进度？
 
-完整功能概览请查阅 [Wiki](https://github.com/Linwendong83/nebula/wiki/About-Nebula)。  
+完整功能概览请查阅 [Wiki](https://github.com/NebulaModTeam/nebula/wiki/About-Nebula)。  
 
 目前该多人联机 Mod 已支持最新游戏版本（0.10.34.x）的**黑雾崛起战斗模式**。  
 战斗模式下绝大多数内容已实现同步，仅少数特性仍在完善中。  
@@ -129,8 +129,8 @@
 
 ### 开发者接口 (API Documentation)
 
-本 Mod 提供了专有 API，方便其他 Mod 开发者使其 Mod 与 Nebula 兼容。如果您是一名 Mod 开发者并希望与 Nebula 适配，请遵循[这里的指南](https://github.com/Linwendong83/nebula/wiki/Nebula-mod-API)。
+本 Mod 提供了专有 API，方便其他 Mod 开发者使其 Mod 与 Nebula 兼容。如果您是一名 Mod 开发者并希望与 Nebula 适配，请遵循[这里的指南](https://github.com/NebulaModTeam/nebula/wiki/Nebula-mod-API)。
 
 ### 如何参与贡献？
 
-非常欢迎任何形式的代码贡献！您可以直接提交 Issue 或 Pull Request。环境搭建与贡献指南请参阅：[Wiki 开发环境配置](https://github.com/Linwendong83/nebula/wiki/Setting-up-a-development-environment)。
+非常欢迎任何形式的代码贡献！您可以直接提交 Issue 或 Pull Request。环境搭建与贡献指南请参阅：[Wiki 开发环境配置](https://github.com/NebulaModTeam/nebula/wiki/Setting-up-a-development-environment)。

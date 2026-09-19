@@ -8,7 +8,7 @@ An open-source, multiplayer mod for the game [Dyson Sphere Program](https://stor
 
 - You can download the latest builds from this repository's [Releases](https://github.com/Linwendong83/nebula/releases) or [Actions](https://github.com/Linwendong83/nebula/actions).
 - Stable builds of the original mod can also be found on [Thunderstore](https://dsp.thunderstore.io/package/nebula/NebulaMultiplayerMod/).
-- For manual installation instructions, please refer to the [Installation Guide](https://github.com/Linwendong83/nebula/wiki/Installation#manual-installation).
+- For manual installation instructions, please refer to the [Installation Guide](https://github.com/NebulaModTeam/nebula/wiki/Installation#manual-installation).
 
 ## FAQ
 
@@ -23,21 +23,21 @@ Some mods are not compatible with multiplayer. Check the [NebulaCompatibilityAss
 Please do keep in mind that this mod is still in active development to keep up with game changes, it may still contain bugs.
 
 - Pre-release and development builds can be downloaded from [Releases](https://github.com/Linwendong83/nebula/releases).
-- For step-by-step setup, see the [Installation Guide](https://github.com/Linwendong83/nebula/wiki/Installation#manual-installation).
-- To connect, check the [Hosting and Joining Guide](https://github.com/Linwendong83/nebula/wiki/Hosting-and-Joining). The mod uses TCP for direct connections, with the default port set to `8469`.
+- For step-by-step setup, see the [Installation Guide](https://github.com/NebulaModTeam/nebula/wiki/Installation#manual-installation).
+- To connect, check the [Hosting and Joining Guide](https://github.com/NebulaModTeam/nebula/wiki/Hosting-and-Joining). The mod uses TCP for direct connections, with the default port set to `8469`.
 
 ### Chat 
 
 The chat window can be opened/closed using `Alt + Backtick` (configurable in Settings - Multiplayer - Chat). Also in settings is an option to disable the chat window from automatically opening when a message is received.  
-Type `/help` to view all commands, or view the [Chat Commands](https://github.com/Linwendong83/nebula/wiki/Chat-Commands) wiki page for more info.  
+Type `/help` to view all commands, or view the [Chat Commands](https://github.com/NebulaModTeam/nebula/wiki/Chat-Commands) wiki page for more info.  
 
 ### Dedicated Server
 
-The mod supports running the server in a non-GPU environment. Check [the wiki page](https://github.com/Linwendong83/nebula/wiki/Setup-Headless-Server) to learn how to set it up and view available command-line arguments.  
+The mod supports running the server in a non-GPU environment. Check [the wiki page](https://github.com/NebulaModTeam/nebula/wiki/Setup-Headless-Server) to learn how to set it up and view available command-line arguments.  
 
 ### What is the current status?
 
-Check the [Wiki](https://github.com/Linwendong83/nebula/wiki/About-Nebula) for an overview of features.  
+Check the [Wiki](https://github.com/NebulaModTeam/nebula/wiki/About-Nebula) for an overview of features.  
 
 The multiplayer mod currently supports the Dark Fog combat mode in the latest game version (0.10.34.x).  
 Most battle aspects are synchronized, with only a few features still work in progress.  
@@ -129,8 +129,8 @@ Most battle aspects are synchronized, with only a few features still work in pro
 
 ### API Documentation
 
-This mod has an API that makes it easier for other mod developers to make their mods compatible with Nebula. If you are a mod developer and you want your mods to be compatible, follow the instructions [here](https://github.com/Linwendong83/nebula/wiki/Nebula-mod-API).
+This mod has an API that makes it easier for other mod developers to make their mods compatible with Nebula. If you are a mod developer and you want your mods to be compatible, follow the instructions [here](https://github.com/NebulaModTeam/nebula/wiki/Nebula-mod-API).
 
 ### How can I contribute?
 
-Contributions are welcome! Please feel free to open an issue or submit a pull request. Contribution documentation can be found here: [Wiki](https://github.com/Linwendong83/nebula/wiki/Setting-up-a-development-environment).
+Contributions are welcome! Please feel free to open an issue or submit a pull request. Contribution documentation can be found here: [Wiki](https://github.com/NebulaModTeam/nebula/wiki/Setting-up-a-development-environment).
