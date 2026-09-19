@@ -1,5 +1,6 @@
-#region
+﻿#region
 
+using System.IO;
 using NebulaAPI.Packets;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
@@ -26,8 +27,11 @@ public class PlayerDashboardProcessor : PacketProcessor<PlayerDashboardPacket>
         {
             if (packet.DashboardData != null && packet.DashboardData.Length > 0 && GameMain.data?.statistics?.charts != null)
             {
-                using var reader = new BinaryUtils.Reader(packet.DashboardData);
-                GameMain.data.statistics.charts.Import(reader.BinaryReader);
+                // The dashboard blob is written as plain BinaryWriter data (see UIDashboard_Patch.SyncDashboardToServer
+                // and PlanetManager.PreservedDashboardData), so it must be read back without LZ4 decompression.
+                using var ms = new MemoryStream(packet.DashboardData);
+                using var reader = new BinaryReader(ms);
+                GameMain.data.statistics.charts.Import(reader);
                 var dashboard = UIRoot.instance?.uiGame?.dashboard;
                 if (dashboard != null)
                 {
