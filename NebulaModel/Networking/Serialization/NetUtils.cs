@@ -34,6 +34,49 @@ public static class NetUtils
         return new IPEndPoint(ResolveAddress(hostStr), port);
     }
 
+    /// <summary>
+    ///     Normalize a configured host. Removes surrounding whitespace and a matching pair of
+    ///     IPv6 brackets, so that "example.com", " 1.2.3.4 " and "[::1]" all come back as the
+    ///     plain host string. Does not resolve anything.
+    /// </summary>
+    public static string NormalizeHost(string host)
+    {
+        var result = host?.Trim() ?? string.Empty;
+        if (result.Length > 1 && result[0] == '[' && result[result.Length - 1] == ']')
+        {
+            result = result.Substring(1, result.Length - 2);
+        }
+        if (result.Length == 0)
+        {
+            throw new ArgumentException("Invalid host: " + host);
+        }
+        return result;
+    }
+
+    /// <summary>
+    ///     Format a host and port for display or for storing in the config: "example.com:8469",
+    ///     "[::1]:8469". Only IPv6 literals get brackets. Does not resolve anything.
+    /// </summary>
+    public static string FormatHostPort(string host, int port)
+    {
+        return $"{FormatHost(host)}:{port}";
+    }
+
+    /// <summary>
+    ///     Build the websocket url for a host that stays a host: the name is kept for the Host
+    ///     header and for the TLS server name, and is resolved by the socket layer when the
+    ///     connection is actually opened. Does not resolve anything.
+    /// </summary>
+    public static string MakeWebSocketUrl(string protocol, string host, int port, string path = "/socket")
+    {
+        return $"{protocol}://{FormatHost(host)}:{port}{path}";
+    }
+
+    private static string FormatHost(string host)
+    {
+        return host.Contains(':') && host[0] != '[' ? $"[{host}]" : host;
+    }
+
     private static IPAddress ResolveAddress(string hostStr)
     {
         if (hostStr == "localhost")

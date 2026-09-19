@@ -50,21 +50,47 @@ public class Client : IClient
     private NebulaConnection serverConnection;
     private bool websocketAuthenticationFailure;
 
-    public Client(string url, int port, string protocol, string password = "")
-        : this(new IPEndPoint(Dns.GetHostEntry(url).AddressList[0], port), protocol, password)
+    /// <summary>
+    ///     Connect to a server by host name or IP literal. The host is kept as configured: it is
+    ///     resolved by the websocket layer when the connection is opened, not here.
+    /// </summary>
+    public Client(string host, int port, string protocol, string password = "")
     {
+        ServerHost = NetUtils.NormalizeHost(host);
+        ServerPort = port;
+        serverProtocol = string.IsNullOrWhiteSpace(protocol) ? "ws" : protocol;
+        serverPassword = password;
     }
 
     public Client(IPEndPoint endpoint, string protocol = "", string password = "")
+        : this(endpoint.Address.ToString(), endpoint.Port, protocol, password)
     {
-        ServerEndpoint = endpoint;
-        serverPassword = password;
-        if (protocol != "")
-        {
-            serverProtocol = protocol;
-        }
     }
 
+    /// <summary>
+    ///     Host name or IP literal as configured, without scheme, port or IPv6 brackets.
+    /// </summary>
+    public string ServerHost { get; }
+
+    /// <summary>
+    ///     Port of the server.
+    /// </summary>
+    public int ServerPort { get; }
+
+    /// <summary>
+    ///     Websocket scheme used to connect: "ws" or "wss".
+    /// </summary>
+    public string ServerProtocol => serverProtocol;
+
+    /// <summary>
+    ///     Websocket url built from the configured host, without resolving it.
+    /// </summary>
+    public string SocketUrl => NetUtils.MakeWebSocketUrl(serverProtocol, ServerHost, ServerPort);
+
+    /// <summary>
+    ///     Endpoint of the peer this client is actually connected to, or null while there is no
+    ///     open connection.
+    /// </summary>
     public IPEndPoint ServerEndpoint { get; set; }
 
     public void Start()
@@ -85,7 +111,7 @@ public class Client : IClient
         PacketProcessor.SimulateLatency = true;
 #endif
 
-        clientSocket = new WebSocket($"{serverProtocol}://{ServerEndpoint}/socket");
+        clientSocket = new WebSocket(SocketUrl);
         clientSocket.Log.Level = LogLevel.Debug;
         clientSocket.Log.Output = Log.SocketOutput;
         clientSocket.OnOpen += ClientSocket_OnOpen;
@@ -117,8 +143,11 @@ public class Client : IClient
 
         if (Config.Options.RememberLastIP)
         {
-            // We've successfully connected, set connection as last ip, cutting out "ws://"(but not others, like wss) and "/socket"
-            Config.Options.LastIP = serverProtocol == "ws" ? ServerEndpoint.ToString() : $"{serverProtocol}://{ServerEndpoint.ToString()}";
+            // We've successfully connected, remember the address the player typed (host name or IP),
+            // so a domain keeps being resolved on every join instead of being frozen into an IP.
+            // Cut out "ws://" (but not others, like wss) and "/socket".
+            var address = NetUtils.FormatHostPort(ServerHost, ServerPort);
+            Config.Options.LastIP = serverProtocol == "ws" ? address : $"{serverProtocol}://{address}";
             Config.SaveOptions();
         }
 
@@ -259,8 +288,13 @@ public class Client : IClient
     {
         DisableNagleAlgorithm(clientSocket);
 
+        // The endpoint we actually reached. The connection itself is identified by the configured
+        // host:port below, so no name lookup is needed to talk to the server.
+        ServerEndpoint = GetRemoteEndPoint(clientSocket);
+
         Log.Info("Server connection established");
-        serverConnection = new NebulaConnection(clientSocket, ServerEndpoint, PacketProcessor as NebulaNetPacketProcessor);
+        serverConnection = new NebulaConnection(clientSocket, new DnsEndPoint(ServerHost, ServerPort),
+            PacketProcessor as NebulaNetPacketProcessor);
 
         //TODO: Maybe some challenge-response authentication mechanism?
 
@@ -347,7 +381,7 @@ public class Client : IClient
                             Multiplayer.ShouldReturnToJoinMenu = false;
                             Multiplayer.LeaveGame();
                             Multiplayer.ShouldReturnToJoinMenu = true;
-                            Multiplayer.JoinGame(new Client(ServerEndpoint, password));
+                            Multiplayer.JoinGame(new Client(ServerHost, ServerPort, serverProtocol, password));
                         },
                         Multiplayer.LeaveGame
                     );
@@ -396,6 +430,12 @@ public class Client : IClient
         {
             tcpClient.NoDelay = true;
         }
+    }
+
+    private static IPEndPoint GetRemoteEndPoint(WebSocket socket)
+    {
+        var tcpClient = AccessTools.FieldRefAccess<WebSocket, TcpClient>("_tcpClient")(socket);
+        return tcpClient?.Client?.RemoteEndPoint as IPEndPoint;
     }
 
     private int GetFragmentBufferLength()

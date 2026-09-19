@@ -243,8 +243,8 @@ internal class UIMainMenu_Patch
                                     hostIPAddressInput = child3.GetComponentInChildren<InputField>();
                                     hostIPAddressInput.onEndEdit.RemoveAllListeners();
                                     hostIPAddressInput.onValueChanged.RemoveAllListeners();
-                                    //note: connectToUrl uses Dns.getHostEntry, which can only use up to 255 chars.
-                                    //256 will trigger an argument out of range exception
+                                    //note: the field takes a host name or an IP literal (optionally
+                                    //with scheme and port); 255 chars is the DNS name length limit
                                     hostIPAddressInput.characterLimit = 255;
 
                                     var ip = "127.0.0.1";

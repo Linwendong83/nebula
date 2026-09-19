@@ -16,6 +16,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\NebulaModel\NebulaModel.csproj" />
+      <ProjectReference Include="..\NebulaNetwork\NebulaNetwork.csproj" />
       <ProjectReference Include="..\NebulaPatcher\NebulaPatcher.csproj" />
     </ItemGroup>
 

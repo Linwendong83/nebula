@@ -7,6 +7,7 @@ using BepInEx.Bootstrap;
 using NebulaModel;
 using NebulaModel.DataStructures.Chat;
 using NebulaModel.Networking;
+using NebulaModel.Networking.Serialization;
 using NebulaModel.Utils;
 using static NebulaWorld.Chat.ChatLinks.CopyTextChatLinkHandler;
 
@@ -149,7 +150,14 @@ public class InfoCommandHandler : IChatCommandHandler
     {
         StringBuilder sb = new("Client info:".Translate());
 
-        var ipAddress = client.ServerEndpoint.ToString();
+        // Show the address the player configured (host name stays a host name), and the peer we
+        // actually reached when that differs from an IP literal.
+        var ipAddress = NetUtils.FormatHostPort(client.ServerHost, client.ServerPort);
+        if (client.ServerEndpoint is { } peer &&
+            !string.Equals(peer.Address.ToString(), client.ServerHost, StringComparison.Ordinal))
+        {
+            ipAddress += $" (connected to {peer})";
+        }
 
         sb.Append("\n  ").Append("Host IP address: ".Translate()).Append(FormatCopyString(ipAddress, true));
         sb.Append("\n  ").Append("Game Version: ".Translate()).Append(GameConfig.gameVersion.ToFullString());
