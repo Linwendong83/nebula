@@ -1,5 +1,15 @@
 ## Changelog
 
+0.9.22-dev.2:
+- Join by domain name instead of a resolved IP: the configured host is kept and looked up on every connect
+- Fix the player dashboard blob, which failed to parse on every incoming packet
+- Align the Chinese catalogue with the game's own terms and guard its keys against regressions
+<br>
+
+- 支持用域名加入，不再把域名固定成解析后的 IP
+- 修复玩家监控面板数据解析失败
+- 中文目录与游戏官方术语对齐，并加固 key 校验
+
 0.9.22-dev.1:
 - Sync wireless power tower charging for mecha
 - Sync tutorial and advisor progress
