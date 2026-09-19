@@ -22,7 +22,7 @@ public class MultiplayerOptions : ICloneable
 
     [DisplayName("Nickname")] public string Nickname { get; set; } = string.Empty;
 
-    [DisplayName("NameTagSize")] public int NameTagSize { get; set; } = 100;
+    [DisplayName("Name Tag Size")] public int NameTagSize { get; set; } = 100;
 
     [DisplayName("Server Password")]
     [Category("Network")]
@@ -89,9 +89,14 @@ public class MultiplayerOptions : ICloneable
 
     [DisplayName("Show Lobby Hints")] public bool ShowLobbyHints { get; set; } = true;
 
+    /// <summary>
+    ///     Last server address the player joined, exactly as configured: host name or IP literal,
+    ///     with the port and (for wss) the scheme. Never a resolved IP, so a domain is looked up
+    ///     again on every join.
+    /// </summary>
     public string LastIP { get; set; } = string.Empty;
 
-    [DisplayName("Sync Ups")]
+    [DisplayName("Sync UPS")]
     [Description("If enabled the UPS of each player is synced. This ensures a similar amount of GameTick() calls.")]
     public bool SyncUps { get; set; } = true;
 

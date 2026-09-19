@@ -30,6 +30,29 @@ public class LocalizationTest
     }
 
     [TestMethod]
+    public void CatalogueKeysStayPrintableAsciiSourceStrings()
+    {
+        using var stream = typeof(NebulaLocalization).Assembly.GetManifestResourceStream("NebulaModel.Localization.zh-CN.json");
+        var serializer = new DataContractJsonSerializer(typeof(Dictionary<string, string>),
+            new DataContractJsonSerializerSettings { UseSimpleDictionaryFormat = true });
+        var catalogue = (Dictionary<string, string>)serializer.ReadObject(stream!)!;
+
+        foreach (var pair in catalogue)
+        {
+            // Keys are the English source strings the code passes to .Translate(). A localized key would
+            // never be looked up by the game, so it silently degrades to the untranslated source text.
+            foreach (var character in pair.Key)
+            {
+                var isAllowedWhitespace = character is '\r' or '\n' or '\t';
+                TestAssert.IsTrue(isAllowedWhitespace || character is >= ' ' and <= '~',
+                    $"Catalogue key is not a printable ASCII source string: {pair.Key}");
+            }
+
+            TestAssert.IsFalse(string.IsNullOrWhiteSpace(pair.Value), $"Empty translation for: {pair.Key}");
+        }
+    }
+
+    [TestMethod]
     public void TranslationsPreserveFormatArgumentsAndNumericFormats()
     {
         using var stream = typeof(NebulaLocalization).Assembly.GetManifestResourceStream("NebulaModel.Localization.zh-CN.json");
