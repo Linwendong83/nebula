@@ -12,6 +12,7 @@ namespace NebulaPatcher.Patches.Dynamic;
 [HarmonyPatch(typeof(SkillSystem))]
 internal class SkillSystem_Patch
 {
+    [System.ThreadStatic] private static int damageObjectDepth;
     [HarmonyPrefix]
     [HarmonyPatch(nameof(SkillSystem.Export))]
     public static bool Export_Prefix(SkillSystem __instance, BinaryWriter w)
@@ -91,52 +92,90 @@ internal class SkillSystem_Patch
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(SkillSystem.DamageObject))]
-    public static void DamageObject_Prefix(int damage, int slice, ref SkillTarget target, ref SkillTarget caster)
+    public static void DamageObject_Prefix(ref int damage, int slice, ref SkillTarget target, ref SkillTarget caster, out bool __state)
     {
+        __state = Multiplayer.IsActive;
+        if (__state) damageObjectDepth++;
         if (!(caster.type == ETargetType.Craft || caster.type == ETargetType.Player)
             || target.type != ETargetType.Enemy
             || !Multiplayer.IsActive || Multiplayer.Session.Combat.IsIncomingRequest.Value) return;
+
+        if (caster.type == ETargetType.Player && caster.id != Multiplayer.Session.LocalPlayer.Id ||
+            Multiplayer.Session.IsClient && caster.type == ETargetType.Craft && !OwnsCraft(caster.astroId, caster.id))
+        {
+            damage = 0;
+            return;
+        }
+        if (damage <= 0) return;
 
         if (target.astroId > 1000000) // Sync for space enemy
         {
             var packet = new CombatStatDamagePacket(damage, slice, in target, in caster)
             {
-                // Change the caster to player as craft (space fleet) is not sync yet
+                // Native targeting needs a player proxy; SourceType retains the actual attacker for statistics.
                 CasterType = (short)ETargetType.Player,
-                CasterId = Multiplayer.Session.LocalPlayer.Id
+                CasterId = Multiplayer.Session.LocalPlayer.Id,
+                TargetGeneration = Multiplayer.Session.Generations.Get(target.astroId, target.id)
             };
             Multiplayer.Session.Network.SendPacket(packet);
         }
-        else if (target.astroId == GameMain.localPlanet?.id) // Sync for local planet
+        else if (Multiplayer.Session.IsServer || target.astroId == GameMain.localPlanet?.id)
         {
             var packet = new CombatStatDamagePacket(damage, slice, in target, in caster)
             {
-                // Change the caster to player as craft (space fleet) is not sync yet
+                // Retain the original source type separately from the native targeting proxy.
                 CasterType = (short)ETargetType.Player,
-                CasterId = Multiplayer.Session.LocalPlayer.Id
+                CasterId = Multiplayer.Session.LocalPlayer.Id,
+                TargetGeneration = Multiplayer.Session.Generations.Get(target.astroId, target.id)
             };
-            Multiplayer.Session.Network.SendPacketToLocalPlanet(packet);
+            Multiplayer.Session.Network.SendPacket(packet);
         }
+    }
+
+    [HarmonyFinalizer]
+    [HarmonyPatch(nameof(SkillSystem.DamageObject))]
+    public static System.Exception DamageObject_Finalizer(System.Exception __exception, bool __state)
+    {
+        if (__state) damageObjectDepth--;
+        return __exception;
+    }
+
+    private static bool OwnsCraft(int astro, int id)
+    {
+        var ground = astro > 100 && astro <= 204899 && astro % 100 != 0;
+        var module = ground ? GameMain.mainPlayer.mecha.groundCombatModule : GameMain.mainPlayer.mecha.spaceCombatModule;
+        if (module?.moduleFleets == null) return false;
+        foreach (var fleet in module.moduleFleets)
+            if (fleet.fighters != null) foreach (var fighter in fleet.fighters)
+                if (fighter.craftId == id) return true;
+        return false;
     }
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(SkillSystem.DamageGroundObjectByLocalCaster))]
-    public static void DamageGroundObjectByLocalCaster_Prefix(PlanetFactory factory, int damage, int slice, ref SkillTarget target, ref SkillTarget caster)
+    public static void DamageGroundObjectByLocalCaster_Prefix(PlanetFactory factory, ref int damage, int slice, ref SkillTargetLocal target, ref SkillTargetLocal caster)
     {
         if (caster.type != ETargetType.Craft
             || target.type != ETargetType.Enemy
             || !Multiplayer.IsActive || Multiplayer.Session.Combat.IsIncomingRequest.Value) return;
-
-        if (factory == GameMain.localPlanet?.factory) // Sync for local planet combat drones
+        if (Multiplayer.Session.IsClient && !OwnsCraft(factory.planetId, caster.id))
         {
-            target.astroId = caster.astroId = GameMain.localPlanet.astroId;
-            var packet = new CombatStatDamagePacket(damage, slice, in target, in caster)
+            damage = 0;
+            return;
+        }
+        if (damageObjectDepth > 0 || damage <= 0) return; // DamageObject already routed this hit.
+        if (Multiplayer.Session.IsServer || factory == GameMain.localPlanet?.factory)
+        {
+            var globalTarget = new SkillTarget { id = target.id, type = target.type, astroId = factory.planetId };
+            var globalCaster = new SkillTarget { id = caster.id, type = caster.type, astroId = factory.planetId };
+            var packet = new CombatStatDamagePacket(damage, slice, in globalTarget, in globalCaster)
             {
-                // Change the caster to player as craft (space fleet) is not sync yet
+                // Retain the original source type separately from the native targeting proxy.
                 CasterType = (short)ETargetType.Player,
-                CasterId = Multiplayer.Session.LocalPlayer.Id
+                CasterId = Multiplayer.Session.LocalPlayer.Id,
+                TargetGeneration = Multiplayer.Session.Generations.Get(factory.planetId, target.id)
             };
-            Multiplayer.Session.Network.SendPacketToLocalPlanet(packet);
+            Multiplayer.Session.Network.SendPacket(packet);
         }
     }
 }

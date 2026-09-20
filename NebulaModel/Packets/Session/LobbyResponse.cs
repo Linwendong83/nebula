@@ -7,6 +7,7 @@ public class LobbyResponse
     public LobbyResponse(in GameDesc gameDesc, byte[] combatSettingsData, byte[] modsSettings, int settingsCount, ushort numPlayers, string discordPartyId)
     {
         GalaxyAlgo = gameDesc.galaxyAlgo;
+        GoalLevel = (int)gameDesc.goalLevel;
         GalaxySeed = gameDesc.galaxySeed;
         StarCount = gameDesc.starCount;
         ResourceMultiplier = gameDesc.resourceMultiplier;
@@ -21,6 +22,7 @@ public class LobbyResponse
     }
 
     public int GalaxyAlgo { get; set; }
+    public int GoalLevel { get; set; }
     public int GalaxySeed { get; set; }
     public int StarCount { get; set; }
     public float ResourceMultiplier { get; set; }

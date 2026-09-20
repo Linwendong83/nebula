@@ -12,4 +12,5 @@ public class DFGKillEnemyPacket
 
     public int PlanetId { get; set; }
     public int EnemyId { get; set; }
+    public long Generation { get; set; }
 }

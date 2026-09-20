@@ -19,7 +19,7 @@ public class CombatAggressivenessProcessor : PacketProcessor<CombatAggressivenes
     {
         if (IsHost)
         {
-            Multiplayer.Session.Network.SendPacketExclude(packet, conn);
+            return; // Only a committed metadata transaction may change the world's difficulty.
         }
 
         var history = GameMain.history;

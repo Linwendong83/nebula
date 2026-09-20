@@ -71,6 +71,19 @@ public class GameStatesManager : IDisposable
     private byte[] milestoneSystemBinaryData;
     private byte[] trashSystemBinaryData;
     private byte[] galacticDigitalBinaryData;
+    private byte[] goalBinaryData;
+    private byte[] killBinaryData;
+    private int birthStarId;
+    private int birthPlanetId;
+    private EGoalLevel goalLevel;
+
+    public void ApplyBirthData(GameData data)
+    {
+        if (birthPlanetId <= 0 || data?.galaxy == null) return;
+        data.galaxy.birthStarId = birthStarId;
+        data.galaxy.birthPlanetId = birthPlanetId;
+        data.gameDesc.goalLevel = goalLevel;
+    }
 
     public GameStatesManager()
     {
@@ -215,6 +228,25 @@ public class GameStatesManager : IDisposable
     {
         switch (packet.DataType)
         {
+            case GlobalGameDataResponse.EDataType.KillStatistics:
+                killBinaryData = packet.BinaryData;
+                break;
+            case GlobalGameDataResponse.EDataType.Goals:
+                goalBinaryData = packet.BinaryData;
+                break;
+            case GlobalGameDataResponse.EDataType.Session:
+                using (var reader = new BinaryUtils.Reader(packet.BinaryData))
+                {
+                    var br = reader.BinaryReader;
+                    if (br.ReadInt32() != SessionProtocol.Version)
+                        throw new System.IO.InvalidDataException("Incompatible Nebula session protocol");
+                    SaveManager.SetWorldId(br.ReadString());
+                    birthStarId = br.ReadInt32();
+                    birthPlanetId = br.ReadInt32();
+                    goalLevel = (EGoalLevel)br.ReadInt32();
+                    Multiplayer.Session.Metadata.SourceClusterKey = br.ReadInt64();
+                }
+                break;
             case GlobalGameDataResponse.EDataType.History:
                 historyBinaryData = packet.BinaryData;
                 Log.Info("Waiting for GalacticTransport data from the server...");
@@ -246,12 +278,14 @@ public class GameStatesManager : IDisposable
                 break;
 
             case GlobalGameDataResponse.EDataType.Ready:
+                if (birthPlanetId <= 0) throw new System.IO.InvalidDataException("Missing session initialization");
                 using (var reader = new BinaryUtils.Reader(packet.BinaryData))
                 {
                     var br = reader.BinaryReader;
                     sandboxToolsEnabled = br.ReadBoolean();
                 }
                 Log.Info("Loading GlobalGameData complete. Initializing...");
+                DSPGame.GameDesc.goalLevel = goalLevel;
                 // We are ready to start the game now
                 DSPGame.StartGameSkipPrologue(DSPGame.GameDesc);
                 break;
@@ -263,6 +297,17 @@ public class GameStatesManager : IDisposable
         if (data == null)
         {
             return;
+        }
+        ApplyBirthData(data);
+        if (killBinaryData != null)
+        {
+            Multiplayer.Session.Kills.ApplySnapshot(killBinaryData);
+            killBinaryData = null;
+        }
+        if (goalBinaryData != null)
+        {
+            Multiplayer.Session.Goals.Apply(goalBinaryData);
+            goalBinaryData = null;
         }
 
         if (historyBinaryData != null)
@@ -410,15 +455,18 @@ public class GameStatesManager : IDisposable
             Log.Info("Parsing SpaceSector data from the server...");
             using (Multiplayer.Session.Enemies.IsIncomingRequest.On())
             {
-                Combat.CombatManager.SerializeOverwrite = true;
-                data.spaceSector.isCombatMode = data.gameDesc.isCombatMode;
-                using (var reader = new BinaryUtils.Reader(spaceSectorBinaryData))
+                var previous = Combat.CombatManager.SerializeOverwrite;
+                try
                 {
-                    // Re-init will cause some issues, so just overwrite the data with import
-                    data.spaceSector.Import(reader.BinaryReader);
+                    Combat.CombatManager.SerializeOverwrite = true;
+                    data.spaceSector.isCombatMode = data.gameDesc.isCombatMode;
+                    using (var reader = new BinaryUtils.Reader(spaceSectorBinaryData))
+                    {
+                        data.spaceSector.Import(reader.BinaryReader);
+                    }
+                    data.mainPlayer.mecha.CheckCombatModuleDataIsValidPatch();
                 }
-                data.mainPlayer.mecha.CheckCombatModuleDataIsValidPatch();
-                Combat.CombatManager.SerializeOverwrite = false;
+                finally { Combat.CombatManager.SerializeOverwrite = previous; }
             }
             spaceSectorBinaryData = null;
         }

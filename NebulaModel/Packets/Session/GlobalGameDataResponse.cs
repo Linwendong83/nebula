@@ -18,7 +18,10 @@ public class GlobalGameDataResponse
         MilestoneSystem,
         TrashSystem,
         GalacticDigital,
-        Ready
+        Ready,
+        Session,
+        Goals,
+        KillStatistics
     }
 
     public EDataType DataType { get; set; }

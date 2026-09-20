@@ -15,13 +15,19 @@ public class CombatStatDamageProcessor : PacketProcessor<CombatStatDamagePacket>
 {
     protected override void ProcessPacket(CombatStatDamagePacket packet, NebulaConnection conn)
     {
+        if (packet.TargetId <= 0 || packet.Damage <= 0 || packet.TargetType != (short)ETargetType.Enemy) return;
         if (IsHost)
         {
-            if (packet.TargetAstroId > 1000000)
-            {
-                Multiplayer.Session.Server.SendPacketExclude(packet, conn);
-            }
+            var player = Players.Get(conn);
+            if (player == null || !Multiplayer.Session.Generations.AcceptDamage(player.Id, packet.Sequence,
+                packet.TargetAstroId, packet.TargetId, packet.TargetGeneration)) return;
+            packet.CasterId = player.Id;
+            packet.CasterType = (short)ETargetType.Player;
+            if (packet.SourceType != (short)ETargetType.Player && packet.SourceType != (short)ETargetType.Craft) return;
+            Multiplayer.Session.Kills.SetDamageOwner(packet.TargetAstroId, packet.TargetId, player.Id, packet.SourceType);
+            Multiplayer.Session.Server.SendPacketExclude(packet, conn);
         }
+        else if (!Multiplayer.Session.Generations.Matches(packet.TargetAstroId, packet.TargetId, packet.TargetGeneration)) return;
 
         SkillTarget target;
         target.type = (ETargetType)packet.TargetType;
@@ -53,9 +59,12 @@ public class CombatStatDamageProcessor : PacketProcessor<CombatStatDamagePacket>
         {
             var skillSystem = GameMain.spaceSector.skillSystem;
             var tmp = skillSystem.playerAlive;
-            skillSystem.playerAlive = true;
-            skillSystem.DamageObject(packet.Damage, packet.Slice, ref target, ref caster);
-            skillSystem.playerAlive = tmp;
+            try
+            {
+                skillSystem.playerAlive = true;
+                skillSystem.DamageObject(packet.Damage, packet.Slice, ref target, ref caster);
+            }
+            finally { skillSystem.playerAlive = tmp; }
         }
     }
 }

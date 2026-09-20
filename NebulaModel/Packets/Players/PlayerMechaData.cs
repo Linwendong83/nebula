@@ -15,7 +15,9 @@ public class PlayerMechaData
     public PlayerMechaData(Player player)
     {
         Data = new MechaData(player);
+        Life = PlayerLifeData.Capture(player);
     }
 
     public MechaData Data { get; set; }
+    public PlayerLifeData Life { get; set; }
 }

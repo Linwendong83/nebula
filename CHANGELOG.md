@@ -1,5 +1,23 @@
 ## Changelog
 
+0.9.22-dev.4:
+- Restore vanilla galaxy/birth planet selection flow and spawn management without transpiler fragility
+- Sync shared goal system, client UI tracking and personal action observations
+- Add personal property and metadata ledger settlement with transactional persistence
+- Restore vanilla player death rules, life cycle state and respawn handling
+- Authoritative kill statistics synchronization broadcasted by server
+- Independent battle visual replicas for remote mecha fleets and planetary/space missile attacks
+- Persistent drop item pool management and sync
+<br>
+
+- 恢复原版星系与出生天体选择流程，重构出生管理（移除脆弱的 Transpiler 补丁）
+- 同步共享目标系统、客户端 UI 追踪与个人目标动作观测
+- 增加个人元数据资产账本结算与事务性持久化存储
+- 恢复原版机甲死亡规则、独立生命周期状态与重生物理/背包同步
+- 由服务端权威统计并广播黑雾击杀统计数据
+- 远端机甲舰队动画、行星/太空导弹与等离子炮跨天体攻击独立视觉副本渲染
+- 地面及太空掉落物（垃圾）持久化池管理与同步
+
 0.9.22-dev.3:
 - Planetary shield physics simulation for headless server: accurate coverage and relay landing tests via GPU/CPU fallback without removing -nographics
 - Fix headless server tick scheduling, pause deadlock and advisor lifecycle crashes

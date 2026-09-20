@@ -23,6 +23,7 @@ internal class LobbyUpdateValuesProcessor : PacketProcessor<LobbyUpdateValues>
         gameDesc.SetForNewGame(packet.GalaxyAlgo, packet.GalaxySeed, packet.StarCount, 1, packet.ResourceMultiplier);
         gameDesc.isSandboxMode = packet.IsSandboxMode;
         gameDesc.isPeaceMode = packet.IsPeaceMode;
+        gameDesc.goalLevel = (EGoalLevel)packet.GoalLevel;
         if (!packet.IsPeaceMode)
         {
             gameDesc.combatSettings.aggressiveness = packet.CombatAggressiveness;
@@ -37,6 +38,8 @@ internal class LobbyUpdateValuesProcessor : PacketProcessor<LobbyUpdateValues>
         }
 
         UIRoot.instance.galaxySelect.gameDesc = gameDesc;
+        UIRoot.instance.galaxySelect.uiCombat.gameDesc = gameDesc;
+        UIRoot.instance.galaxySelect.GoalSetting.gameDesc = gameDesc;
         UIRoot.instance.galaxySelect.SetStarmapGalaxy();
         UIRoot.instance.galaxySelect.sandboxToggle.isOn = packet.IsSandboxMode;
     }

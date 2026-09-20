@@ -113,6 +113,7 @@ public class CommandLineOptions
                 Log.Info($">> Creating new game ({seed}, {starCount}, {resourceMultiplier:F1})");
                 var gameDesc = new GameDesc();
                 gameDesc.SetForNewGame(UniverseGen.algoVersion, seed, starCount, 1, resourceMultiplier);
+                gameDesc.goalLevel = EGoalLevel.Full;
                 NewGameDesc = gameDesc;
                 return true;
             }
@@ -128,6 +129,7 @@ public class CommandLineOptions
         var gameDesc = new GameDesc();
         var random = new DotNet35Random((int)(DateTime.UtcNow.Ticks / 10000L));
         gameDesc.SetForNewGame(UniverseGen.algoVersion, random.Next(100000000), 64, 1, 1f);
+        gameDesc.goalLevel = EGoalLevel.Full;
 
         if (useModConfigFile)
         {

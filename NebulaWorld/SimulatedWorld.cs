@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.Collections.Generic;
@@ -81,7 +81,7 @@ public class SimulatedWorld : IDisposable
         var player = Multiplayer.Session.LocalPlayer as LocalPlayer;
 
         // If not a new client, we need to update the player position to put him where he was previously
-        if (player is { IsClient: true, IsNewPlayer: false })
+        if (player is { IsClient: true })
         {
             GameMain.mainPlayer.planetId = player.Data.LocalPlanetId;
             if (player.Data.LocalPlanetId == -1)
@@ -92,17 +92,19 @@ public class SimulatedWorld : IDisposable
             else
             {
                 GameMain.mainPlayer.position = player.Data.LocalPlanetPosition.ToVector3();
-                GameMain.mainPlayer.uPosition = new VectorLF3(GameMain.localPlanet.uPosition.x + GameMain.mainPlayer.position.x,
-                    GameMain.localPlanet.uPosition.y + GameMain.mainPlayer.position.y,
-                    GameMain.localPlanet.uPosition.z + GameMain.mainPlayer.position.z);
+                GameMain.mainPlayer.transform.localPosition = GameMain.mainPlayer.position;
+                GameMain.mainPlayer.uPosition = GameMain.localPlanet.uPosition +
+                    (VectorLF3)(GameMain.localPlanet.runtimeRotation * GameMain.mainPlayer.position);
             }
             GameMain.mainPlayer.uRotation = Quaternion.Euler(player.Data.Rotation.ToVector3());
 
             // Load client's saved data from the last session.
-            player.Data.Mecha.UpdateMech(GameMain.mainPlayer);
-
-            // Fix references that broke during import
-            FixPlayerAfterImport();
+            if (!player.IsNewPlayer)
+            {
+                player.Data.Mecha.UpdateMech(GameMain.mainPlayer);
+                FixPlayerAfterImport();
+                Multiplayer.Session.Life.RestoreLocal((PlayerData)player.Data);
+            }
         }
 
         // Initialization on the host side after game is loaded
@@ -125,12 +127,6 @@ public class SimulatedWorld : IDisposable
                     // If warp has unlocked, give new client few warpers
                     GameMain.mainPlayer.TryAddItemToPackage(1210, 5, 0, false);
                 }
-                // Make new client spawn higher to avoid collision
-                var magnitude = GameMain.mainPlayer.transform.localPosition.magnitude;
-                if (magnitude > 0)
-                {
-                    GameMain.mainPlayer.transform.localPosition *= (magnitude + 20f) / magnitude;
-                }
             }
             else
             {
@@ -149,12 +145,13 @@ public class SimulatedWorld : IDisposable
             // Refresh Logistics Distributor traffic for player delivery package changes
             GameMain.mainPlayer.factory?.transport.RefreshDispenserTraffic();
 
-            // Enable Ping Indicator for Clients
-            DisplayPingIndicator();
+            // Enable Ping Indicator for Clients (Entry-level disabled)
+            // DisplayPingIndicator();
 
             // Notify the server that we are done loading the game
             var clientCert = CryptoUtils.GetPublicKey(CryptoUtils.GetOrCreateUserCert());
             Multiplayer.Session.Network.SendPacket(new SyncComplete(clientCert));
+            Multiplayer.Session.Life.Publish(); // Persist the initial inventory before the first periodic update.
 
             // Subscribe for the local star events
             Multiplayer.Session.Network.SendPacket(new PlayerUpdateLocalStarId(Multiplayer.Session.LocalPlayer.Id, GameMain.data.localStar?.id ?? -1));
@@ -183,8 +180,8 @@ public class SimulatedWorld : IDisposable
         localPlayerMovement = GameMain.mainPlayer.gameObject.AddComponentIfMissing<LocalPlayerMovement>();
         // ChatManager should exist continuously until the game is closed
         GameMain.mainPlayer.gameObject.AddComponentIfMissing<ChatManager>();
-        // Load the Player List Window
-        GameMain.mainPlayer.gameObject.AddComponentIfMissing<UIPlayerWindow>();
+        // Load the Player List Window (Entry-level disabled)
+        // GameMain.mainPlayer.gameObject.AddComponentIfMissing<UIPlayerWindow>();
     }
 
     public static void FixPlayerAfterImport()
@@ -324,7 +321,8 @@ public class SimulatedWorld : IDisposable
             var model = new RemotePlayerModel(playerData.PlayerId, playerData.Username);
             model.Movement.LocalStarId = playerData.LocalStarId;
             model.Movement.localPlanetId = playerData.LocalPlanetId;
-            remotePlayersModels.Add(playerData.PlayerId, model);
+              remotePlayersModels.Add(playerData.PlayerId, model);
+              Multiplayer.Session.Life.ApplyRemote(playerData.PlayerId, ((PlayerData)playerData).Life);
 
             // Show connected message
             var planetName = GameMain.galaxy.PlanetById(playerData.LocalPlanetId)?.displayName ?? "In space";
@@ -538,26 +536,13 @@ public class SimulatedWorld : IDisposable
 
     private void DisplayPingIndicator()
     {
+        // Entry-level disable: Do not create or show the ping indicator
         var previousObject = GameObject.Find("Ping Indicator");
-        if (previousObject == null)
+        if (previousObject != null)
         {
-            var targetObject = GameObject.Find("label");
-            pingIndicator = Object.Instantiate(targetObject, UIRoot.instance.uiGame.gameObject.transform).GetComponent<Text>();
-            pingIndicator.gameObject.name = "Ping Indicator";
-            pingIndicator.alignment = TextAnchor.UpperLeft;
-            pingIndicator.enabled = true;
-            var rect = pingIndicator.GetComponent<RectTransform>();
-            rect.anchorMin = new Vector2(0f, 1f);
-            rect.offsetMax = new Vector2(-68f, -40f);
-            rect.offsetMin = new Vector2(10f, -100f);
-            pingIndicator.text = "";
-            pingIndicator.fontSize = 14;
+            previousObject.SetActive(false);
         }
-        else
-        {
-            pingIndicator = previousObject.GetComponent<Text>();
-            pingIndicator.enabled = true;
-        }
+        pingIndicator = null;
     }
 
     public void HidePingIndicator()

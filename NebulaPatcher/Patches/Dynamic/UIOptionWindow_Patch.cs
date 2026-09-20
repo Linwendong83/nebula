@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.Collections.Generic;
@@ -357,7 +357,8 @@ internal class UIOptionWindow_Patch
                 var displayAttr = prop.GetCustomAttribute<DisplayNameAttribute>();
                 var descriptionAttr = prop.GetCustomAttribute<DescriptionAttribute>();
                 var categoryAttribute = prop.GetCustomAttribute<CategoryAttribute>();
-                if (displayAttr == null)
+                // Entry-level disable: Do not display Chat settings subtab or PlayerListHotkey in settings window
+                if (displayAttr == null || categoryAttribute?.Category == "Chat" || prop.Name == "PlayerListHotkey")
                 {
                     continue;
                 }

@@ -42,6 +42,7 @@ internal class LobbyResponseProcessor : PacketProcessor<LobbyResponse>
         var gameDesc = new GameDesc();
         gameDesc.SetForNewGame(packet.GalaxyAlgo, packet.GalaxySeed, packet.StarCount, 1, packet.ResourceMultiplier);
         gameDesc.isPeaceMode = packet.IsPeaceMode;
+        gameDesc.goalLevel = (EGoalLevel)packet.GoalLevel;
         gameDesc.isSandboxMode = packet.IsSandboxMode;
         gameDesc.savedThemeIds = new int[packet.SavedThemeIds.Length];
         Array.Copy(packet.SavedThemeIds, gameDesc.savedThemeIds, packet.SavedThemeIds.Length);
@@ -51,6 +52,8 @@ internal class LobbyResponseProcessor : PacketProcessor<LobbyResponse>
         }
 
         UIRoot.instance.galaxySelect.gameDesc = gameDesc;
+        UIRoot.instance.galaxySelect.uiCombat.gameDesc = gameDesc;
+        UIRoot.instance.galaxySelect.GoalSetting.gameDesc = gameDesc;
         UIRoot.instance.galaxySelect.SetStarmapGalaxy();
         UIRoot.instance.galaxySelect.sandboxToggle.isOn = gameDesc.isSandboxMode;
     }

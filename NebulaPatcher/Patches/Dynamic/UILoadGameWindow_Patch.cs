@@ -13,6 +13,19 @@ namespace NebulaPatcher.Patches.Dynamic;
 [HarmonyPatch(typeof(UILoadGameWindow))]
 internal class UILoadGameWindow_Patch
 {
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(UILoadGameWindow.DoLoadSelectedGame))]
+    public static bool DoLoadSelectedGame_Prefix()
+    {
+        if (!Multiplayer.IsActive) return true;
+        if (Multiplayer.Session.IsClient) return false;
+        if (Multiplayer.Session.IsGameLoaded)
+        {
+            Multiplayer.LeaveGame();
+            Multiplayer.IsInMultiplayerMenu = true;
+        }
+        return true;
+    }
     [HarmonyPostfix]
     [HarmonyPatch(nameof(UILoadGameWindow.DoLoadSelectedGame))]
     public static void DoLoadSelectedGame_Postfix()

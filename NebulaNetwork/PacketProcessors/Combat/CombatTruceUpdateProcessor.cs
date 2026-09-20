@@ -19,7 +19,7 @@ public class CombatTruceUpdateProcessor : PacketProcessor<CombatTruceUpdatePacke
     {
         if (IsHost)
         {
-            Multiplayer.Session.Network.SendPacketExclude(packet, conn);
+            return; // Clients request a transaction; this packet is an authoritative result.
         }
 
         var truceTime = packet.TruceEndTime - (GameMain.gameTick + GameMain.history.dfTruceTimer);

@@ -46,6 +46,7 @@ public class HandshakeResponseProcessor : PacketProcessor<HandshakeResponse>
         var gameDesc = new GameDesc();
         gameDesc.SetForNewGame(packet.GalaxyAlgo, packet.GalaxySeed, packet.StarCount, 1, packet.ResourceMultiplier);
         gameDesc.isPeaceMode = packet.IsPeaceMode;
+        gameDesc.goalLevel = (EGoalLevel)packet.GoalLevel;
         gameDesc.isSandboxMode = packet.IsSandboxMode;
         gameDesc.savedThemeIds = packet.SavedThemeIds;
         using (var p = new BinaryUtils.Reader(packet.CombatSettingsData))

@@ -10,6 +10,8 @@
 > 7. 助理（语音助手）状态将不会丢失
 > 8. 加入了简体中文支持
 > 9. 修复了部分黑雾不同步的问题
+> 10. 恢复原版出生天体选择流程，增加共享目标、个人元数据结算和原版死亡规则
+> 11. 增加击杀统计同步、远端舰队及跨天体攻击的独立显示副本
 
 # Nebula Multiplayer Mod [![QQ Group: 587702629](https://img.shields.io/badge/QQ_Group-587702629-12B7F5?logo=qq&logoColor=white)](https://qun.qq.com/universal-share/share?ac=1&authKey=aqcKfS15Bl5nLEWhfmkiskMj65QyEsdWPCsMGYducyVdZhqNPrGeilcYSgaENhs%2F&busi_data=eyJncm91cENvZGUiOiI1ODc3MDI2MjkiLCJ0b2tlbiI6Ik1HbXppTWRHYmNlVUlSSCtaN1BkaUVXWU9ud3ZMOElJdGplaitmL21OWkorNllYaCtBbXduc2hKdGlzUnlrVksiLCJ1aW4iOiI1NDU1NTg1MzgifQ%3D%3D&data=ZYdt-PQo-JrmmYsIyy4D3s8XTbPjqzGZTrjxiTlbr9uAivSvyvqc_KyXatfb7YTjGqF5O7FONbKh1QpxuEen5A&svctype=4&tempid=h5_group_info)
 
@@ -87,7 +89,7 @@ Most battle aspects are synchronized, with only a few features still work in pro
 - [x] Broadcast notification syncing (events with guide icon)
 - [x] Logistics Control Panel (I) syncing (entry list and detail panel)
 - [x] Planet Memo syncing
-- [ ] Goal system (currently not available in client)
+- [x] Shared goal system (including client UI and personal action observations)
 - [x] Custom dashboard (persisted across reconnects and star system warps)
 - [x] Tutorial and advisor tips syncing (progress preserved across reconnects)
 - [x] Wireless charge tower (power will not sync when mecha is charging)
@@ -129,11 +131,11 @@ Most battle aspects are synchronized, with only a few features still work in pro
 - [x] Patch DF turret to search for nearest alive mecha (attack when within attack range or counterattack)
 - [x] Show base/hive/relay invasion events in chat
 - [x] Sync Dark Fog communicator (aggressiveness and truce)
-- [ ] Sync kill stats
-- [ ] Show remote mecha combat drone fleet animation
-- [ ] Show remote mecha spacecraft fleet animation
-- [ ] Show ground-to-space attacks animation on client for remote planets (missile turrets, plasma cannon)
-- [ ] Show space-to-ground attacks animation for remote planets (lancers invading with sweep laser and bomber)
+- [x] Sync authoritative kill stats
+- [x] Show remote mecha combat drone fleet animation
+- [x] Show remote mecha spacecraft fleet animation
+- [x] Show ground-to-space attacks animation on client for remote planets (missile turrets, plasma cannon)
+- [x] Show space-to-ground attacks animation for remote planets (lancers invading with sweep laser and bomber)
 
 </details>
 

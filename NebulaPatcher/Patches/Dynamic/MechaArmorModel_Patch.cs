@@ -11,6 +11,14 @@ namespace NebulaPatcher.Patches.Dynamic;
 [HarmonyPatch(typeof(MechaArmorModel))]
 internal class MechaArmorModel_Patch
 {
+    [HarmonyPostfix]
+    [HarmonyPatch(nameof(MechaArmorModel.GameTickWreckages))]
+    public static void EmptyWreckages_Postfix(MechaArmorModel __instance)
+    {
+        // A reconnect can restore a dead player before armor pieces have been instantiated.
+        if (NebulaWorld.Multiplayer.IsActive && (MechaArmorModel.all_wreckages == null || MechaArmorModel.all_wreckages.Count == 0))
+            __instance.wreckagesCenterUPos = __instance.player.uPosition;
+    }
     [HarmonyPrefix]
     [HarmonyPatch(nameof(MechaArmorModel.SetDead))]
     public static bool SetDead_Prefix(MechaArmorModel __instance)

@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using NebulaModel;
@@ -14,6 +14,7 @@ using UnityEngine.UI;
 
 namespace NebulaWorld.MonoBehaviours.Local.Chat;
 
+#pragma warning disable CS0169, CS0414, CS0649, IDE0060
 public class ChatManager : MonoBehaviour
 {
     public static ChatManager Instance;
@@ -32,50 +33,19 @@ public class ChatManager : MonoBehaviour
     {
         Instance = this;
 
-        SwitchChatView(Config.Options.ChatViewMode, false);
-
-        Config.OnConfigApplied += ApplyConfig;
-
-        if (!showedWelcome)
-        {
-            showedWelcome = true;
-            ChatService.Instance.AddMessage(
-                string.Format("Welcome to Nebula multiplayer mod! Press {0} to open chat window, type /help to see all commands.".Translate(),
-                    Config.Options.ChatHotkey.ToString()),
-                ChatMessageType.SystemInfoMessage);
-        }
+        // Entry-level disable: Do not initialize any chat views or display welcome message
     }
 
     private void Update()
     {
-        if (!ChatInputState.IsComposing && Config.Options.ChatHotkey.IsDown())
-        {
-            currentChatView.Toggle();
-        }
+        // Entry-level disable: Hotkey is disabled to prevent opening chat window
 
-        // Process outgoing messages from ChatService
-        if (Multiplayer.IsActive)
-        {
-            var newMessage = ChatService.Instance.GetQueuedMessage();
-            if (newMessage != null)
-            {
-                Multiplayer.Session.Network?.SendPacket(new NewChatMessagePacket(
-                    newMessage.MessageType,
-                    newMessage.MessageText,
-                    newMessage.Timestamp,
-                    newMessage.UserName));
-            }
-        }
-        else
-        {
-            // Discard the outgoing messages
-            _ = ChatService.Instance.GetQueuedMessage();
-        }
+        // Discard any outgoing messages
+        _ = ChatService.Instance.GetQueuedMessage();
 
-        // Handle warning messages from Log system
+        // Handle warning messages from Log system (clear without adding to chat)
         if (Log.LastWarnMsg != null)
         {
-            ChatService.Instance.AddMessage(Log.LastWarnMsg, ChatMessageType.SystemWarnMessage);
             Log.LastWarnMsg = null;
         }
     }
@@ -100,89 +70,8 @@ public class ChatManager : MonoBehaviour
     /// <param name="preserveState">Whether to preserve window state (open/closed)</param>
     public void SwitchChatView(ChatViewMode viewType, bool preserveState = true)
     {
-        // Don't switch if already using this view
-        if (currentViewMode == viewType && currentChatView != null)
-        {
-            return;
-        }
-
-        var wasActive = currentChatView?.IsActive ?? false;
-
-        // Unsubscribe from current view
-        if (currentChatView != null)
-        {
-            currentChatView.OnMessageSubmitted -= OnUserMessageSubmitted;
-            currentChatView.Hide();
-
-            if (tmproChatView != null)
-            {
-                Log.Debug("Destroy tmproChatView");
-                Destroy(tmproChatView);
-                Destroy(chatWindowGameObject);
-                tmproChatView = null;
-                chatWindowGameObject = null;
-            }
-            if (imguiChatView != null)
-            {
-                Log.Debug("Destroy imguiChatView");
-                Destroy(imguiChatView);
-                imguiChatView = null;
-            }
-        }
-
-        // Switch view
-        switch (viewType)
-        {
-            case ChatViewMode.TMPro:
-                if (tmproChatView == null)
-                {
-                    InitTMProChatView();
-                    if (tmproChatView == null)
-                    {
-                        Log.Error("TMPro ChatWindow is not available!");
-                        return;
-                    }
-                }
-
-                // Enable TMPro components
-                tmproChatView.enabled = true;
-                currentChatView = tmproChatView;
-                currentViewMode = ChatViewMode.TMPro;
-
-                Log.Info("Switched to TMPro chat view");
-                break;
-
-            case ChatViewMode.IMGUI:
-                if (imguiChatView == null)
-                {
-                    // Add IMGUI view component to the GameObject
-                    imguiChatView = gameObject.AddComponent<IMGUIChatView>();
-                    if (imguiChatView == null)
-                    {
-                        Log.Error("IMGUI ChatView is not available!");
-                        return;
-                    }
-                }
-
-                // Enable IMGUI
-                imguiChatView.enabled = true;
-                currentChatView = imguiChatView;
-                currentViewMode = ChatViewMode.IMGUI;
-
-                Log.Info("Switched to IMGUI chat view");
-                break;
-        }
-
-        // Subscribe to new view
-        if (currentChatView != null)
-        {
-            currentChatView.OnMessageSubmitted += OnUserMessageSubmitted;
-            if (preserveState && wasActive)
-            {
-                currentChatView.Show();
-            }
-            ReplayRecentMessages();
-        }
+        // Entry-level disable: Chat views are disabled
+        return;
     }
 
     private void InitTMProChatView()
@@ -313,7 +202,7 @@ public class ChatManager : MonoBehaviour
     /// <param name="messageType">The type of message</param>
     public void SendChatMessage(string text, ChatMessageType messageType = ChatMessageType.SystemInfoMessage)
     {
-        ChatService.Instance.AddMessage(text, messageType);
+        // Entry-level disable: Silently drop message
     }
 
     /// <summary>
@@ -323,15 +212,8 @@ public class ChatManager : MonoBehaviour
     /// <param name="forceOpenChatWindow">Whether to force open the chat window</param>
     public void InsertTextToChatbox(string text, bool forceOpenChatWindow)
     {
-        if (currentChatView == null) return;
-
-        if (!currentChatView.IsActive)
-        {
-            if (!forceOpenChatWindow) return;
-            currentChatView.Toggle();
-        }
-
-        currentChatView.InsertText(text);
+        // Entry-level disable: Do not insert or open chat window
+        return;
     }
 
     /// <summary>
@@ -339,7 +221,7 @@ public class ChatManager : MonoBehaviour
     /// </summary>
     public bool IsPointerIn()
     {
-        return currentChatView?.IsPointerIn() ?? false;
+        return false;
     }
 
     /// <summary>
@@ -347,7 +229,7 @@ public class ChatManager : MonoBehaviour
     /// </summary>
     public bool IsChatViewActive()
     {
-        return currentChatView?.IsActive ?? false;
+        return false;
     }
 
     #endregion

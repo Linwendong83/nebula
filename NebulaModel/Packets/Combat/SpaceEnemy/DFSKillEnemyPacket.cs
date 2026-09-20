@@ -12,4 +12,5 @@ public class DFSKillEnemyPacket
 
     public int OriginAstroId { get; set; }
     public int EnemyId { get; set; }
+    public long Generation { get; set; }
 }

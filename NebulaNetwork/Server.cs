@@ -86,9 +86,8 @@ public class Server : IServer
         var playerId = GetNextPlayerId();
 
         // this is truncated to ushort.MaxValue
-        var birthPlanet = GameMain.galaxy.PlanetById(GameMain.galaxy.birthPlanetId);
-        var playerData = new PlayerData(playerId, -1,
-            position: new Double3(birthPlanet.uPosition.x, birthPlanet.uPosition.y, birthPlanet.uPosition.z));
+        // A lobby can exist before the actual galaxy does. Assign birth on StartGame, on the server.
+        var playerData = new PlayerData(playerId, -1);
 
         conn.ConnectionStatus = EConnectionStatus.Pending;
 
@@ -111,10 +110,15 @@ public class Server : IServer
     // Placeholder until we implement Connected and Disconnected event on the socket level.
     internal void OnSocketDisconnection(INebulaConnection conn)
     {
-        Multiplayer.Session.NumPlayers -= 1;
-        DiscordManager.UpdateRichPresence();
+        if (Multiplayer.Session == null || Multiplayer.IsLeavingGame) return;
 
         Players.TryRemove(conn, out var player);
+        if (player?.Data is PlayerData { SessionCounted: true } counted)
+        {
+            counted.SessionCounted = false;
+            Multiplayer.Session.NumPlayers = (ushort)Math.Max(1, Multiplayer.Session.NumPlayers - 1);
+            DiscordManager.UpdateRichPresence();
+        }
 
         // @TODO: Why can this happen in the first place?
         // Figure out why it was possible before the move and fix that issue at the root.
@@ -146,6 +150,11 @@ public class Server : IServer
         }
 
         // player is valid
+        Multiplayer.Session.Metadata.Leave(player.Id);
+        Multiplayer.Session.Life.Remove(player.Id);
+        Multiplayer.Session.Goals.RemovePlayer(player.Id);
+        Multiplayer.Session.Kills.Unsubscribe(player.Id);
+        Multiplayer.Session.BattleVisuals.RemoveOwner(player.Id);
         SendPacketExclude(new PlayerDisconnected(player.Id, Multiplayer.Session.NumPlayers), conn);
         // For sync completed player who triggered OnPlayerJoinedGame() before
         if (conn.ConnectionStatus == EConnectionStatus.Connected)

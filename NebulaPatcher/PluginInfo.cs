@@ -30,8 +30,8 @@ internal static class PluginInfo
     ///     Fork-specific dev suffix and revision number.
     ///     Empty string means pure upstream release build.
     /// </summary>
-    public const string FORK_SUFFIX = "-dev.3";
-    public const int FORK_REVISION = 3;
+    public const string FORK_SUFFIX = "-dev.4";
+    public const int FORK_REVISION = 4;
 
     /// <summary>
     ///     Base version from upstream (e.g. "0.9.22").

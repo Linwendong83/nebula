@@ -45,8 +45,14 @@ public class TrashContainer_Patch
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(TrashContainer.NewTrash))]
-    public static bool NewTrash_Postfix()
+    public static bool NewTrash_Postfix(ref TrashObject trashObj, ref TrashData trashData, ref int __result)
     {
+        if (Multiplayer.IsActive && !Multiplayer.Session.Trashes.IsIncomingRequest &&
+            !string.IsNullOrEmpty(Multiplayer.Session.PropertyTransactions.ActiveOperationId))
+        {
+            __result = Multiplayer.Session.Drops.Capture(trashObj, trashData);
+            return false;
+        }
         if (Multiplayer.IsActive && Multiplayer.Session.IsClient)
         {
             //Client should wait for server to approve
@@ -59,6 +65,7 @@ public class TrashContainer_Patch
     [HarmonyPatch(nameof(TrashContainer.NewTrash))]
     public static void NewTrash_Postfix(ref TrashObject trashObj, ref TrashData trashData, int __result)
     {
+        if (Multiplayer.IsActive && !string.IsNullOrEmpty(Multiplayer.Session.PropertyTransactions.ActiveOperationId)) return;
         if (Multiplayer.IsActive && !Multiplayer.Session.Trashes.IsIncomingRequest)
         {
             if (Multiplayer.Session.Trashes.PlanetId != 0)

@@ -34,7 +34,8 @@ public class FactoryLoadRequestProcessor : PacketProcessor<FactoryLoadRequest>
             var data = writer.CloseAndGetBytes();
             Log.Info($"Sent {data.Length} bytes of data for PlanetFactory {planet.name} (ID: {planet.id})");
             conn.SendPacket(new FragmentInfo(data.Length + planet.data.modData.Length));
-            conn.SendPacket(new FactoryData(packet.PlanetID, data, planet.data.modData));
+            conn.SendPacket(new FactoryData(packet.PlanetID, data, planet.data.modData)
+            { EnemyGenerations = Multiplayer.Session.Generations.Export(packet.PlanetID) });
         }
 
         // Update syncing player data (Connected player will be update by movement packets)

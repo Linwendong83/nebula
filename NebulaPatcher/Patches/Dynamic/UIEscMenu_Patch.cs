@@ -7,7 +7,6 @@ using HarmonyLib;
 using NebulaModel.Packets.Players;
 using NebulaPatcher.Patches.Transpilers;
 using NebulaWorld;
-using NebulaWorld.GameStates;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -32,20 +31,13 @@ internal class UIEscMenu_Patch
         SetButtonEnableState(loadGameWindowButton, !Multiplayer.IsActive);
     }
 
-    [HarmonyPostfix]
-    [HarmonyPatch(nameof(UIEscMenu._OnOpen))]
-    [SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "Original Function Name")]
-    public static void _OnOpen_Postfix(UIEscMenu __instance)
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(UIEscMenu.OnButton2Click))]
+    public static bool OnButton2Click_Prefix()
     {
-        if (!Multiplayer.IsActive || Multiplayer.Session.LocalPlayer.IsHost) return;
-
-        var timeSinceSave = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - GameStatesManager.LastSaveTime;
-        var second = (int)(timeSinceSave);
-        var minute = second / 60;
-        var hour = minute / 60;
-        var saveBtnText = "存档时间".Translate() + string.Format(" {0}h{1}m{2}s ago".Translate(), hour, minute % 60, second % 60);
-        __instance.button2Text.text = saveBtnText;
+        return !Multiplayer.IsActive || Multiplayer.Session.LocalPlayer.IsHost;
     }
+
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(UIEscMenu.OnButton5Click))]

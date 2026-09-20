@@ -24,6 +24,7 @@ public class FactoryDataProcessor : PacketProcessor<FactoryData>
             return;
         }
         // The whole fragment is received
+        Multiplayer.Session.Generations.Import(packet.EnemyGenerations);
         GameStatesManager.FragmentSize = 0;
 
         // Stop packet processing until factory is imported and loaded

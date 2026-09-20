@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using NebulaModel;
 using NebulaModel.Logger;
@@ -8,6 +8,7 @@ using Object = System.Object;
 
 namespace NebulaWorld.UIPlayerList
 {
+#pragma warning disable CS0169, IDE0060
     public class UIPlayerWindow : MonoBehaviour
     {
         private const string WindowName = "";
@@ -22,45 +23,14 @@ namespace NebulaWorld.UIPlayerList
 
         public void Update()
         {
-            var hasModifier = Config.Options.PlayerListHotkey.Modifiers.Any();
-
-            _windowVisible = false;
-            if (Input.GetKey(Config.Options.PlayerListHotkey.MainKey))
-            {
-                if (Config.Options.PlayerListHotkey.Modifiers.All(Input.GetKey))
-                {
-                    // If we have no modifier but a modifier is pressed, do not progress
-                    if (!hasModifier && Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.LeftControl) ||
-                        Input.GetKey(KeyCode.RightAlt) || Input.GetKey(KeyCode.RightControl)) return;
-
-                    _windowVisible = true;
-                }
-            }
+            // Entry-level disable: Player list window is disabled
+            return;
         }
 
         public void OnGUI()
         {
-            if (!Multiplayer.IsActive) return;
-            if (Multiplayer.Session.IsDedicated) return;
-
-            try
-            {
-                if (!_windowVisible ||
-                    ChatManager.Instance.IsChatViewActive() ||
-                    UIRoot.instance.uiGame.techTree.active ||
-                    UIRoot.instance.uiGame.escMenu.active ||
-                    UIRoot.instance.uiGame.dysonEditor.active)
-                    return;
-
-                windowSize = GUI.Window(6245814, windowSize, WindowHandler, WindowName, UIStyles.DialogStyles.WindowBackgroundStyle());
-                windowSize.x = (int)(Screen.width * 0.5f - windowSize.width * 0.5f);
-                windowSize.y = (int)(Screen.height * 0.5f - windowSize.height * 0.5f);
-            }
-            catch (Exception ex)
-            {
-                Log.Error("Error in UIPlayerWindow OnGUI");
-                Log.Error(ex);
-            }
+            // Entry-level disable: Player list window is disabled
+            return;
         }
 
         public void WindowHandler(int id)

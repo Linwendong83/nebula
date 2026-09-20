@@ -276,13 +276,14 @@ internal class GameData_Patch
     [HarmonyPatch(nameof(GameData.SetForNewGame))]
     public static void SetForNewGame_Postfix(GameData __instance)
     {
-        //Set starting star and planet to request from the server, except when client has set custom starting planet.
+        // Restore the server-assigned birth point or the returning player's saved location.
         if (!Multiplayer.IsActive || Multiplayer.Session.LocalPlayer.IsHost)
         {
             return;
         }
 
         //Update player's position before searching for closest planet (GS2: Modeler.ModelingCoroutine)
+        Multiplayer.Session.State.ApplyBirthData(__instance);
         __instance.mainPlayer.uPosition = new VectorLF3(Multiplayer.Session.LocalPlayer.Data.UPosition.x,
             Multiplayer.Session.LocalPlayer.Data.UPosition.y, Multiplayer.Session.LocalPlayer.Data.UPosition.z);
 
@@ -291,7 +292,7 @@ internal class GameData_Patch
             var planet = __instance.galaxy.PlanetById(Multiplayer.Session.LocalPlayer.Data.LocalPlanetId);
             __instance.ArrivePlanet(planet);
         }
-        else if (UIVirtualStarmap_Transpiler.CustomBirthPlanet == -1)
+        else
         {
             StarData nearestStar = null;
             PlanetData nearestPlanet = null;
@@ -303,11 +304,6 @@ internal class GameData_Patch
             }
 
             __instance.ArriveStar(nearestStar);
-        }
-        else
-        {
-            var planet = __instance.galaxy.PlanetById(UIVirtualStarmap_Transpiler.CustomBirthPlanet);
-            __instance.ArrivePlanet(planet);
         }
     }
 
@@ -374,22 +370,11 @@ internal class GameData_Patch
         //Players should clear the list of drone orders of other players when they leave the planet
         if (Multiplayer.IsActive)
         {
+            Multiplayer.Session.BattleVisuals.LeavePlanet(Multiplayer.Session.LocalPlayer.Id, GameMain.localPlanet?.id ?? -1);
             Multiplayer.Session.Trashes.Refresh();
             Multiplayer.Session.PowerTowers.ClearLocalState();
             Multiplayer.Session.Enemies.OnLeavePlanet();
         }
-    }
-
-    [HarmonyPrefix]
-    [HarmonyPatch(nameof(GameData.DetermineLocalPlanet))]
-    public static bool DetermineLocalPlanet_Prefix(ref bool __result)
-    {
-        if (UIVirtualStarmap_Transpiler.CustomBirthPlanet == -1 || !Multiplayer.IsActive || Multiplayer.Session.IsGameLoaded)
-        {
-            return true;
-        }
-        __result = false;
-        return false;
     }
 
     private static void RefreshMissingMeshes()

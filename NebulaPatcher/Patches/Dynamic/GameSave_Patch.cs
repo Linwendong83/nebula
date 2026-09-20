@@ -80,6 +80,7 @@ internal class GameSave_Patch
         {
             return;
         }
+        if (Multiplayer.IsActive) GoalManager.RestoreLevel(GameMain.data);
         for (var index = 0; index < GameMain.data.factoryCount; index++)
         {
             var factory = GameMain.data.factories[index];

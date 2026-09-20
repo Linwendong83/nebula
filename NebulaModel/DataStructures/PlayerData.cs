@@ -55,6 +55,10 @@ public class PlayerData : IPlayerData
     public int[] DIYItemId { get; set; }
     public int[] DIYItemValue { get; set; }
     public byte[] DashboardData { get; set; }
+    public PlayerLifeData Life { get; set; } = new();
+    public byte[] PersonalKillData { get; set; } = Array.Empty<byte>();
+    public string PersistentId { get; set; } = "";
+    public bool SessionCounted { get; set; }
 
     public void Serialize(INetDataWriter writer)
     {
@@ -102,9 +106,17 @@ public class PlayerData : IPlayerData
             writer.Put(DashboardData.Length);
             writer.Put(DashboardData);
         }
+        Life.Serialize(writer);
+        writer.Put(PersonalKillData.Length);
+        writer.Put(PersonalKillData);
     }
 
     public void Deserialize(INetDataReader reader)
+    {
+        Deserialize(reader, true);
+    }
+
+    public void Deserialize(INetDataReader reader, bool hasLifeData)
     {
         Username = reader.GetString();
         PlayerId = reader.GetUShort();
@@ -158,18 +170,35 @@ public class PlayerData : IPlayerData
         {
             DashboardData = null;
         }
+        Life = new PlayerLifeData();
+        if (hasLifeData)
+        {
+            Life.Deserialize(reader);
+            var killLength = reader.GetInt();
+            if (killLength < 0 || killLength > 128 * 1024 * 1024) throw new InvalidDataException("Invalid personal kill statistics size");
+            PersonalKillData = new byte[killLength];
+            reader.GetBytes(PersonalKillData, killLength);
+        }
+        else if (Mecha.FightData != null && Mecha.FightData.Hp == 0 && GameMain.mainPlayer != null)
+            Mecha.FightData.Hp = GameMain.mainPlayer.mecha.hpMaxApplied;
     }
 
     public IPlayerData CreateCopyWithoutMechaData()
     {
         var copy = new PlayerData(PlayerId, LocalPlanetId, Username, LocalPlanetPosition, UPosition, Rotation, BodyRotation);
         copy.DashboardData = DashboardData;
+        copy.Life = Life;
         return copy;
     }
 
     // Backward compatiblity for older versions
     public void Import(INetDataReader reader, int revision)
     {
+        if (revision >= 8)
+        {
+            Deserialize(reader, revision >= 9);
+            return;
+        }
         Username = reader.GetString();
         PlayerId = reader.GetUShort();
         LocalPlanetId = reader.GetInt();

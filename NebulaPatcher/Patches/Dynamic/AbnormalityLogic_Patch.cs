@@ -15,6 +15,6 @@ internal class AbnormalityLogic_Patch
     [HarmonyPatch(nameof(AbnormalityLogic.GameTick))]
     public static bool GameTick_Prefix()
     {
-        return !Multiplayer.IsActive || !Config.Options.EnableAchievement;
+        return !Multiplayer.IsActive || Multiplayer.Session.IsServer;
     }
 }

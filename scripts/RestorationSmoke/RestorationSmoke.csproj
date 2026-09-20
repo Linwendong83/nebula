@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <ImportDirectoryBuildTargets>false</ImportDirectoryBuildTargets>
+    <OutputPath>$(MSBuildThisFileDirectory)..\..\TestResults\smoke-harness\</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\NebulaPatcher\NebulaPatcher.csproj" />
+  </ItemGroup>
+</Project>

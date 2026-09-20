@@ -38,6 +38,7 @@ internal class StartGameMessageProcessor : PacketProcessor<StartGameMessage>
                 }
 
                 Multiplayer.Session.Server.Players.TryUpgrade(player, EConnectionStatus.Syncing);
+                NebulaWorld.Player.SpawnManager.SetBirthPoint((PlayerData)player.Data);
 
                 Multiplayer.Session.World.OnPlayerJoining(player.Data.Username);
 

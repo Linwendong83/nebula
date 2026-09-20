@@ -24,6 +24,7 @@ public class LobbyUpdateValues
     }
 
     public int GalaxyAlgo { get; set; }
+    public int GoalLevel { get; set; }
     public int GalaxySeed { get; set; }
     public int StarCount { get; set; }
     public float ResourceMultiplier { get; set; }

@@ -50,11 +50,17 @@ public class SyncCompleteProcessor : PacketProcessor<SyncComplete>
         }
 
         // store the player now, not when he enters the lobby. that would cause weird teleportations when clients reenter the lobby without ever having loaded into the game
-        var clientCertHash = CryptoUtils.Hash(packet.ClientCert);
+        var clientCertHash = ((NebulaModel.DataStructures.PlayerData)player.Data).PersistentId;
+        if (clientCertHash != CryptoUtils.Hash(packet.ClientCert))
+        {
+            Server.Disconnect(conn, DisconnectionReason.InvalidData);
+            return;
+        }
 
         SaveManager.TryAdd(clientCertHash, player.Data);
 
         Multiplayer.Session.Server.Players.TryUpgrade(player, EConnectionStatus.Connected);
+        Multiplayer.Session.Metadata.Join(player.Id, clientCertHash);
 
         // Since the player is now connected, we can safely spawn his player model
         SimulatedWorld.OnPlayerJoinedGame(player);

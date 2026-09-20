@@ -160,13 +160,17 @@ internal class Player_Patch
         if (!Multiplayer.IsActive) return true;
         if (__instance != GameMain.mainPlayer) return false;
 
-        if (__instance.isAlive)
-        {
-            Multiplayer.Session.Network.SendPacket(new MechaAliveEventPacket(
-                Multiplayer.Session.LocalPlayer.Id, MechaAliveEventPacket.EStatus.Kill));
-            ThrowItemsInInventory(__instance);
-        }
         return true;
+    }
+
+    [HarmonyPostfix]
+    [HarmonyPatch(nameof(Player.Kill))]
+    public static void Kill_Postfix(Player __instance)
+    {
+        if (!Multiplayer.IsActive || __instance != GameMain.mainPlayer || __instance.isAlive) return;
+        NebulaModel.DataStructures.PlayerLifeData.CurrentTransactionId = "";
+        NebulaModel.DataStructures.PlayerLifeData.CurrentRedeployItemsDropped = false;
+        Multiplayer.Session.Life.Publish();
     }
 
     [HarmonyPrefix]
@@ -175,25 +179,29 @@ internal class Player_Patch
     {
         if (!Multiplayer.IsActive) return true;
 
-        // Don't drop item when Redeploy
-        __instance.mecha.PrepareRedeploy();
-        return false;
+        if (__instance != GameMain.mainPlayer) return false;
+        if (NebulaModel.DataStructures.PlayerLifeData.CurrentRedeployItemsDropped) return false;
+        Multiplayer.Session.PropertyTransactions.BeginDropOperation(NebulaModel.DataStructures.PlayerLifeData.CurrentTransactionId);
+        Multiplayer.Session.Life.Publish(); // Durable pre-drop image for interrupted redeploy recovery.
+        return true;
     }
 
-    private static void ThrowItemsInInventory(Player player)
+    [HarmonyPostfix]
+    [HarmonyPatch(nameof(Player.PrepareRedeploy))]
+    public static void PrepareRedeploy_Postfix(Player __instance)
     {
-        // Balance: Drop half of item in inventory when player killed
-        const float DROP_RATE = 0.5f;
-        for (var i = 0; i < player.package.size; i++)
-        {
-            var itemId = 0;
-            var itemCount = (int)(player.package.grids[i].count * DROP_RATE);
-            player.package.TakeItemFromGrid(i, ref itemId, ref itemCount, out var itemInc);
-            if (itemId > 0 && itemCount > 0)
-            {
-                player.ThrowTrash(itemId, itemCount, itemInc, 0, 0);
-            }
-        }
+        if (!Multiplayer.IsActive || __instance != GameMain.mainPlayer) return;
+        NebulaModel.DataStructures.PlayerLifeData.CurrentRedeployItemsDropped = true;
+        Multiplayer.Session.PropertyTransactions.EndDropOperation();
+        Multiplayer.Session.Life.Publish();
+    }
+
+    [HarmonyFinalizer]
+    [HarmonyPatch(nameof(Player.PrepareRedeploy))]
+    public static System.Exception PrepareRedeploy_Finalizer(System.Exception __exception)
+    {
+        if (Multiplayer.IsActive) Multiplayer.Session.PropertyTransactions.EndDropOperation();
+        return __exception;
     }
 
     #endregion

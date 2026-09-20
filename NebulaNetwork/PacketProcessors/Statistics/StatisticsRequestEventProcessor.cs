@@ -32,6 +32,7 @@ internal class StatisticsRequestEventProcessor : PacketProcessor<StatisticsReque
             case StatisticEvent.WindowOpened:
                 {
                     Multiplayer.Session.Statistics.RegisterPlayer(conn, player.Id);
+                    Multiplayer.Session.Kills.Subscribe(player.Id, conn);
 
                     using (var writer = new BinaryUtils.Writer())
                     {
@@ -43,6 +44,7 @@ internal class StatisticsRequestEventProcessor : PacketProcessor<StatisticsReque
                 }
             case StatisticEvent.WindowClosed:
                 Multiplayer.Session.Statistics.UnRegisterPlayer(player.Id);
+                Multiplayer.Session.Kills.Unsubscribe(player.Id);
                 break;
 
             case StatisticEvent.AstroFilterChanged:

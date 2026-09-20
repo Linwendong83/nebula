@@ -23,8 +23,10 @@ internal class PlayerUpdateLocalStarIdProcessor : PacketProcessor<PlayerUpdateLo
             if (player != null)
             {
                 player.Data.LocalStarId = packet.StarId;
+                packet.PlayerId = player.Id;
+                Multiplayer.Session.BattleVisuals.SendInitial(conn, packet.StarId, player.Data.LocalPlanetId);
             }
-            Server.SendPacketToStarExclude(packet, packet.StarId, conn);
+            Server.SendPacketExclude(packet, conn);
 
             //Realize hives in this star system
             var star = GameMain.galaxy.StarById(packet.StarId);
@@ -43,6 +45,7 @@ internal class PlayerUpdateLocalStarIdProcessor : PacketProcessor<PlayerUpdateLo
         {
             if (remotePlayersModels.TryGetValue(packet.PlayerId, out var remotePlayerModel))
             {
+                if (remotePlayerModel.Movement.LocalStarId != packet.StarId) Multiplayer.Session.BattleVisuals.RemoveOwner(packet.PlayerId);
                 remotePlayerModel.Movement.LocalStarId = packet.StarId;
             }
         }

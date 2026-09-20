@@ -16,7 +16,7 @@ internal class GameAbnormalityData_0925_Patch
     [HarmonyPatch(nameof(GameAbnormalityData_0925.TriggerAbnormality))]
     public static bool TriggerAbnormality_Prefix()
     {
-        return !Multiplayer.IsActive || !Config.Options.EnableAchievement;
+        return !Multiplayer.IsActive || Multiplayer.Session.IsServer;
     }
 
     [HarmonyPrefix]

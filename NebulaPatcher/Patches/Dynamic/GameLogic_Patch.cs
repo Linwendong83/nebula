@@ -25,6 +25,7 @@ public class GameLogic_Patch
         }
 
         Multiplayer.Session.World.RenderPlayerNameTagsInGame();
+        Multiplayer.Session.BattleVisuals.Draw();
     }
 
     [HarmonyPostfix]
@@ -39,6 +40,13 @@ public class GameLogic_Patch
         Multiplayer.Session.Couriers.GameTick();
         Multiplayer.Session.Belts.GameTick();
         Multiplayer.Session.Combat.GameTick();
+        Multiplayer.Session.Metadata.GameTick();
+        Multiplayer.Session.PropertyTransactions.GameTick();
+        Multiplayer.Session.Drops.GameTick();
+        Multiplayer.Session.Life.GameTick();
+        Multiplayer.Session.Goals.GameTick();
+        Multiplayer.Session.Kills.GameTick();
+        Multiplayer.Session.BattleVisuals.GameTick();
 
         if (Multiplayer.Session.IsServer)
         {

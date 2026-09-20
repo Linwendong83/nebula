@@ -77,14 +77,6 @@ public class MechaData : IMechaData
     public void Deserialize(INetDataReader reader)
     {
         TechBonuses = new PlayerTechBonuses();
-        FightData = new MechaFightData();
-        Inventory = new StorageComponent(4);
-        DeliveryPackage = new DeliveryPackage();
-        DeliveryPackage.Init();
-        ReactorStorage = new StorageComponent(4);
-        WarpStorage = new StorageComponent(1);
-        Forge = new MechaForge { tasks = [], extraItems = new ItemBundle() };
-        ConstructionModule = new ConstructionModuleComponent();
         TechBonuses.Deserialize(reader);
         SandCount = reader.GetLong();
         CoreEnergy = reader.GetDouble();
@@ -92,8 +84,10 @@ public class MechaData : IMechaData
         var isPayloadPresent = reader.GetBool();
         if (!isPayloadPresent)
         {
+            ReactorStorage = null;
             return;
         }
+        InitializePayload();
         FightData.Deserialize(reader);
         var mechaLength = reader.GetInt();
         var mechaBytes = new byte[mechaLength];
@@ -106,6 +100,18 @@ public class MechaData : IMechaData
         WarpStorage.Import(br);
         Forge.Import(br);
         ConstructionModule.Import(br);
+    }
+
+    private void InitializePayload()
+    {
+        FightData = new MechaFightData();
+        Inventory = new StorageComponent(4);
+        DeliveryPackage = new DeliveryPackage();
+        DeliveryPackage.Init();
+        ReactorStorage = new StorageComponent(4);
+        WarpStorage = new StorageComponent(1);
+        Forge = new MechaForge { tasks = [], extraItems = new ItemBundle() };
+        ConstructionModule = new ConstructionModuleComponent();
     }
 
     public void UpdateMech(Player destination)
@@ -133,13 +139,6 @@ public class MechaData : IMechaData
     public void Import(INetDataReader reader, int revision)
     {
         TechBonuses = new PlayerTechBonuses();
-        Inventory = new StorageComponent(4);
-        DeliveryPackage = new DeliveryPackage();
-        DeliveryPackage.Init();
-        ReactorStorage = new StorageComponent(4);
-        WarpStorage = new StorageComponent(1);
-        Forge = new MechaForge { tasks = [], extraItems = new ItemBundle() };
-        ConstructionModule = new ConstructionModuleComponent();
         TechBonuses.Import(reader, revision);
         SandCount = reader.GetInt();
         CoreEnergy = reader.GetDouble();
@@ -147,8 +146,11 @@ public class MechaData : IMechaData
         var isPayloadPresent = reader.GetBool();
         if (!isPayloadPresent)
         {
+            ReactorStorage = null;
             return;
         }
+        InitializePayload();
+        if (revision < 8 && GameMain.mainPlayer != null) FightData.Hp = GameMain.mainPlayer.mecha.hpMaxApplied;
         if (revision >= 8)
         {
             FightData.Deserialize(reader);

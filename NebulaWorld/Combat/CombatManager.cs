@@ -125,7 +125,7 @@ public class CombatManager : IDisposable
                 ptr.starId = pair.Value.Movement.LocalStarId;
                 // If the remote player is on the same planet, player.position is more precise
                 // Otherwise it has to use the interpolated received position
-                ptr.position = ptr.id == localPlanetId ? player.position : snapshot.LocalPlanetPosition.ToVector3();
+                ptr.position = ptr.planetId == localPlanetId ? player.position : snapshot.LocalPlanetPosition.ToVector3();
                 ptr.uPosition = player.uPosition;
                 ptr.isAlive = player.isAlive;
 
@@ -144,7 +144,7 @@ public class CombatManager : IDisposable
                 }
                 IndexByPlayerId[pair.Key] = index++;
 
-                player.controller.actionDeath.GameTick(gameTick);
+                PlayerLifeManager.TickRemote(pair.Value);
             }
         }
     }

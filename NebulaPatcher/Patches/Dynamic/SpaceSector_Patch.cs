@@ -35,7 +35,8 @@ internal class SpaceSector_Patch
         ref var enemyPtr = ref __instance.enemyPool[enemyId];
         if (Multiplayer.Session.IsServer)
         {
-            Multiplayer.Session.Network.SendPacket(new DFSKillEnemyPacket(enemyPtr.originAstroId, enemyId));
+            Multiplayer.Session.Network.SendPacket(new DFSKillEnemyPacket(enemyPtr.originAstroId, enemyId)
+            { Generation = Multiplayer.Session.Generations.Get(0, enemyId) });
             return true;
         }
         if (Multiplayer.Session.Enemies.IsIncomingRequest.Value)
@@ -47,7 +48,7 @@ internal class SpaceSector_Patch
         // Make this enemyData appear as empty        
         enemyPtr.isInvincible = true;
         enemyPtr.id = 0;
-        Multiplayer.Session.Network.SendPacket(new DFSKillEnemyPacket(enemyPtr.originAstroId, enemyId));
+        // Wait for the host's damage result; do not submit an unvalidated kill request.
 
         return false;
     }

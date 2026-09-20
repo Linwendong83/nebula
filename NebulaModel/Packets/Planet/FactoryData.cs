@@ -14,4 +14,5 @@ public class FactoryData
     public int PlanetId { get; set; }
     public byte[] BinaryData { get; set; }
     public byte[] TerrainModData { get; set; }
+    public byte[] EnemyGenerations { get; set; }
 }

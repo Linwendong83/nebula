@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.Text;
@@ -69,61 +69,15 @@ public class GizmoManager : IDisposable
 
     public void OnUpdate()
     {
-        if (VFInput.alt && VFInput.control && Input.GetMouseButtonDown(0)) GetMapPing();
+        // Entry-level disable: Map ping to chat is disabled
+        // if (VFInput.alt && VFInput.control && Input.GetMouseButtonDown(0)) GetMapPing();
         UpdateIndicator();
     }
 
     private static void GetMapPing()
     {
-        // Modify from UIGlobemap.TeleportLogic
-        var mainCam = Camera.main;
-        if (mainCam == null || GameMain.localPlanet == null) return;
-        if (!Physics.Raycast(mainCam.ScreenPointToRay(Input.mousePosition), out var hitInfo, 800f, 8720, QueryTriggerInteraction.Collide)) return;
-
-        var starmap = UIRoot.instance.uiGame.starmap;
-        if (starmap.active)
-        {
-            // In starmap view, get the focusing planet or star (OnCursorFunction3Click)
-            int astroId;
-            string displayString;
-            if (starmap.focusPlanet != null)
-            {
-                astroId = starmap.focusPlanet.planet.id;
-                displayString = starmap.focusPlanet.planet.displayName;
-            }
-            else if (starmap.focusStar != null)
-            {
-                astroId = starmap.focusStar.star.astroId;
-                displayString = starmap.focusStar.star.displayName;
-            }
-            else if (starmap.focusHive != null)
-            {
-                astroId = starmap.focusHive.hive.hiveAstroId;
-                displayString = starmap.focusHive.hive.displayName;
-            }
-            else
-            {
-                return;
-            }
-            ChatManager.Instance.InsertTextToChatbox(NavigateChatLinkHandler.FormatNavigateToAstro(astroId, displayString), false);
-            return;
-        }
-
-        Maths.GetLatitudeLongitude(hitInfo.point, out var latd, out _, out var logd, out _,
-            out var north, out _, out _, out var east);
-
-        var stringBuilder = new StringBuilder();
-        stringBuilder.Append(GameMain.localPlanet.displayName);
-        stringBuilder.Append(' ');
-        stringBuilder.Append(north == true ? 'N' : 'S');
-        stringBuilder.Append(latd);
-        stringBuilder.Append('°');
-        stringBuilder.Append(east == true ? 'E' : 'W');
-        stringBuilder.Append(logd);
-        stringBuilder.Append('°');
-
-        var str = NavigateChatLinkHandler.FormatNavigateToPlanetPos(GameMain.localPlanet.id, hitInfo.point, stringBuilder.ToString());
-        ChatManager.Instance.InsertTextToChatbox(str, false);
+        // Entry-level disable: Map ping to chat is disabled
+        return;
     }
 
     private void UpdateIndicator()

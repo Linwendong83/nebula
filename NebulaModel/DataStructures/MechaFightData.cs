@@ -138,13 +138,6 @@ namespace NebulaModel.DataStructures
             LaserFire = reader.GetInt();
             BombFire = reader.GetInt();
 
-            if (Hp == 0)
-            {
-                // prevent instant death, which can happen when a player joins for the first time and then exits again before sending the first mecha data update.
-                // when the host saves in this situation, the Hp would be set to 0 and on every next join the client would be insta killed. lol
-                Hp = GameMain.mainPlayer.mecha.hpMaxApplied;
-            }
-
             var fightLength = reader.GetInt();
             var fightBytes = new byte[fightLength];
             reader.GetBytes(fightBytes, fightLength);

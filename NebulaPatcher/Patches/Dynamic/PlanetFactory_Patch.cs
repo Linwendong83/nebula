@@ -724,7 +724,8 @@ internal class PlanetFactory_patch
         if (Multiplayer.Session.IsServer)
         {
             var starId = __instance.planet.star.id;
-            Multiplayer.Session.Network.SendPacketToStar(new DFGKillEnemyPacket(__instance.planetId, enemyId), starId);
+            Multiplayer.Session.Network.SendPacketToStar(new DFGKillEnemyPacket(__instance.planetId, enemyId)
+            { Generation = Multiplayer.Session.Generations.Get(__instance.planetId, enemyId) }, starId);
             return true;
         }
         if (Multiplayer.Session.Combat.IsIncomingRequest.Value)
@@ -737,7 +738,7 @@ internal class PlanetFactory_patch
         ref var enemyPtr = ref __instance.enemyPool[enemyId];
         enemyPtr.isInvincible = true;
         enemyPtr.id = 0;
-        Multiplayer.Session.Network.SendPacket(new DFGKillEnemyPacket(__instance.planetId, enemyId));
+        // The damage packet is authoritative input. A predicted death cannot kill an enemy on the host.
 
         return false;
     }

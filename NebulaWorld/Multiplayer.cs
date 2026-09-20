@@ -22,9 +22,11 @@ public static class Multiplayer
     public static bool IsInMultiplayerMenu { get; set; }
 
     public static bool IsDedicated { get; set; }
+    public static bool ProtocolReady { get; set; }
 
     public static void HostGame(IServer server)
     {
+        if (!ProtocolReady) throw new System.InvalidOperationException("Multiplayer protocol patches are unavailable");
         IsLeavingGame = false;
 
         Session = new MultiplayerSession(server);
@@ -33,6 +35,7 @@ public static class Multiplayer
 
     public static void JoinGame(IClient client)
     {
+        if (!ProtocolReady) throw new System.InvalidOperationException("Multiplayer protocol patches are unavailable");
         IsLeavingGame = false;
 
         Session = new MultiplayerSession(client);

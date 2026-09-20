@@ -40,6 +40,10 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         LocalPlayer = new LocalPlayer();
         World = new SimulatedWorld();
         Combat = new CombatManager();
+        Generations = new CombatGenerationManager();
+        BattleVisuals = new BattleVisualManager();
+        Impacts = new BattleImpactCapture();
+        Life = new PlayerLifeManager();
         Enemies = new EnemyManager();
         Factories = new FactoryManager();
         Storage = new StorageManager();
@@ -50,12 +54,17 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         Gizmos = new GizmoManager();
         History = new GameDataHistoryManager();
         State = new GameStatesManager();
+        Goals = new GoalManager();
+        Metadata = new MetadataManager();
+        PropertyTransactions = new MetadataTransactionManager();
         Couriers = new CourierManager();
         Ships = new ILSShipManager();
         StationsUI = new StationUIManager();
         Planets = new PlanetManager();
         Statistics = new StatisticsManager();
+        Kills = new KillStatisticsManager();
         Trashes = new TrashManager();
+        Drops = new PersistentDropManager();
         DysonSpheres = new DysonSphereManager();
         Launch = new LaunchManager();
         Warning = new WarningManager();
@@ -65,6 +74,10 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
 
     public SimulatedWorld World { get; set; }
     public CombatManager Combat { get; set; }
+    public CombatGenerationManager Generations { get; set; }
+    public BattleVisualManager BattleVisuals { get; set; }
+    public BattleImpactCapture Impacts { get; set; }
+    public PlayerLifeManager Life { get; set; }
     public EnemyManager Enemies { get; set; }
     public StorageManager Storage { get; set; }
     public PowerTowerManager PowerTowers { get; set; }
@@ -74,12 +87,17 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
     public GizmoManager Gizmos { get; set; }
     public GameDataHistoryManager History { get; set; }
     public GameStatesManager State { get; set; }
+    public GoalManager Goals { get; set; }
+    public MetadataManager Metadata { get; set; }
+    public MetadataTransactionManager PropertyTransactions { get; set; }
     public CourierManager Couriers { get; set; }
     public ILSShipManager Ships { get; set; }
     public StationUIManager StationsUI { get; set; }
     public PlanetManager Planets { get; set; }
     public StatisticsManager Statistics { get; set; }
+    public KillStatisticsManager Kills { get; set; }
     public TrashManager Trashes { get; set; }
+    public PersistentDropManager Drops { get; set; }
     public DysonSphereManager DysonSpheres { get; set; }
     public LaunchManager Launch { get; set; }
     public WarningManager Warning { get; set; }
@@ -110,6 +128,14 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
 
         Combat?.Dispose();
         Combat = null;
+        Generations?.Dispose();
+        Generations = null;
+        BattleVisuals?.Dispose();
+        BattleVisuals = null;
+        Impacts?.Dispose();
+        Impacts = null;
+        Life?.Dispose();
+        Life = null;
 
         Enemies?.Dispose();
         Enemies = null;
@@ -140,6 +166,12 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
 
         State?.Dispose();
         State = null;
+        Goals?.Dispose();
+        Goals = null;
+        Metadata?.Dispose();
+        Metadata = null;
+        PropertyTransactions?.Dispose();
+        PropertyTransactions = null;
 
         Couriers?.Dispose();
         Couriers = null;
@@ -154,9 +186,13 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
 
         Statistics?.Dispose();
         Statistics = null;
+        Kills?.Dispose();
+        Kills = null;
 
         Trashes?.Dispose();
         Trashes = null;
+        Drops?.Dispose();
+        Drops = null;
 
         DysonSpheres?.Dispose();
         DysonSpheres = null;
@@ -192,7 +228,11 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         }
 
         Log.Info("==== Game load completed ====");
+        if (IsServer) SaveManager.EnsureServerDataLoaded();
+        if (IsServer) SaveManager.BindWorldIdentity(GameMain.data);
+        if (IsServer) GoalManager.RestoreLevel(GameMain.data);
         IsGameLoaded = true;
+        if (IsServer) Metadata.Initialize();
         DiscordManager.UpdateRichPresence();
 
         if (Multiplayer.Session.LocalPlayer.IsHost)

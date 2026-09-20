@@ -45,6 +45,8 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
         catch (Exception ex)
         {
             Log.Error("Unhandled exception occurred while initializing Nebula:", ex);
+            enabled = false;
+            if (Multiplayer.IsDedicated) Application.Quit(1);
         }
     }
 
@@ -132,7 +134,7 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
             $"seed={gameDesc.galaxySeed} starCount={gameDesc.starCount} resourceMultiplier={gameDesc.resourceMultiplier:F1}");
         DSPGame.StartGameSkipPrologue(gameDesc);
         Log.Info($"Listening server on port {NebulaModel.Config.Options.HostPort}");
-        Multiplayer.HostGame(new Server(NebulaModel.Config.Options.HostPort, true));
+        Multiplayer.HostGame(new Server(NebulaModel.Config.Options.HostPort, false));
         FPSController.SetFixUPS(NebulaModel.Config.CommandLineOptions.UpsValue);
     }
 
@@ -245,13 +247,17 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
 #endif
 
             Log.Info("Patching completed successfully. Time cost: " + timer.duration);
+            Multiplayer.ProtocolReady = true;
         }
         catch (Exception ex)
         {
             Log.Error("Unhandled exception occurred while patching the game:", ex);
+            Multiplayer.ProtocolReady = false;
+            new Harmony(PluginInfo.PLUGIN_ID).UnpatchSelf();
             // Show error in UIFatalErrorTip to inform normal users
             Harmony.CreateAndPatchAll(typeof(UIFatalErrorTip_Patch));
             Log.Error($"Nebula Multiplayer Mod is incompatible with game version, expected version {DSPGameVersion.VERSION}\nUnhandled exception occurred while patching the game.");
+            throw new InvalidOperationException("Nebula's protocol patches were not installed completely; multiplayer startup is disabled.", ex);
         }
     }
 

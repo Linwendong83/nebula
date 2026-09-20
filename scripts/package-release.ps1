@@ -88,7 +88,28 @@ if (Test-Path $apiSource) {
 Copy-Item (Join-Path $root "README.md") -Destination $tmpDir -ErrorAction SilentlyContinue
 Copy-Item (Join-Path $root "LICENSE") -Destination $tmpDir -ErrorAction SilentlyContinue
 
-Compress-Archive -Path "$tmpDir\*" -DestinationPath $archivePath -Force
+# Add-Type for ZipArchive
+Add-Type -AssemblyName System.IO.Compression
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+
+# Create zip with standard forward slashes ('/') to prevent backslash issues across platforms and mod managers
+$zipStream = [System.IO.File]::Open($archivePath, [System.IO.FileMode]::Create)
+$zipArchive = [System.IO.Compression.ZipArchive]::new($zipStream, [System.IO.Compression.ZipArchiveMode]::Create)
+$basePath = (Resolve-Path $tmpDir).Path.TrimEnd('\', '/')
+$items = Get-ChildItem -Path $basePath -Recurse
+foreach ($item in $items) {
+    $relPath = $item.FullName.Substring($basePath.Length + 1).Replace('\', '/')
+    if ($item.PSIsContainer) {
+        $hasDirectFiles = (Get-ChildItem -Path $item.FullName -File).Count -gt 0
+        if (-not $hasDirectFiles) {
+            [void]$zipArchive.CreateEntry($relPath + '/')
+        }
+    } else {
+        [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zipArchive, $item.FullName, $relPath, [System.IO.Compression.CompressionLevel]::Optimal)
+    }
+}
+$zipArchive.Dispose()
+$zipStream.Dispose()
 Remove-Item $tmpDir -Recurse -Force
 
 $zipItem = Get-Item $archivePath

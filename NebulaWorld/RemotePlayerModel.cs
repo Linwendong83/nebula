@@ -15,6 +15,7 @@ public class RemotePlayerModel
 
     public RemotePlayerModel(ushort playerId, string username)
     {
+        using var wreckageScope = new NebulaWorld.Combat.RemoteWreckageScope(this);
         // Spawn remote player model by cloning the player prefab and replacing local player script by remote player ones.
         var playerPrefabPath = LDB.players.Select(PLAYER_PROTO_ID).PrefabPath;
         if (playerPrefabPath != null)
@@ -104,6 +105,8 @@ public class RemotePlayerModel
 
     public string Username { get; set; }
     public ushort PlayerId { get; set; }
+    public NebulaModel.DataStructures.PlayerLifeData Life { get; set; } = new();
+    public System.Collections.Generic.List<ArmorWreckage> Wreckages { get; set; } = new();
     public Transform PlayerTransform { get; set; }
     public Transform PlayerModelTransform { get; set; }
     public RemotePlayerMovement Movement { get; set; }
@@ -117,6 +120,7 @@ public class RemotePlayerModel
 
     public void Destroy()
     {
+        using var wreckageScope = new NebulaWorld.Combat.RemoteWreckageScope(this);
         Object.Destroy(PlayerTransform.gameObject);
         PlayerTransform = null;
         PlayerModelTransform = null;

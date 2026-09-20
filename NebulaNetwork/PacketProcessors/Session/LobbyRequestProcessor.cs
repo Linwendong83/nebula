@@ -66,18 +66,19 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
         //TODO: some validation of client cert / generating auth challenge for the client
         // Load old data of the client
         var clientCertHash = CryptoUtils.Hash(packet.ClientCert);
+        if (Players.Connected.Values.Concat(Players.Syncing.Values).Concat(Players.Pending.Values)
+            .Any(other => other.Connection != conn && (other.Data as PlayerData)?.PersistentId == clientCertHash))
+        {
+            Server.Disconnect(conn, DisconnectionReason.InvalidData, "This player identity is already connected. Disconnect it before joining again.");
+            return;
+        }
+        ((PlayerData)player.Data).PersistentId = clientCertHash;
         if (SaveManager.PlayerSaves.TryGetValue(clientCertHash, out var value))
         {
             var playerData = value;
-            {
-                foreach (var connectedPlayer in Players.Connected.Values.Where(connectedPlayer => connectedPlayer.Data == playerData))
-                {
-                    playerData = value.CreateCopyWithoutMechaData();
-                    Log.Warn($"Copy playerData for duplicated player{playerData.PlayerId} {playerData.Username}");
-                }
-            }
-
             player.LoadUserData(playerData);
+            // Old servers could save an entry before the first inventory snapshot arrived.
+            isNewUser = playerData.Mecha?.ReactorStorage == null;
         }
         else
         {
@@ -86,9 +87,19 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
         }
 
         // Add the username to the player data
+        ((PlayerData)player.Data).PersistentId = clientCertHash;
         player.Data.Username = !string.IsNullOrWhiteSpace(packet.Username) ? packet.Username : $"Player {player.Id}";
+        if (Multiplayer.Session.IsGameLoaded)
+        {
+            NebulaWorld.Combat.PlayerLifeManager.RestoreServer((PlayerData)player.Data);
+            Multiplayer.Session.PropertyTransactions.RestoreServerPlayer((PlayerData)player.Data);
+        }
 
-        Multiplayer.Session.NumPlayers += 1;
+        if (!((PlayerData)player.Data).SessionCounted)
+        {
+            ((PlayerData)player.Data).SessionCounted = true;
+            Multiplayer.Session.NumPlayers += 1;
+        }
         DiscordManager.UpdateRichPresence();
 
         // if user is known and host is ingame dont put him into lobby but let him join the game
