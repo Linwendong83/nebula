@@ -1,7 +1,8 @@
 # PowerShell script to package Nebula Release locally
 [CmdletBinding()]
 param (
-    [string]$Configuration = "Release"
+    [string]$Configuration = "Release",
+    [switch]$SkipNativeShield
 )
 
 $ErrorActionPreference = "Stop"
@@ -24,6 +25,10 @@ Write-Host "Full Version:    $fullVersion" -ForegroundColor Green
 Write-Host "`nBuilding solution with /p:PublicRelease=true ..." -ForegroundColor Cyan
 New-Item -Path (Join-Path $root ".remoteBuild") -ItemType File -Force | Out-Null
 dotnet build (Join-Path $root "Nebula.sln") -c $Configuration /p:PublicRelease=true
+if ($LASTEXITCODE -ne 0) { throw 'Managed build failed.' }
+if (!$SkipNativeShield) {
+    & (Join-Path $PSScriptRoot 'build_shield_native.ps1')
+}
 
 # 3. Generate BODY.md from CHANGELOG.md
 Write-Host "`nGenerating BODY.md from CHANGELOG.md ..." -ForegroundColor Cyan

@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.Collections.Generic;
@@ -17,7 +17,7 @@ using Object = UnityEngine.Object;
 
 namespace NebulaPatcher.Patches.Misc;
 
-// Collections of patches that need to make game run in nographics mode
+// Dedicated server patches: suppress rendering while retaining native GPU shield computation.
 // This part only get patch when Multiplayer.IsDedicated is true
 internal class Dedicated_Server_Patches
 {
@@ -26,6 +26,12 @@ internal class Dedicated_Server_Patches
     public static void GameMainBegin_Postfix()
     {
         Log.Info($"[headless] GameMain.Begin call #{Interlocked.Increment(ref gameMainBeginCount)} completed");
+        // Report the required native compute path separately from rendering suppression.
+        Log.Info($"[headless] graphics device={SystemInfo.graphicsDeviceType} " +
+                 $"computeShaders={SystemInfo.supportsComputeShaders} " +
+                 $"unityShieldCompute={HeadlessShieldCompute.ComputeAvailable} " +
+                 $"shieldBackend={HeadlessShieldBackend.Kind} " +
+                 $"nativeShieldCompute={HeadlessShieldBackend.Kind != ShieldBackendKind.Cpu}");
         // Server.Start() could not restore the saved player data because the world did not exist yet.
         SaveManager.EnsureServerDataLoaded();
         if (!Multiplayer.IsActive)
@@ -50,13 +56,9 @@ internal class Dedicated_Server_Patches
         }
     }
 
-    // VFPreload.PreloadThread starts a background "menu demo" game via DSPGame.StartDemoGame right
-    // before it calls InvokeOnLoadWorkEnded(), and that call is what starts the dedicated server.
-    // In headless mode the splash gates are skipped, so StartGameSkipPrologue runs before the demo
-    // loader ever ticks. Both GameLoader instances then walk frames 1..10 and each call
-    // GameMain.Begin(): the second call throws in UIAchievementPanel.LoadData (duplicate key),
-    // GameLoader.SelfDestroy() is never reached, and the server loops on that exception forever
-    // with port 8469 left unbound. A dedicated server has no main menu, so it needs no demo game.
+    // A dedicated server needs no menu demo. This must stay paired with VFPreload's
+    // IsMenuDemoLoaded override: otherwise the demo and server loaders can overlap and
+    // call GameMain.Begin twice, causing duplicate-key errors in the achievement UI.
     [HarmonyPrefix]
     [HarmonyPatch(typeof(DSPGame), nameof(DSPGame.StartDemoGame))]
     public static bool StartDemoGame_Prefix()
@@ -78,18 +80,23 @@ internal class Dedicated_Server_Patches
 
     private static int gameMainBeginCount;
 
-    // A dedicated server must keep simulating even while the host mecha is dead. GameMainBegin_Postfix
-    // kills the host player so it cannot interact with enemies, but DSP applies a death slow-motion
-    // afterwards and returns 0 logic frames per FixedUpdate once Player.timeSinceKilled reaches 320.
-    // The world then freezes: gameTick stops advancing, autosave never fires and clients desync.
-    [HarmonyPostfix]
+    // The dedicated host's dead mecha must not slow or stop the world. Use the vanilla
+    // living-player timing rules, including fullscreen pause and one-frame unlock.
+    // GameMain_Patch's postfix still applies the multiplayer CanPause policy.
+    [HarmonyPrefix]
     [HarmonyPatch(typeof(GameMain), nameof(GameMain.DetermineGameTickRate))]
-    public static void DetermineGameTickRate_Postfix(ref int __result)
+    public static bool DetermineGameTickRate_Prefix(bool ____fullscreenPaused,
+        ref bool ____fullscreenPausedUnlockOneFrame, ref int __result)
     {
-        if (Multiplayer.IsDedicated && __result < 1)
+        if (____fullscreenPaused && !____fullscreenPausedUnlockOneFrame)
         {
-            __result = 1;
+            __result = 0;
+            return false;
         }
+
+        ____fullscreenPausedUnlockOneFrame = false;
+        __result = 1;
+        return false;
     }
 
     [HarmonyPrefix]
@@ -129,22 +136,57 @@ internal class Dedicated_Server_Patches
         return false;
     }
 
+    // Keep the managed lifecycle state used by _OnInit/_OnFree without allocating
+    // the advisor's audio visualization buffer on a graphics-less server.
     [HarmonyPrefix]
-    [HarmonyPatch(typeof(ComputeShader), nameof(ComputeShader.FindKernel))]
-    [HarmonyPatch(typeof(ComputeShader), nameof(ComputeShader.GetKernelThreadGroupSizes))]
-    [HarmonyPatch(typeof(ComputeShader), nameof(ComputeShader.Dispatch))]
-    public static bool ComputeShader_Prefix()
+    [HarmonyPatch(typeof(UIAdvisorTip), nameof(UIAdvisorTip._OnCreate))]
+    public static bool UIAdvisorTipCreate_Prefix(UIAdvisorTip __instance)
+    {
+        __instance.requests = new List<int>();
+        return false;
+    }
+
+    // An invisible host must not open advisor UI that depends on the skipped buffer.
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(UIAdvisorTip), nameof(UIAdvisorTip.RequestAdvisorTip))]
+    [HarmonyPatch(typeof(UIAdvisorTip), nameof(UIAdvisorTip.RunAdvisorTip))]
+    public static bool UIAdvisorTipPlay_Prefix()
     {
         return false;
     }
 
+    // Kernel lookup stays disabled for every other compute user: the planetary shield dispatches
+    // kernel 0 directly and keeping these off preserves the existing DysonSwarm behaviour. It is
+    // released inside the shield scope so Unity can resolve the kernel for that one shader.
+    //
+    // NOTE on the return convention: a Harmony prefix returns FALSE to SKIP the original method and
+    // TRUE to run it. These helpers therefore return the gate value directly, not its negation.
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(ComputeShader), nameof(ComputeShader.FindKernel))]
+    [HarmonyPatch(typeof(ComputeShader), nameof(ComputeShader.GetKernelThreadGroupSizes))]
+    public static bool ComputeShaderKernel_Prefix()
+    {
+        return HeadlessShieldCompute.Allowed;
+    }
+
+    // Dispatch is allowed ONLY while PlanetATField.RecalculatePhysicsShape is running and only when
+    // the process has a compute-capable graphics device (see HeadlessShieldCompute). Every other
+    // compute user, DysonSwarm in particular, stays blocked exactly as before.
+    [HarmonyPrefix]
+    [HarmonyPatch(typeof(ComputeShader), nameof(ComputeShader.Dispatch))]
+    public static bool ComputeShaderDispatch_Prefix()
+    {
+        return HeadlessShieldCompute.Allowed;
+    }
+
     [HarmonyPrefix]
     [HarmonyPatch(typeof(ComputeBuffer), nameof(ComputeBuffer.SetData), typeof(Array))]
-    [HarmonyPatch(typeof(ComputeBuffer), nameof(ComputeBuffer.GetData), typeof(Array), typeof(int), typeof(int),
-        typeof(int))] //DysonSwarm.Export
+    [HarmonyPatch(typeof(ComputeBuffer), nameof(ComputeBuffer.GetData), typeof(Array), typeof(int), typeof(int), typeof(int))]
     public static bool ComputeBuffer_Prefix()
     {
-        return false;
+        // Keep Unity compute gated for the compatibility backend and the existing headless swarm.
+        // The native in-process backend and CPU fallback do not call these APIs.
+        return HeadlessShieldCompute.Allowed;
     }
 
     [HarmonyTranspiler]
@@ -205,50 +247,88 @@ internal class Dedicated_Server_Patches
         return false;
     }
 
+    // The planetary shield coverage is computed on the GPU by PlanetATField.fieldGenerateShader.
+    // The original code:
+    //   Dispatch(kernel 0, (vertexCount-1)/256+1, 1, 1) -> GetData -> physicsArgs[0]
+    //   coverage        = physicsArgs[0] / (vertexCount * 1000.0)
+    //   energyMaxTarget = (long)(1200000000000.0 * coverage + 0.5)
+    //   physicsArgs[0] == 0          -> isEmpty = true,  isSpherical = false
+    //   physicsArgs[0] >= n * 1000   -> isEmpty = false, isSpherical = true   (full coverage)
+    //   otherwise                    -> isEmpty = false, isSpherical = false  (holes in the field)
+    //
+    // On a host with a real GPU we simply let the original method run: the native shader then
+    // produces the same coverage, isEmpty and isSpherical the single-player game does, which is
+    // what the relay-landing raycast and the full-coverage achievement depend on.
+    //
+    // Scope the compatibility Unity path as well; native/CPU kernels never touch Unity GPU APIs.
     [HarmonyPrefix]
     [HarmonyPatch(typeof(PlanetATField), nameof(PlanetATField.RecalculatePhysicsShape))]
-    public static bool RecalculatePhysicsShape_Prefix(PlanetATField __instance)
+    public static bool RecalculatePhysicsShape_Prefix(PlanetATField __instance, out bool __state)
     {
-        // If we're the server, let's update the planet shields manually.
-        // This is required as checks to planetary shields fail, as there is no GPU to simulate the shields
-        // they become `isEmpty = true`.  This causes some checks to fail such as:
-        //  - Relays still landing on a planet when a shield is online
-        //  - Some space to surface weaponry ignoring the shields
-        if (__instance.generatorCount == 0)
-        {
-            __instance.ClearPhysics();
-            __instance.energyMaxTarget = 0L;
-        }
-
-        __instance.CreatePhysics();
-        __instance.isSpherical = true;
-
-        /*
-            * This is usually computed on the GPU, No idea what math the GPU does though, so we're shoving 0.95 here.
-            * On my own testing this goes as low as 0.35 during initial planet shield spin up
-            * and when it hits 1.0 it seems to stop calling this method.
-            */
-        __instance.energyMaxTarget = (long)(1200000000000.0 * 0.95 + 0.5);
-
-        if (__instance.energy > 0)
-        {
-            __instance.isEmpty = false;
-        }
-
-        // I believe these are used in raycasting tests to see if a relay would hit a shield, so we need them.
-        if (__instance.colliderHotTicks > 0)
-            __instance.OpenColliderObject();
-        else
-            __instance.CloseColliderObject();
-
-        return false;
+        __state = false;
+        if (__instance == null) throw new ArgumentNullException(nameof(__instance));
+        HeadlessShieldCompute.EnterScope();
+        __state = true;
+        return true;
     }
 
-    [HarmonyPostfix]
-    [HarmonyPatch(typeof(PlanetATField), nameof(PlanetATField.TestRelayCondition))]
-    public static void StopLanding(PlanetATField __instance, ref bool __result)
+    // Last logged (isEmpty, isSpherical) pair per planet, so a planet is reported once and then only
+    // when its field state actually changes. RecalculatePhysicsShape runs on the main thread only.
+    private static readonly Dictionary<int, int> shieldStateByPlanet = [];
+
+    // Closes the compute gate opened by the prefix and reports the coverage the native shader
+    // produced. This is a Finalizer rather than a Postfix on purpose: a Postfix is skipped when the
+    // original method throws, which would leave the compute gate open for the rest of the session
+    // and let DysonSwarm start dispatching again. A Finalizer runs from a finally block, so the gate
+    // is closed on every path.
+    [HarmonyFinalizer]
+    [HarmonyPatch(typeof(PlanetATField), nameof(PlanetATField.RecalculatePhysicsShape))]
+    public static void RecalculatePhysicsShape_Finalizer(PlanetATField __instance, bool __state, Exception __exception)
     {
-        // Balance: Stop relay landing when there are 7 or more working shield generators
-        __result &= !(__instance.energy > 0 && __instance.generatorCount >= 7);
+        if (__state) HeadlessShieldCompute.ExitScope();
+        if (__exception != null)
+        {
+            Log.Error("[headless] Shield computation failed after configured fallback; stopping.", __exception);
+            Application.Quit(1);
+            return; // Harmony still propagates the original exception.
+        }
+        if (!__state) return;
+
+        if (__instance == null || __instance.generatorCount <= 0)
+        {
+            return;
+        }
+
+        var args = __instance.physicsArgs;
+        var vertexCount = __instance.physicsMeshVertsOriginal?.Length ?? 0;
+        var planetId = __instance.planet?.id ?? -1;
+        if (args == null || args.Length == 0 || vertexCount == 0)
+        {
+            Log.Error($"[headless] shield planet={planetId} has no valid native physics output; stopping.");
+            Application.Quit(1);
+            return;
+        }
+
+        var covered = args[0];
+        var expected = vertexCount * 1000L;
+        var coverage = covered / (double)expected;
+        var state = (__instance.isEmpty ? 1 : 0) | (__instance.isSpherical ? 2 : 0);
+
+        if (shieldStateByPlanet.TryGetValue(planetId, out var previous) && previous == state)
+        {
+            return;
+        }
+        shieldStateByPlanet[planetId] = state;
+
+        Log.Info($"[headless] shield planet={planetId} generators={__instance.generatorCount} " +
+                 $"covered={covered}/{expected} coverage={coverage:F4} " +
+                 $"energyMaxTarget={__instance.energyMaxTarget} isEmpty={__instance.isEmpty} " +
+                 $"isSpherical={__instance.isSpherical}");
     }
+
+    // Removed upstream balance hack:
+    //   __result &= !(__instance.energy > 0 && __instance.generatorCount >= 7);
+    // It forced relays to stop landing once 7+ generators were online, which overrode the original
+    // per-planet raycast test that TestRelayCondition performs against the shield's actual holes.
+    // With the native shield computation restored that override is no longer wanted.
 }

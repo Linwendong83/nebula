@@ -7,15 +7,6 @@
 DevEnv.targets
 dist
 
-# Local operational notes and deployment tooling. Kept on disk, but they are
-# deployment/investigation notes for this fork's own hardware and are not part
-# of the mod, so they are not tracked.
-docs
-
-# The nested wiki checkout keeps its own git repository.
-nebula.wiki
-
-
 # User-specific files
 *.rsuser
 *.suo

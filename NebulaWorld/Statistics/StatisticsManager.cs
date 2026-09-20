@@ -34,6 +34,7 @@ public class StatisticsManager : IDisposable
     public long[] PowerEnergyStoredData { get; set; }
     public int FactoryCount { get; set; }
     public int TechHashedFor10Frames { get; set; }
+    public bool HasActiveAutomaticResearch { get; set; }
 
     public StatisticsManager()
     {

@@ -1,13 +1,23 @@
-# Nebula Multiplayer Mod [![Build - Win x64](https://github.com/Linwendong83/nebula/actions/workflows/build-winx64.yml/badge.svg)](https://github.com/Linwendong83/nebula/actions/workflows/build-winx64.yml) [![QQ Group: 587702629](https://img.shields.io/badge/QQ_Group-587702629-12B7F5?logo=qq&logoColor=white)](https://qun.qq.com/universal-share/share?ac=1&authKey=aqcKfS15Bl5nLEWhfmkiskMj65QyEsdWPCsMGYducyVdZhqNPrGeilcYSgaENhs%2F&busi_data=eyJncm91cENvZGUiOiI1ODc3MDI2MjkiLCJ0b2tlbiI6Ik1HbXppTWRHYmNlVUlSSCtaN1BkaUVXWU9ud3ZMOElJdGplaitmL21OWkorNllYaCtBbXduc2hKdGlzUnlrVksiLCJ1aW4iOiI1NDU1NTg1MzgifQ%3D%3D&data=ZYdt-PQo-JrmmYsIyy4D3s8XTbPjqzGZTrjxiTlbr9uAivSvyvqc_KyXatfb7YTjGqF5O7FONbKh1QpxuEen5A&svctype=4&tempid=h5_group_info)
+> [!NOTE]
+> **本分支说明**
+> 
+> 1. 无头服务器的行星护盾目前更加符合原版，并默认使用GPU计算，且不需要去除-nographics参数
+> 2. 修复了某些导致无头服务器无法启动/状态不正常的问题
+> 3. 改为动态解析域名而不是固化为IP
+> 4. 无线输电塔的表现更加正常，不会在客户端间不同步
+> 5. 修复了有研究站在研究模式却提示现在没有任何自动研究设备的问题
+> 6. 自定义监控面板将不会丢失
+> 7. 助理（语音助手）状态将不会丢失
+> 8. 加入了简体中文支持
+> 9. 修复了部分黑雾不同步的问题
 
-[English](README.md) | [简体中文](README_zh-CN.md)
+# Nebula Multiplayer Mod [![QQ Group: 587702629](https://img.shields.io/badge/QQ_Group-587702629-12B7F5?logo=qq&logoColor=white)](https://qun.qq.com/universal-share/share?ac=1&authKey=aqcKfS15Bl5nLEWhfmkiskMj65QyEsdWPCsMGYducyVdZhqNPrGeilcYSgaENhs%2F&busi_data=eyJncm91cENvZGUiOiI1ODc3MDI2MjkiLCJ0b2tlbiI6Ik1HbXppTWRHYmNlVUlSSCtaN1BkaUVXWU9ud3ZMOElJdGplaitmL21OWkorNllYaCtBbXduc2hKdGlzUnlrVksiLCJ1aW4iOiI1NDU1NTg1MzgifQ%3D%3D&data=ZYdt-PQo-JrmmYsIyy4D3s8XTbPjqzGZTrjxiTlbr9uAivSvyvqc_KyXatfb7YTjGqF5O7FONbKh1QpxuEen5A&svctype=4&tempid=h5_group_info)
 
 An open-source, multiplayer mod for the game [Dyson Sphere Program](https://store.steampowered.com/app/1366540/Dyson_Sphere_Program/).
 
 ## Releases & Downloads
 
-- You can download the latest builds from this repository's [Releases](https://github.com/Linwendong83/nebula/releases) or [Actions](https://github.com/Linwendong83/nebula/actions).
-- Stable builds of the original mod can also be found on [Thunderstore](https://dsp.thunderstore.io/package/nebula/NebulaMultiplayerMod/).
+- You can download the latest builds from this repository's [Releases](https://github.com/Linwendong83/nebula/releases).
 - For manual installation instructions, please refer to the [Installation Guide](https://github.com/NebulaModTeam/nebula/wiki/Installation#manual-installation).
 
 ## FAQ

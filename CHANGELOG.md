@@ -1,5 +1,17 @@
 ## Changelog
 
+0.9.22-dev.3:
+- Planetary shield physics simulation for headless server: accurate coverage and relay landing tests via GPU/CPU fallback without removing -nographics
+- Fix headless server tick scheduling, pause deadlock and advisor lifecycle crashes
+- Authoritative sync for mecha lab automatic supply to prevent false warnings
+- Sync Dark Fog combat state and relay condition checks
+<br>
+
+- 无头专用服务器行星护盾高精度物理仿真：默认 GPU 计算并支持 CPU 软仿真回退，无需去除 -nographics 参数
+- 修复无头服务器心跳调度、暂停卡顿及顾问助手生命周期崩溃
+- 机甲背包自动供给状态由服务端权威同步，避免误报“无自动研究设备”
+- 修复黑雾中继站降落射线检测与战斗状态同步
+
 0.9.22-dev.2:
 - Join by domain name instead of a resolved IP: the configured host is kept and looked up on every connect
 - Fix the player dashboard blob, which failed to parse on every incoming packet

@@ -1,6 +1,7 @@
 ﻿#region
 
 using NebulaModel.Networking;
+using NebulaPatcher.Patches.Misc;
 using NebulaWorld;
 using UnityEngine;
 
@@ -10,6 +11,16 @@ namespace NebulaPatcher.MonoBehaviours;
 
 public class NebulaBootstrapper : MonoBehaviour
 {
+    private void OnApplicationQuit()
+    {
+        if (Multiplayer.IsDedicated) HeadlessShieldBackend.Shutdown();
+    }
+
+    private void OnDestroy()
+    {
+        if (Multiplayer.IsDedicated) HeadlessShieldBackend.Shutdown();
+    }
+
     private void Awake()
     {
         DontDestroyOnLoad(gameObject);

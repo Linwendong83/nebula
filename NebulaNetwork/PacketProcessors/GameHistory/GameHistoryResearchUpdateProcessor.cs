@@ -30,6 +30,7 @@ internal class GameHistoryResearchUpdateProcessor : PacketProcessor<GameHistoryR
         state.hashNeeded = packet.HashNeeded;
         data.techStates[data.currentTech] = state;
         Multiplayer.Session.Statistics.TechHashedFor10Frames = packet.TechHashedFor10Frames;
+        Multiplayer.Session.Statistics.HasActiveAutomaticResearch = packet.HasActiveAutomaticResearch;
 
         if (packet.TechQueueLength != GameMain.history.techQueueLength)
         {

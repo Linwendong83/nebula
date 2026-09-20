@@ -102,6 +102,7 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
 
     public static void StartDedicatedServer(string saveName)
     {
+        if (!ValidateDedicatedGpu()) return;
         // Mimic UI buttons clicking
         UIMainMenu_Patch.OnMultiplayerButtonClick();
         if (!GameSave.SaveExist(saveName))
@@ -118,6 +119,7 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
 
     public static void StartDedicatedServer(GameDesc gameDesc)
     {
+        if (!ValidateDedicatedGpu()) return;
         // Mimic UI buttons clicking
         UIMainMenu_Patch.OnMultiplayerButtonClick();
         if (gameDesc == null)
@@ -132,6 +134,22 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
         Log.Info($"Listening server on port {NebulaModel.Config.Options.HostPort}");
         Multiplayer.HostGame(new Server(NebulaModel.Config.Options.HostPort, true));
         FPSController.SetFixUPS(NebulaModel.Config.CommandLineOptions.UpsValue);
+    }
+
+    private static bool ValidateDedicatedGpu()
+    {
+        try
+        {
+            if (!HeadlessShieldPipeline.Ready) throw new InvalidOperationException("Shield backend patches are incomplete; refusing to start.");
+            HeadlessShieldBackend.Initialize();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("[headless] Could not initialize the configured shield backend.", ex);
+            Application.Quit(1);
+            return false;
+        }
     }
 
     private static async void ActivityManager_OnActivityJoin(string secret)
@@ -220,6 +238,7 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
             {
                 Log.Info("Patching for headless mode...");
                 harmony.PatchAll(typeof(Dedicated_Server_Patches));
+                harmony.PatchAll(typeof(HeadlessShieldPipeline));
             }
 #if DEBUG
             Environment.SetEnvironmentVariable("MONOMOD_DMD_DUMP", "");

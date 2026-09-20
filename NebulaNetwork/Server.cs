@@ -27,6 +27,7 @@ using NebulaNetwork.Messaging;
 using NebulaNetwork.Ngrok;
 using NebulaWorld;
 using NebulaWorld.SocialIntegration;
+using NebulaWorld.Statistics;
 using Open.Nat;
 using UnityEngine;
 using WebSocketSharp;
@@ -423,8 +424,11 @@ public class Server : IServer
             if (GameMain.data.history.currentTech != 0)
             {
                 var state = GameMain.data.history.techStates[GameMain.data.history.currentTech];
+                var hasActiveAutomaticResearch = ResearchStationStatistics.HasRecentPowerUsage(
+                    GameMain.statistics.production.factoryStatPool, GameMain.data.factoryCount);
                 SendPacket(new GameHistoryResearchUpdatePacket(GameMain.data.history.currentTech, state.hashUploaded,
-                    state.hashNeeded, GameMain.statistics.techHashedFor10Frames, GameMain.data.history.techQueueLength));
+                    state.hashNeeded, GameMain.statistics.techHashedFor10Frames, GameMain.data.history.techQueueLength,
+                    hasActiveAutomaticResearch));
             }
         }
 

@@ -56,32 +56,6 @@ internal class VFPreload_Patch
     }
 
     [HarmonyPrefix]
-    [HarmonyPatch(typeof(VFPreload), nameof(VFPreload.IsSplashSolid))]
-    public static bool IsSplashSolid_Prefix(ref bool __result)
-    {
-        if (!Multiplayer.IsDedicated)
-        {
-            return true;
-        }
-        // Splash animation state never settles without a real display, so skip the gate.
-        __result = true;
-        return false;
-    }
-
-    [HarmonyPrefix]
-    [HarmonyPatch(typeof(VFPreload), nameof(VFPreload.IsMusicReached))]
-    public static bool IsMusicReached_Prefix(ref bool __result)
-    {
-        if (!Multiplayer.IsDedicated)
-        {
-            return true;
-        }
-        // No audio device is available in headless mode, so this gate would wait 80 seconds.
-        __result = true;
-        return false;
-    }
-
-    [HarmonyPrefix]
     [HarmonyPatch(typeof(VFPreload), nameof(VFPreload.IsMenuDemoLoaded))]
     public static bool IsMenuDemoLoaded_Prefix(ref bool __result)
     {
@@ -89,20 +63,7 @@ internal class VFPreload_Patch
         {
             return true;
         }
-        // The menu demo needs a graphics device to finish loading.
-        __result = true;
-        return false;
-    }
-
-    [HarmonyPrefix]
-    [HarmonyPatch(typeof(VFPreload), nameof(VFPreload.IsLogined))]
-    public static bool IsLogined_Prefix(ref bool __result)
-    {
-        if (!Multiplayer.IsDedicated)
-        {
-            return true;
-        }
-        // Steam login callbacks are not always delivered under a headless Wine prefix.
+        // Dedicated_Server_Patches skips StartDemoGame, so there is no demo to wait for.
         __result = true;
         return false;
     }

@@ -65,7 +65,6 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
 
         //TODO: some validation of client cert / generating auth challenge for the client
         // Load old data of the client
-        SaveManager.EnsureServerDataLoaded();
         var clientCertHash = CryptoUtils.Hash(packet.ClientCert);
         if (SaveManager.PlayerSaves.TryGetValue(clientCertHash, out var value))
         {
