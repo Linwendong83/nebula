@@ -6,6 +6,7 @@
 # Nebula-specific files
 DevEnv.targets
 dist
+scripts/
 
 # User-specific files
 *.rsuser
