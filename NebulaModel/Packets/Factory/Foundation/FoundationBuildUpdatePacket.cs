@@ -2,6 +2,8 @@
 
 using NebulaAPI.DataStructures;
 using UnityEngine;
+using NebulaModel.DataStructures;
+using System;
 
 #endregion
 
@@ -11,16 +13,20 @@ public class FoundationBuildUpdatePacket
 {
     public FoundationBuildUpdatePacket() { }
 
-    public FoundationBuildUpdatePacket(Vector3 center, float radius, int reformSize, bool veinBuried, float fade0)
+    public FoundationBuildUpdatePacket(Vector3 center, float radius, int reformSize, bool veinBuried, float fade0,
+        bool isRestore = false)
     {
         Radius = radius;
         ReformSize = reformSize;
         VeinBuried = veinBuried;
         Fade0 = fade0;
+        IsRestore = isRestore;
+        CollectionBefore = VegetableCollectionState.Capture(GameMain.mainPlayer?.vegetableCollection);
         //Assume FlattenTerrainReform are all called in BuildTool_Reform
         var btr = GameMain.mainPlayer.controller.actionBuild.reformTool;
         ReformType = btr?.brushType ?? -1;
         ReformColor = btr?.brushColor ?? -1;
+        ReformMode = btr?.reformMode ?? 0;
         PlanetId = GameMain.mainPlayer.planetId;
         GroundTestPos = new Float3(btr?.castGroundPos ?? Vector3.zero);
         if (center != btr?.reformCenterPoint) //Pit (circle)
@@ -45,10 +51,13 @@ public class FoundationBuildUpdatePacket
     public float Fade0 { get; set; }
     public int ReformType { get; set; }
     public int ReformColor { get; set; }
+    public int ReformMode { get; set; }
     public int PlanetId { get; set; }
     public int[] ReformIndices { get; set; }
     public Float3 GroundTestPos { get; set; }
     public Float3 ExtraCenter { get; set; }
     public int CirclePointCount { get; set; }
     public bool IsCircle { get; set; }
+    public bool IsRestore { get; set; }
+    public byte[] CollectionBefore { get; set; } = Array.Empty<byte>();
 }

@@ -19,11 +19,21 @@ public class CombatStatDamageProcessor : PacketProcessor<CombatStatDamagePacket>
         if (IsHost)
         {
             var player = Players.Get(conn);
-            if (player == null || !Multiplayer.Session.Generations.AcceptDamage(player.Id, packet.Sequence,
+            if (player == null) return;
+            if (packet.SourceType != (short)ETargetType.Player && packet.SourceType != (short)ETargetType.Craft)
+                return;
+            if (!Multiplayer.Session.Generations.Matches(packet.TargetAstroId, packet.TargetId, packet.TargetGeneration))
+            {
+                if (Multiplayer.Session.Generations.ShouldSendCorrection(player.Id, packet.TargetAstroId,
+                    packet.TargetId, packet.TargetGeneration, GameMain.gameTick))
+                    CombatEnemyStateRequestProcessor.SendState(conn, packet.TargetAstroId, packet.TargetId,
+                        packet.TargetGeneration, 0, false);
+                return;
+            }
+            if (!Multiplayer.Session.Generations.AcceptDamage(player.Id, packet.Sequence,
                 packet.TargetAstroId, packet.TargetId, packet.TargetGeneration)) return;
             packet.CasterId = player.Id;
             packet.CasterType = (short)ETargetType.Player;
-            if (packet.SourceType != (short)ETargetType.Player && packet.SourceType != (short)ETargetType.Craft) return;
             Multiplayer.Session.Kills.SetDamageOwner(packet.TargetAstroId, packet.TargetId, player.Id, packet.SourceType);
             Multiplayer.Session.Server.SendPacketExclude(packet, conn);
         }

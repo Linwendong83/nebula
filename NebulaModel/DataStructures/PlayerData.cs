@@ -21,6 +21,7 @@ public class PlayerData : IPlayerData
         DIYItemId = Array.Empty<int>();
         DIYItemValue = Array.Empty<int>();
         DashboardData = null;
+        VegetableCollectionData = Array.Empty<byte>();
     }
 
     public PlayerData(ushort playerId, int localPlanetId, string username = null, Float3 localPlanetPosition = new(),
@@ -39,6 +40,7 @@ public class PlayerData : IPlayerData
         DIYItemId = Array.Empty<int>();
         DIYItemValue = Array.Empty<int>();
         DashboardData = null;
+        VegetableCollectionData = Array.Empty<byte>();
     }
 
     public string Username { get; set; }
@@ -57,6 +59,7 @@ public class PlayerData : IPlayerData
     public byte[] DashboardData { get; set; }
     public PlayerLifeData Life { get; set; } = new();
     public byte[] PersonalKillData { get; set; } = Array.Empty<byte>();
+    public byte[] VegetableCollectionData { get; set; } = Array.Empty<byte>();
     public string PersistentId { get; set; } = "";
     public bool SessionCounted { get; set; }
 
@@ -109,14 +112,16 @@ public class PlayerData : IPlayerData
         Life.Serialize(writer);
         writer.Put(PersonalKillData.Length);
         writer.Put(PersonalKillData);
+        writer.Put(VegetableCollectionData.Length);
+        writer.Put(VegetableCollectionData);
     }
 
     public void Deserialize(INetDataReader reader)
     {
-        Deserialize(reader, true);
+        Deserialize(reader, true, true);
     }
 
-    public void Deserialize(INetDataReader reader, bool hasLifeData)
+    public void Deserialize(INetDataReader reader, bool hasLifeData, bool hasVegetationData = false)
     {
         Username = reader.GetString();
         PlayerId = reader.GetUShort();
@@ -181,6 +186,20 @@ public class PlayerData : IPlayerData
         }
         else if (Mecha.FightData != null && Mecha.FightData.Hp == 0 && GameMain.mainPlayer != null)
             Mecha.FightData.Hp = GameMain.mainPlayer.mecha.hpMaxApplied;
+        // Snapshots saved before vegetation sync existed end right here: only keep reading
+        // when the writer actually put the section, otherwise every pre-update file breaks.
+        if (hasVegetationData && reader.AvailableBytes >= 4)
+        {
+            var length = reader.GetInt();
+            if (length < 0 || length > VegetableCollectionState.MaxBytes)
+                throw new InvalidDataException("Invalid vegetation collection size");
+            if (reader.AvailableBytes >= length)
+            {
+                VegetableCollectionData = new byte[length];
+                reader.GetBytes(VegetableCollectionData, length);
+            }
+        }
+        if (VegetableCollectionData == null) VegetableCollectionData = Array.Empty<byte>();
     }
 
     public IPlayerData CreateCopyWithoutMechaData()
@@ -188,6 +207,7 @@ public class PlayerData : IPlayerData
         var copy = new PlayerData(PlayerId, LocalPlanetId, Username, LocalPlanetPosition, UPosition, Rotation, BodyRotation);
         copy.DashboardData = DashboardData;
         copy.Life = Life;
+        copy.VegetableCollectionData = VegetableCollectionData;
         return copy;
     }
 
@@ -196,7 +216,7 @@ public class PlayerData : IPlayerData
     {
         if (revision >= 8)
         {
-            Deserialize(reader, revision >= 9);
+            Deserialize(reader, revision >= 9, revision >= 10);
             return;
         }
         Username = reader.GetString();

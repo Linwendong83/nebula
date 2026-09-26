@@ -22,6 +22,14 @@ public sealed class CombatGenerationState
         var key = (NormalizeAstro(astro), id);
         if (!entries.TryGetValue(key, out var old) || generation > old) entries[key] = generation;
     }
+    public bool ReplaceIfCurrent(int astro, int id, long expected, long generation)
+    {
+        if (id <= 0 || generation < 0 || Get(astro, id) != expected) return false;
+        var key = (NormalizeAstro(astro), id);
+        if (generation == 0) entries.Remove(key);
+        else entries[key] = generation;
+        return true;
+    }
     public bool Matches(int astro, int id, long generation) => generation > 0 && generation == Get(astro, id);
     public void Clear() => entries.Clear();
 }

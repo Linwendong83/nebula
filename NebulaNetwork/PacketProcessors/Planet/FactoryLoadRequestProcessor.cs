@@ -27,15 +27,17 @@ public class FactoryLoadRequestProcessor : PacketProcessor<FactoryLoadRequest>
         var factory = GameMain.data.GetOrCreateFactory(planet);
         GameMain.galaxy.astrosFactory[planet.id] = factory;
         OnPlanetFactoryLoad(planet);
+        Multiplayer.Session.BuildDispatch.SeedForSnapshot(factory);
 
         using (var writer = new BinaryUtils.Writer())
         {
             factory.Export(writer.BinaryWriter.BaseStream, writer.BinaryWriter);
             var data = writer.CloseAndGetBytes();
             Log.Info($"Sent {data.Length} bytes of data for PlanetFactory {planet.name} (ID: {planet.id})");
-            conn.SendPacket(new FragmentInfo(data.Length + planet.data.modData.Length));
+            var assignments = Multiplayer.Session.BuildDispatch.ExportSnapshot(packet.PlanetID);
+            conn.SendPacket(new FragmentInfo(data.Length + planet.data.modData.Length + assignments.Length));
             conn.SendPacket(new FactoryData(packet.PlanetID, data, planet.data.modData)
-            { EnemyGenerations = Multiplayer.Session.Generations.Export(packet.PlanetID) });
+            { EnemyGenerations = Multiplayer.Session.Generations.Export(packet.PlanetID), BuildAssignments = assignments });
         }
 
         // Update syncing player data (Connected player will be update by movement packets)

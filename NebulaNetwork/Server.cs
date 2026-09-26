@@ -24,9 +24,7 @@ using NebulaModel.Packets.Players;
 using NebulaModel.Packets.Session;
 using NebulaModel.Utils;
 using NebulaNetwork.Messaging;
-using NebulaNetwork.Ngrok;
 using NebulaWorld;
-using NebulaWorld.SocialIntegration;
 using NebulaWorld.Statistics;
 using Open.Nat;
 using UnityEngine;
@@ -53,7 +51,6 @@ public class Server : IServer
     private float dysonSphereUpdateTimer;
 
     private float gameResearchHashUpdateTimer;
-    private NgrokManager ngrokManager;
 
     private WebSocketServer socket;
     private float warningUpdateTimer;
@@ -71,15 +68,6 @@ public class Server : IServer
 
     public ushort Port { get; set; }
 
-    public string NgrokAddress => ngrokManager.NgrokAddress;
-    public bool NgrokActive => ngrokManager.IsNgrokActive();
-    public bool NgrokEnabled => ngrokManager.NgrokEnabled;
-    public string NgrokLastErrorCode => ngrokManager.NgrokLastErrorCode;
-    public string NgrokLastErrorCodeDesc => ngrokManager.NgrokLastErrorCodeDesc;
-    public event EventHandler<INebulaConnection> Connected;
-    public event EventHandler<INebulaConnection> Disconnected;
-
-    // Placeholder until we implement Connected and Disconnected event on the socket level.
     internal void OnSocketConnection(INebulaConnection conn)
     {
         // Generate new data for the player
@@ -94,9 +82,6 @@ public class Server : IServer
         INebulaPlayer newPlayer = new NebulaPlayer(conn, playerData);
         if (!Players.TryAdd(conn, newPlayer))
             throw new InvalidOperationException($"Connection {conn.Id} already exists!");
-
-        // return newPlayer;
-        Connected?.Invoke(this, conn);
     }
 
     private ushort GetNextPlayerId()
@@ -107,17 +92,34 @@ public class Server : IServer
         return nextId;
     }
 
-    // Placeholder until we implement Connected and Disconnected event on the socket level.
     internal void OnSocketDisconnection(INebulaConnection conn)
     {
         if (Multiplayer.Session == null || Multiplayer.IsLeavingGame) return;
 
+        var departing = Players.Get(conn, EConnectionStatus.Connected);
+        if (departing != null)
+        {
+            Multiplayer.Session.Vegetation?.CaptureRemote(departing.Id);
+            Multiplayer.Session.Vegetation?.ForgetRemote(departing.Id);
+        }
         Players.TryRemove(conn, out var player);
+
+        // A connection that never completed the handshake (server list probe or a mid-handshake
+        // drop) was never part of the session: recycle the id and skip the leave bookkeeping,
+        // otherwise every browser refresh would broadcast a phantom PlayerDisconnected.
+        if (player?.Data is PlayerData { SessionCounted: false } && conn.ConnectionStatus == EConnectionStatus.Pending)
+        {
+            PlayerIdPool.Enqueue(player.Id);
+            return;
+        }
+
+        if (player != null) Multiplayer.Session.BuildDispatch?.PlayerLeft(player.Id);
         if (player?.Data is PlayerData { SessionCounted: true } counted)
         {
             counted.SessionCounted = false;
-            Multiplayer.Session.NumPlayers = (ushort)Math.Max(1, Multiplayer.Session.NumPlayers - 1);
-            DiscordManager.UpdateRichPresence();
+            // The floor is the host's own seat; a headless server has none and may reach zero.
+            var floor = Multiplayer.IsDedicated ? (ushort)0 : (ushort)1;
+            Multiplayer.Session.NumPlayers = (ushort)Math.Max(floor, Multiplayer.Session.NumPlayers - 1);
         }
 
         // @TODO: Why can this happen in the first place?
@@ -125,26 +127,6 @@ public class Server : IServer
         if (player is null)
         {
             Log.Warn("Player is null - Disconnect logic NOT CALLED!");
-
-            if (!Config.Options.SyncSoil)
-            {
-                return;
-            }
-
-            // now we need to recalculate the current sand amount :C
-            GameMain.mainPlayer.sandCount = Multiplayer.Session.LocalPlayer.Data.Mecha.SandCount;
-            // using (GetConnectedPlayers(out var connectedPlayers))
-            {
-                var connectedPlayers = Players.Connected;
-                foreach (var entry in connectedPlayers)
-                {
-                    GameMain.mainPlayer.sandCount += entry.Value.Data.Mecha.SandCount;
-                }
-            }
-
-            UIRoot.instance.uiGame.OnSandCountChanged(GameMain.mainPlayer.sandCount,
-                GameMain.mainPlayer.sandCount - Multiplayer.Session.LocalPlayer.Data.Mecha.SandCount, (ESandSource)0);
-            SendPacket(new PlayerSandCount(GameMain.mainPlayer.sandCount));
 
             return;
         }
@@ -177,7 +159,6 @@ public class Server : IServer
 
         SendPacket(new SyncComplete());
         Multiplayer.Session.World.OnAllPlayersSyncCompleted();
-        Disconnected?.Invoke(this, conn);
     }
 
     public void Start()
@@ -222,12 +203,9 @@ public class Server : IServer
             });
         }
 
-        ngrokManager = new NgrokManager(Port);
-
         socket = new WebSocketServer(IPAddress.IPv6Any, Port)
         {
-            Log = { Level = LogLevel.Debug, Output = Log.SocketOutput },
-            AllowForwardedRequest = true // This is required to make the websocket play nice with tunneling services like ngrok
+            Log = { Level = LogLevel.Debug, Output = Log.SocketOutput }
         };
 
         if (!string.IsNullOrWhiteSpace(Config.Options.ServerPassword))
@@ -270,38 +248,8 @@ public class Server : IServer
         ((LocalPlayer)Multiplayer.Session.LocalPlayer).SetPlayerData(new PlayerData(
                 GetNextPlayerId(),
                 GameMain.localPlanet?.id ?? -1,
-                !string.IsNullOrWhiteSpace(Config.Options.Nickname) ? Config.Options.Nickname : GameMain.data?.account.userName ?? string.Empty),
+                GameMain.data?.account.userName ?? string.Empty),
             loadSaveFile);
-
-        Task.Run(async () =>
-        {
-            if (ngrokManager.NgrokEnabled)
-            {
-                try
-                {
-                    // Wait up to 15s for ngrok to start, then get the address
-                    var ip = await ngrokManager.GetNgrokAddressAsync();
-                    DiscordManager.UpdateRichPresence(ip, updateTimestamp: true);
-                    if (Multiplayer.IsDedicated)
-                    {
-                        Log.Info($">> Ngrok address: {ip}");
-                    }
-                    return;
-                }
-                catch (Exception e)
-                {
-                    Log.Warn(e);
-                }
-            }
-            else
-            {
-                DiscordManager.UpdateRichPresence(
-                    $"{(Config.Options.IPConfiguration != IPUtils.IPConfiguration.IPv6 ? await IPUtils.GetWANv4Address() : string.Empty)};" +
-                    $"{(Config.Options.IPConfiguration != IPUtils.IPConfiguration.IPv4 ? await IPUtils.GetWANv6Address() : string.Empty)};" +
-                    $"{Port}",
-                    updateTimestamp: true);
-            }
-        });
 
         try
         {
@@ -317,8 +265,6 @@ public class Server : IServer
     public void Stop()
     {
         socket?.Stop();
-
-        ngrokManager?.StopNgrok();
 
         try
         {

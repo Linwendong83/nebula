@@ -11,7 +11,6 @@ using NebulaWorld.GameStates;
 using NebulaWorld.Logistics;
 using NebulaWorld.Planet;
 using NebulaWorld.Player;
-using NebulaWorld.SocialIntegration;
 using NebulaWorld.Statistics;
 using NebulaWorld.Trash;
 using NebulaWorld.Universe;
@@ -50,6 +49,7 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         PowerTowers = new PowerTowerManager();
         Belts = new BeltManager();
         BuildTools = new BuildToolManager();
+        BuildDispatch = new BuildDispatchManager();
         Drones = new DroneManager();
         Gizmos = new GizmoManager();
         History = new GameDataHistoryManager();
@@ -63,6 +63,7 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         Planets = new PlanetManager();
         Statistics = new StatisticsManager();
         Kills = new KillStatisticsManager();
+        Vegetation = new VegetationManager();
         Trashes = new TrashManager();
         Drops = new PersistentDropManager();
         DysonSpheres = new DysonSphereManager();
@@ -83,6 +84,7 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
     public PowerTowerManager PowerTowers { get; set; }
     public BeltManager Belts { get; set; }
     public BuildToolManager BuildTools { get; set; }
+    public BuildDispatchManager BuildDispatch { get; set; }
     public DroneManager Drones { get; set; }
     public GizmoManager Gizmos { get; set; }
     public GameDataHistoryManager History { get; set; }
@@ -96,6 +98,7 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
     public PlanetManager Planets { get; set; }
     public StatisticsManager Statistics { get; set; }
     public KillStatisticsManager Kills { get; set; }
+    public VegetationManager Vegetation { get; set; }
     public TrashManager Trashes { get; set; }
     public PersistentDropManager Drops { get; set; }
     public DysonSphereManager DysonSpheres { get; set; }
@@ -113,7 +116,9 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         }
     }
 
-    public ushort NumPlayers { get; set; } = 1;
+    // A hosted session always has its human host in the world; a headless server is nobody's
+    // mecha and must not reserve a player slot in the count.
+    public ushort NumPlayers { get; set; } = Multiplayer.IsDedicated ? (ushort)0 : (ushort)1;
 
     public void Dispose()
     {
@@ -136,6 +141,8 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         Impacts = null;
         Life?.Dispose();
         Life = null;
+        Vegetation?.Dispose();
+        Vegetation = null;
 
         Enemies?.Dispose();
         Enemies = null;
@@ -154,6 +161,9 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
 
         BuildTools?.Dispose();
         BuildTools = null;
+
+        BuildDispatch?.Dispose();
+        BuildDispatch = null;
 
         Drones?.Dispose();
         Drones = null;
@@ -230,10 +240,14 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         Log.Info("==== Game load completed ====");
         if (IsServer) SaveManager.EnsureServerDataLoaded();
         if (IsServer) SaveManager.BindWorldIdentity(GameMain.data);
-        if (IsServer) GoalManager.RestoreLevel(GameMain.data);
+        if (IsServer)
+        {
+            GoalManager.RestoreLevel(GameMain.data);
+            Goals.LoadLegacyDefaults();
+            Goals.PrepareHostProfile();
+        }
         IsGameLoaded = true;
         if (IsServer) Metadata.Initialize();
-        DiscordManager.UpdateRichPresence();
 
         if (Multiplayer.Session.LocalPlayer.IsHost)
         {
@@ -244,5 +258,6 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         {
             Multiplayer.Session.World.SetupInitialPlayerState();
         }
+        if (IsServer) BuildDispatch.InitializeLoadedFactories();
     }
 }

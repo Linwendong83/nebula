@@ -12,61 +12,10 @@ namespace NebulaModel.Utils;
 
 public static class ChatUtils
 {
-    private const float ReferenceX = 1920;
-    private const float ReferenceY = 1080;
-
     private static readonly string[] AllowedTags =
     {
         "b", "i", "s", "u", "indent", "link", "mark", "sprite", "sub", "sup", "color"
     };
-
-    private static readonly Vector2[] ChatMargins = { new(10, 350), new(10, 350), new(10, 10), new(10, 100) };
-
-
-    private static readonly Vector2[] ChatSizes = { new(500, 300), new(700, 420), new(800, 480) };
-
-    public static Vector2 GetDefaultPosition(ChatPosition position, ChatSize size)
-    {
-        var chatSize = GetDefaultSize(size);
-        var margin = ChatMargins[(int)position];
-        var snapRight = ((int)position & 1) == 1;
-        var snapTop = ((int)position & 2) == 2;
-
-        float needXPos;
-        float needYPos;
-
-        if (snapRight)
-        {
-            needXPos = ReferenceX - margin.x - chatSize.x;
-        }
-        else
-        {
-            needXPos = margin.x;
-        }
-
-        if (snapTop)
-        {
-            needYPos = -margin.y;
-        }
-        else
-        {
-            needYPos = -ReferenceY + margin.y + chatSize.y;
-        }
-
-        needXPos *= Screen.width / ReferenceX;
-        needYPos *= Screen.height / ReferenceY;
-
-        return new Vector2(needXPos, needYPos);
-    }
-
-    public static Vector2 GetDefaultSize(ChatSize size)
-    {
-        var chatSize = ChatSizes[(int)size];
-        chatSize.x *= Screen.width / ReferenceX;
-        chatSize.y *= Screen.height / ReferenceY;
-        return chatSize;
-    }
-
 
     public static string SanitizeText(string input)
     {
@@ -124,7 +73,7 @@ public static class ChatUtils
             formattedString = message.UserName + " : ";
         }
 
-        if (Config.Options.EnableTimestamp && !IsCommandMessage(message.MessageType))
+        if (!IsCommandMessage(message.MessageType))
         {
             formattedString = $"[{message.Timestamp:HH:mm}] " + formattedString;
         }

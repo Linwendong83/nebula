@@ -8,7 +8,6 @@ using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.Session;
 using NebulaWorld;
-using NebulaWorld.SocialIntegration;
 
 #endregion
 
@@ -34,7 +33,6 @@ internal class LobbyResponseProcessor : PacketProcessor<LobbyResponse>
         ((LocalPlayer)Multiplayer.Session.LocalPlayer).IsHost = false;
         Multiplayer.Session.NumPlayers = packet.NumPlayers;
         Multiplayer.Session.IsInLobby = true;
-        DiscordManager.UpdateRichPresence(partyId: packet.DiscordPartyId);
 
         UIRoot.instance.galaxySelect._Open();
         UIRoot.instance.uiMainMenu._Close();

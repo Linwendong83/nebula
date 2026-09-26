@@ -83,6 +83,7 @@ async function main() {
   appendApiChangelog();
   copyLicenses();
   copyApiLicense();
+  await removeRetiredIntegrationFiles();
 
   await createTStoreArchive();
   await createTStoreApiArchive();
@@ -195,6 +196,20 @@ function copyLicenses() {
 
 function copyApiLicense() {
   copyFileSync("LICENSE", join(DIST_NEBULA_API_FOLDER, "nebula.LICENSE"));
+}
+
+async function removeRetiredIntegrationFiles() {
+  for (const name of [
+    "discord_game_sdk_dotnet.dll",
+    "discord_game_sdk.dll",
+    "discord_game_sdk.dll.lib",
+    "discord_game_sdk.dylib",
+    "discord_game_sdk.so",
+    "discord_game_sdk.bundle",
+    "ngrok-v3-stable-windows-amd64",
+  ]) {
+    await remove(join(DIST_NEBULA_FOLDER, name));
+  }
 }
 
 function copyFolderContent(src, dst, excludedExts) {

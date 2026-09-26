@@ -283,7 +283,7 @@ public class BuildToolManager : IDisposable
         if (now - LastCheckTime < WAIT_TIME && LastPosition == pos)
         {
             //Stop client from sending prebuilds at the same position
-            UIRealtimeTip.Popup("Please wait for server respond".Translate());
+            UIRealtimeTip.Popup("Please wait for server response".Translate());
             return false;
         }
         LastCheckTime = now;

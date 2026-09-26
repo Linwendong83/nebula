@@ -101,7 +101,7 @@ internal class BattleBaseComponent_Transpiler
 
     private static void AddPlayerSandCount(TrashSystem trashSystem, int trashId, int sandCount)
     {
-        if (Multiplayer.IsActive && !Config.Options.SyncSoil) // Host
+        if (Multiplayer.IsActive) // Host
         {
             var connectedPlayers = Multiplayer.Session.Server.Players.Connected;
             {
@@ -110,7 +110,7 @@ internal class BattleBaseComponent_Transpiler
                 {
                     // Sand gain is split between all connecting players
                     sandCount = (int)((float)sandCount / totalPlayerCount + 0.5f);
-                    var packet = new PlayerSandCount(sandCount, true);
+                    var packet = new PlayerSandCount(sandCount);
                     Multiplayer.Session.Server.SendPacket(packet);
                 }
             }

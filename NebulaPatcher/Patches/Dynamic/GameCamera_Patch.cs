@@ -59,23 +59,24 @@ public class GameCamera_Patch
                 StopTrackingPlayer(string.Format("Can't find player {0}".Translate(), playerId));
                 return;
             }
+            var targetName = string.IsNullOrEmpty(model?.Movement?.Username) ? playerId.ToString() : model.Movement.Username;
             var planetId = model.Movement.localPlanetId;
             if (planetId > 0 && planetId != GameMain.mainPlayer.planetId)
             {
-                StopTrackingPlayer(string.Format("Player {0} is on a different planet".Translate(), playerId));
+                StopTrackingPlayer(string.Format("Player {0} is on a different planet".Translate(), targetName));
                 return;
             }
             var starId = model.Movement.LocalStarId;
             if (planetId == 0 && (starId <= 0 || starId != GameMain.localStar?.id))
             {
-                StopTrackingPlayer(string.Format("Player {0} is too far away".Translate(), playerId));
+                StopTrackingPlayer(string.Format("Player {0} is too far away".Translate(), targetName));
                 return;
             }
             if (GameMain.mainPlayer.planetId > 0)
             {
                 if (planetId == 0 && Multiplayer.Session.IsClient)
                 {
-                    StopTrackingPlayer(string.Format("Player {0} is too far away".Translate(), playerId));
+                    StopTrackingPlayer(string.Format("Player {0} is too far away".Translate(), targetName));
                     return;
                 }
                 // The local player is on the planet and viewing another player on the same planet or in space
@@ -85,7 +86,7 @@ public class GameCamera_Patch
             else
             {
                 // Both players are in space
-                StopTrackingPlayer(string.Format("Player {0} is too far away".Translate(), playerId));
+                StopTrackingPlayer(string.Format("Player {0} is too far away".Translate(), targetName));
             }
         }
     }

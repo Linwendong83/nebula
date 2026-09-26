@@ -16,7 +16,6 @@ public abstract class PacketProcessor<T> : BasePacketProcessor<T>
 {
     protected ConcurrentPlayerCollection Players => Multiplayer.Session.Server.Players;
     protected IServer Server => Multiplayer.Session.Server;
-    protected IClient Client => Multiplayer.Session.Client;
 
     public override void ProcessPacket(T packet, INebulaConnection conn)
     {

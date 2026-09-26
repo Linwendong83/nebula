@@ -33,7 +33,7 @@ internal class UIControlPanelObjectEntry_Patch
         {
             // The main reason why target data is invalid is due to remote planet is not loaded for client
             // So make a popup here to info the user about this behavior
-            UIRealtimeTip.Popup("Can't view remote planet for MP client!".Translate());
+            UIRealtimeTip.Popup("Cannot view remote planets in multiplayer client.".Translate());
         }
     }
 }

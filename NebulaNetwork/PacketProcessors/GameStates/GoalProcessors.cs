@@ -16,15 +16,6 @@ public class GoalSnapshotProcessor : PacketProcessor<GoalSnapshotPacket>
 }
 
 [RegisterPacketProcessor]
-public class GoalCommandProcessor : PacketProcessor<GoalCommandPacket>
-{
-    protected override void ProcessPacket(GoalCommandPacket packet, NebulaConnection conn)
-    {
-        if (IsHost && Players.Get(conn) != null) Multiplayer.Session.Goals.Command(packet);
-    }
-}
-
-[RegisterPacketProcessor]
 public class GoalObservationProcessor : PacketProcessor<GoalObservationPacket>
 {
     protected override void ProcessPacket(GoalObservationPacket packet, NebulaConnection conn)

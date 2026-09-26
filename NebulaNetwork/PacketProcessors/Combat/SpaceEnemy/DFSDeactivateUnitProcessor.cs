@@ -18,6 +18,8 @@ public class DFSDeactivateUnitProcessor : PacketProcessor<DFSDeactivateUnitPacke
         var spaceSector = GameMain.spaceSector;
         var hive = GameMain.spaceSector.GetHiveByAstroId(packet.HiveAstroId);
         if (hive == null || packet.EnemyId < 0 || packet.EnemyId >= spaceSector.enemyCursor) return;
+        Multiplayer.Session.Enemies.RecordAuthoritativeRemoval(0, packet.EnemyId,
+            Multiplayer.Session.Generations.Peek(0, packet.EnemyId));
 
         using (Multiplayer.Session.Enemies.IsIncomingRequest.On())
         {

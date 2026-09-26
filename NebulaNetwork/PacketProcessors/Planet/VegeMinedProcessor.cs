@@ -1,10 +1,12 @@
 ﻿#region
 
 using NebulaAPI;
+using NebulaAPI.Networking;
 using NebulaAPI.Packets;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.Planet;
+using NebulaModel.Packets.Players;
 using NebulaWorld;
 
 #endregion
@@ -23,6 +25,19 @@ internal class VegeMinedProcessor : PacketProcessor<VegeMinedPacket>
         {
             return;
         }
+        if (packet.VegeId <= 0 || packet.IsVein &&
+            (factory.veinPool == null || packet.VegeId >= factory.veinPool.Length ||
+             factory.veinPool[packet.VegeId].id != packet.VegeId) ||
+            !packet.IsVein &&
+            (packet.VegeId >= factory.vegePool.Length || factory.vegePool[packet.VegeId].id != packet.VegeId))
+            return;
+        ushort author = 0;
+        if (IsHost)
+        {
+            var player = Players.Get(conn, EConnectionStatus.Connected);
+            if (player == null || player.Data.LocalStarId != planetData.star.id) return;
+            author = player.Id;
+        }
         using (Multiplayer.Session.Planets.IsIncomingRequest.On())
         {
             Multiplayer.Session.Planets.TargetPlanet = packet.PlanetId;
@@ -35,28 +50,28 @@ internal class VegeMinedProcessor : PacketProcessor<VegeMinedPacket>
 
                     factory.RemoveVeinWithComponents(packet.VegeId);
 
-                    if (veinProto == null || GameMain.localPlanet != planetData)
+                    if (veinProto != null && GameMain.localPlanet == planetData)
                     {
-                        return;
+                        VFEffectEmitter.Emit(veinProto.MiningEffect, veinData.pos,
+                            Maths.SphericalRotation(veinData.pos, 0f));
+                        VFAudio.Create(veinProto.MiningAudio, null, veinData.pos, true);
                     }
-                    VFEffectEmitter.Emit(veinProto.MiningEffect, veinData.pos,
-                        Maths.SphericalRotation(veinData.pos, 0f));
-                    VFAudio.Create(veinProto.MiningAudio, null, veinData.pos, true);
                 }
                 else
                 {
                     var vegeData = factory.GetVegeData(packet.VegeId);
                     var vegeProto = LDB.veges.Select(vegeData.protoId);
+                    if (IsHost && packet.IsCollected)
+                        Multiplayer.Session.Vegetation.GetRemote(author)?.AddVegeToPlayer(vegeData.protoId, 1);
 
                     factory.RemoveVegeWithComponents(packet.VegeId);
 
-                    if (vegeProto == null || GameMain.localPlanet != planetData)
+                    if (vegeProto != null && GameMain.localPlanet == planetData)
                     {
-                        return;
+                        VFEffectEmitter.Emit(vegeProto.MiningEffect, vegeData.pos,
+                            Maths.SphericalRotation(vegeData.pos, 0f));
+                        VFAudio.Create(vegeProto.MiningAudio, null, vegeData.pos, true);
                     }
-                    VFEffectEmitter.Emit(vegeProto.MiningEffect, vegeData.pos,
-                        Maths.SphericalRotation(vegeData.pos, 0f));
-                    VFAudio.Create(vegeProto.MiningAudio, null, vegeData.pos, true);
                 }
             }
             else
@@ -71,6 +86,13 @@ internal class VegeMinedProcessor : PacketProcessor<VegeMinedPacket>
                 veinGroups[groupIndex].amount -= 1L;
             }
             Multiplayer.Session.Planets.TargetPlanet = NebulaModAPI.PLANET_NONE;
+        }
+        if (IsHost && packet.Amount == 0)
+        {
+            Multiplayer.Session.Server.SendPacketToStarExclude(packet, planetData.star.id, conn);
+            if (packet.IsCollected)
+                conn.SendPacket(new VegetableCollectionSnapshotPacket(
+                    Multiplayer.Session.Vegetation.CaptureRemote(author), true));
         }
     }
 }

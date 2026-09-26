@@ -189,7 +189,8 @@ internal class MonitorComponent_Patch
         }
         _traffic.factory.RemoveEntityWithComponents(__instance.entityId, false);
         WarningManager.DisplayTemporaryWarning(
-            $"Broken Traffic Monitor detected on {_traffic.factory.planet.displayName}\nIt was removed, clients should reconnect!",
+            string.Format("Broken Traffic Monitor detected on {0}\nIt was removed, clients should reconnect!".Translate(),
+                _traffic.factory.planet.displayName),
             15000);
         return false;
     }

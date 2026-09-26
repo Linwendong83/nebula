@@ -1,7 +1,5 @@
 ﻿#region
 
-using System;
-using NebulaModel;
 using NebulaWorld.MonoBehaviours.Local.Chat;
 using UnityEngine;
 using Object = UnityEngine.Object;
@@ -80,13 +78,8 @@ public class CopyTextChatLinkHandler : IChatLinkHandler
         }
     }
 
-    public static string FormatCopyString(string data, bool isSensitive = false, Func<string, string> filter = null)
+    public static string FormatCopyString(string data)
     {
-        if (!isSensitive || !Config.Options.StreamerMode)
-        {
-            return $"<link=\"copytext {data}\"><color=\"blue\"><u>{data}</u></color></link>";
-        }
-        var safeText = filter != null ? filter(data) : new string('*', data.Length);
-        return $"<link=\"copytext {data}\"><color=\"blue\"><u>{safeText}</u></color></link>";
+        return $"<link=\"copytext {data}\"><color=\"blue\"><u>{data}</u></color></link>";
     }
 }

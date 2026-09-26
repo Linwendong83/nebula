@@ -25,13 +25,6 @@ public static class IPUtils
         Cached
     }
 
-    public enum IPConfiguration
-    {
-        Both,
-        IPv4,
-        IPv6
-    }
-
     private static readonly HttpClient client = new();
 
     private static IpInfo ipInfo;
@@ -183,11 +176,6 @@ public static class IPUtils
             return ipAddress.AddressFamily == AddressFamily.InterNetwork;
         }
         return false;
-    }
-
-    public static async Task<bool> IsIPv6Supported()
-    {
-        return IsIPv6(await GetWANv6Address());
     }
 
     private enum PortStatus

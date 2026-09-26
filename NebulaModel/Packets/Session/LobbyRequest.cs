@@ -43,6 +43,10 @@ public class LobbyRequest
                 }
             }
 
+            writer.BinaryWriter.Write(SessionProtocol.HandshakeKey);
+            writer.BinaryWriter.Write(SessionProtocol.Version.ToString());
+            count++;
+
             ModsVersion = writer.CloseAndGetBytes();
             ModsCount = count;
         }

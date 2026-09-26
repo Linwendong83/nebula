@@ -1,5 +1,6 @@
 ﻿#region
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using BepInEx.Bootstrap;
@@ -18,7 +19,6 @@ using NebulaModel.Packets.Session;
 using NebulaModel.Packets.Universe;
 using NebulaModel.Utils;
 using NebulaWorld;
-using NebulaWorld.SocialIntegration;
 
 #endregion
 
@@ -67,7 +67,8 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
         // Load old data of the client
         var clientCertHash = CryptoUtils.Hash(packet.ClientCert);
         if (Players.Connected.Values.Concat(Players.Syncing.Values).Concat(Players.Pending.Values)
-            .Any(other => other.Connection != conn && (other.Data as PlayerData)?.PersistentId == clientCertHash))
+            .Any(other => !ReferenceEquals(other.Connection, conn) &&
+                          (other.Data as PlayerData)?.PersistentId == clientCertHash))
         {
             Server.Disconnect(conn, DisconnectionReason.InvalidData, "This player identity is already connected. Disconnect it before joining again.");
             return;
@@ -100,12 +101,20 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
             ((PlayerData)player.Data).SessionCounted = true;
             Multiplayer.Session.NumPlayers += 1;
         }
-        DiscordManager.UpdateRichPresence();
 
-        // if user is known and host is ingame dont put him into lobby but let him join the game
-        if (!isNewUser && Multiplayer.Session.IsGameLoaded)
+        // While the host's game is loaded, skip the lobby page for every joining player:
+        // the page offers nothing a running server does not already own. Only a host still
+        // configuring a new game keeps players in the lobby as a waiting room.
+        if (Multiplayer.Session.IsGameLoaded)
         {
             Multiplayer.Session.Server.Players.TryUpgrade(player, EConnectionStatus.Syncing);
+
+            if (isNewUser)
+            {
+                // A first-time player carries no spawn data yet: assign the host's birth
+                // planet before the data is sent, like the lobby start button used to.
+                NebulaWorld.Player.SpawnManager.SetBirthPoint((PlayerData)player.Data);
+            }
 
             Multiplayer.Session.World.OnPlayerJoining(player.Data.Username);
 
@@ -126,8 +135,8 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
                 combatSettingsData = p.CloseAndGetBytes();
             }
             var modsSettings = GetModSetting(out var modSettingCount);
-            player.SendPacket(new HandshakeResponse(in gameDesc, combatSettingsData, false, (PlayerData)player.Data, modsSettings,
-                modSettingCount, Config.Options.SyncSoil, Multiplayer.Session.NumPlayers, DiscordManager.GetPartyId()));
+            player.SendPacket(new HandshakeResponse(in gameDesc, combatSettingsData, isNewUser, (PlayerData)player.Data, modsSettings,
+                modSettingCount, Multiplayer.Session.NumPlayers));
         }
         else
         {
@@ -140,7 +149,7 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
             }
             var modsSettings = GetModSetting(out var modSettingCount);
             player.SendPacket(new LobbyResponse(in gameDesc, combatSettingsData, modsSettings, modSettingCount,
-                Multiplayer.Session.NumPlayers, DiscordManager.GetPartyId()));
+                Multiplayer.Session.NumPlayers));
 
             // Send overriden Planet and Star names
             player.SendPacket(new NameInputPacket(GameMain.galaxy));
@@ -169,6 +178,13 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
         reason = DisconnectionReason.Normal;
         reasonString = null;
         var clientMods = new Dictionary<string, string>();
+        var protocolSeen = false;
+
+        if (packet.ModsVersion == null || packet.ModsCount < 0 || packet.ModsCount > 256)
+        {
+            reason = DisconnectionReason.InvalidData;
+            return false;
+        }
 
         Log.Info("Packet null: " + (packet == null));
         Log.Info("ModsVersion null: " + (packet?.ModsVersion == null));
@@ -180,6 +196,15 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
                 var guid = reader.BinaryReader.ReadString();
                 var version = reader.BinaryReader.ReadString();
 
+                if (guid == SessionProtocol.HandshakeKey)
+                {
+                    protocolSeen = true;
+                    if (version == SessionProtocol.Version.ToString()) continue;
+                    reason = DisconnectionReason.ModVersionMismatch;
+                    reasonString = $"Nebula protocol;{version};{SessionProtocol.Version}";
+                    return false;
+                }
+
                 if (!Chainloader.PluginInfos.ContainsKey(guid))
                 {
                     reason = DisconnectionReason.ModIsMissingOnServer;
@@ -189,6 +214,13 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
 
                 clientMods.Add(guid, version);
             }
+        }
+
+        if (!protocolSeen)
+        {
+            reason = DisconnectionReason.ModVersionMismatch;
+            reasonString = $"Nebula protocol;legacy;{SessionProtocol.Version}";
+            return false;
         }
 
         foreach (var pluginInfo in Chainloader.PluginInfos)

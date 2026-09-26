@@ -61,6 +61,11 @@ public class PlayerMovement
             Flags |= EFlags.warping;
         }
         var mecha = animator.controller.mecha;
+        BuildArea = mecha.buildArea;
+        ConstructionDroneCount = mecha.constructionModule.droneCount;
+        ConstructionDronesEnabled = mecha.constructionModule.droneEnabled &&
+                                    mecha.constructionModule.droneConstructEnabled;
+        CanLaunchConstructionDrone = animator.player.speed <= 20f;
         if (mecha.energyShieldEnergy > 0)
         {
             Flags |= EFlags.hasShield;
@@ -90,4 +95,8 @@ public class PlayerMovement
     public byte MiningAnimIndex { get; set; }
     public float MiningWeight { get; set; }
     public EFlags Flags { get; set; }
+    public float BuildArea { get; set; }
+    public int ConstructionDroneCount { get; set; }
+    public bool ConstructionDronesEnabled { get; set; }
+    public bool CanLaunchConstructionDrone { get; set; }
 }

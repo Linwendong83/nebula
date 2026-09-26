@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace NebulaPatcher.Patches.Misc;
 
-// CPU transcription of the game's cs_5_0 shield kernel (DSP 0.10.34.28529).
+// CPU transcription of the game's cs_5_0 shield kernel (DSP 0.10.35.29088).
 // Five surface samples, ordered smooth union of generators, finite-difference normals,
 // underside contraction and both quantized counters are preserved. No coverage constants.
 internal static class ShieldCpuKernel

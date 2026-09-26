@@ -1,10 +1,12 @@
 ﻿#region
 
 using NebulaAPI;
+using NebulaAPI.Networking;
 using NebulaAPI.Packets;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.Planet;
+using NebulaModel.Packets.Players;
 using NebulaWorld;
 using UnityEngine;
 
@@ -18,9 +20,33 @@ internal class VegeAddProcessor : PacketProcessor<VegeAddPacket>
 {
     protected override void ProcessPacket(VegeAddPacket packet, NebulaConnection conn)
     {
+        if (packet.Data == null || packet.Data.Length == 0 || packet.Data.Length > 2048 ||
+            packet.IsPlanting && packet.IsVein) return;
+        var planet = GameMain.galaxy.PlanetById(packet.PlanetId);
+        if (planet?.factory == null) return;
+        ushort author = 0;
+        if (IsHost)
+        {
+            var player = Players.Get(conn, EConnectionStatus.Connected);
+            if (player == null || player.Data.LocalPlanetId != packet.PlanetId) return;
+            author = player.Id;
+            if (packet.IsPlanting)
+            {
+                VegeData planted = new();
+                using (BinaryUtils.Reader reader = new(packet.Data))
+                    planted.Import(reader.BinaryReader);
+                var collection = Multiplayer.Session.Vegetation.GetRemote(author);
+                if (LDB.veges.Select(planted.protoId) == null || collection == null ||
+                    collection.RemoveVegeFromPlayer(planted.protoId, 1) != 1)
+                {
+                    Server.Disconnect(conn, DisconnectionReason.InvalidData,
+                        "Vegetation planting rejected. Reconnect to reload the planet.");
+                    return;
+                }
+            }
+        }
         using (Multiplayer.Session.Planets.IsIncomingRequest.On())
         {
-            var planet = GameMain.galaxy.PlanetById(packet.PlanetId);
             var factory = planet?.factory;
             if (factory == null)
             {
@@ -97,6 +123,13 @@ internal class VegeAddProcessor : PacketProcessor<VegeAddPacket>
             GameMain.gpuiManager.specifyPlanet = pData;
             Multiplayer.Session.Factories.TargetPlanet = NebulaModAPI.PLANET_NONE;
             Multiplayer.Session.Factories.EventFactory = null;
+        }
+        if (IsHost)
+        {
+            Multiplayer.Session.Server.SendPacketToStarExclude(packet, planet.star.id, conn);
+            if (packet.IsPlanting)
+                conn.SendPacket(new VegetableCollectionSnapshotPacket(
+                    Multiplayer.Session.Vegetation.CaptureRemote(author), true));
         }
     }
 }

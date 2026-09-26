@@ -18,7 +18,7 @@ using UnityEngine;
 
 namespace NebulaWorld.Combat;
 
-public class EnemyManager : IDisposable
+public partial class EnemyManager : IDisposable
 {
     public readonly ToggleSwitch IsIncomingRequest = new();
 
@@ -32,6 +32,8 @@ public class EnemyManager : IDisposable
 
     public void Dispose()
     {
+        ClearStateRequests();
+        ClearAuthoritativeRemovals();
         GroundTargets.Clear();
         basePackets.Clear();
         hivePackets.Clear();
@@ -147,6 +149,7 @@ public class EnemyManager : IDisposable
 
     public void OnLeavePlanet()
     {
+        ClearGroundStateRequests();
         if (Multiplayer.Session.IsServer) return;
 
         // Reset threat on each base on the loaded factory so it doesn't show on the monitor        

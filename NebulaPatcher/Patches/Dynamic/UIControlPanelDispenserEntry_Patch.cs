@@ -67,7 +67,7 @@ internal class UIControlPanelDispenserEntry_Patch
         if (!Multiplayer.IsActive) return true;
         if (__instance.factory == null || __instance.dispenser == null)
         {
-            UIRealtimeTip.Popup("Unavailable".Translate());
+            UIRealtimeTip.Popup("Remote planet facility cannot be operated".Translate());
             return false;
         }
 

@@ -9,7 +9,6 @@ using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.Session;
 using NebulaWorld;
-using NebulaWorld.SocialIntegration;
 
 #endregion
 
@@ -33,11 +32,9 @@ public class HandshakeResponseProcessor : PacketProcessor<HandshakeResponse>
             }
         }
 
-        // overwrite local setting with host setting, but dont save it as its a temp setting for this session
-        Config.Options.SyncSoil = packet.SyncSoil;
-
         ((LocalPlayer)Multiplayer.Session.LocalPlayer).IsHost = false;
         ((LocalPlayer)Multiplayer.Session.LocalPlayer).SetPlayerData(packet.LocalPlayerData, packet.IsNewPlayer);
+        Multiplayer.Session.Goals.SetExistingPlayer(!packet.IsNewPlayer);
 
         Multiplayer.Session.IsInLobby = false;
         Multiplayer.ShouldReturnToJoinMenu = false;
@@ -69,6 +66,5 @@ public class HandshakeResponseProcessor : PacketProcessor<HandshakeResponse>
         InGamePopup.ShowInfo("Loading".Translate(), "Loading state from server, please wait".Translate(), null);
 
         Multiplayer.Session.NumPlayers = packet.NumPlayers;
-        DiscordManager.UpdateRichPresence(partyId: packet.DiscordPartyId);
     }
 }

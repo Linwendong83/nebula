@@ -61,10 +61,4 @@ internal class Mecha_Patch
         return false;
     }
 
-    [HarmonyPrefix]
-    [HarmonyPatch(nameof(Mecha.TakeDamage))]
-    public static bool TakeDamage_Prefix()
-    {
-        return !Multiplayer.IsActive || !Config.Options.EnableInvincibleMode;
-    }
 }

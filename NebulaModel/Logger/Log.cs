@@ -12,8 +12,17 @@ public static class Log
 {
     private static ILogger logger;
     public static string LastInfoMsg { get; set; }
-    public static string LastWarnMsg { get; set; }
     public static string LastErrorMsg { get; set; }
+    public static int PatchDiagnosticCount { get; private set; }
+    private static bool recordingPatchDiagnostics;
+
+    public static void BeginPatchAudit()
+    {
+        PatchDiagnosticCount = 0;
+        recordingPatchDiagnostics = true;
+    }
+
+    public static void EndPatchAudit() => recordingPatchDiagnostics = false;
 
     public static void Init(ILogger logger)
     {
@@ -43,6 +52,7 @@ public static class Log
 
     public static void Warn(string message)
     {
+        if (recordingPatchDiagnostics) PatchDiagnosticCount++;
         logger.LogWarning(message);
     }
 
@@ -54,11 +64,11 @@ public static class Log
     public static void WarnInform(string message)
     {
         Warn(message);
-        LastWarnMsg = message;
     }
 
     public static void Error(string message)
     {
+        if (recordingPatchDiagnostics) PatchDiagnosticCount++;
         logger.LogError(message);
         LastErrorMsg = message;
         if (UIFatalErrorTip.instance != null)

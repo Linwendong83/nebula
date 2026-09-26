@@ -6,6 +6,7 @@ using NebulaWorld;
 using NebulaWorld.MonoBehaviours.Local.Chat;
 using TMPro;
 using UnityEngine.EventSystems;
+using UnityEngine.UI;
 
 #endregion
 
@@ -35,12 +36,13 @@ internal class VFInput_Patch
         {
             var currentSelectedGameObject = EventSystem.current.currentSelectedGameObject;
             VFInput.inputing = currentSelectedGameObject != null &&
-                               currentSelectedGameObject.GetComponent<TMP_InputField>() != null;
+                               (currentSelectedGameObject.GetComponent<TMP_InputField>() != null ||
+                                currentSelectedGameObject.GetComponent<InputField>() != null);
         }
 
-        if (!VFInput.inScrollView && ChatManager.Instance != null && EmojiPicker.instance != null)
+        if (!VFInput.inScrollView && ChatManager.Instance != null)
         {
-            VFInput.inScrollView = ChatManager.Instance.IsPointerIn() || EmojiPicker.instance.pointerIn;
+            VFInput.inScrollView = ChatManager.Instance.IsPointerIn();
         }
     }
 }

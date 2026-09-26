@@ -4,7 +4,7 @@ public class LobbyResponse
 {
     public LobbyResponse() { }
 
-    public LobbyResponse(in GameDesc gameDesc, byte[] combatSettingsData, byte[] modsSettings, int settingsCount, ushort numPlayers, string discordPartyId)
+    public LobbyResponse(in GameDesc gameDesc, byte[] combatSettingsData, byte[] modsSettings, int settingsCount, ushort numPlayers)
     {
         GalaxyAlgo = gameDesc.galaxyAlgo;
         GoalLevel = (int)gameDesc.goalLevel;
@@ -18,7 +18,6 @@ public class LobbyResponse
         ModsSettings = modsSettings;
         ModsSettingsCount = settingsCount;
         NumPlayers = numPlayers;
-        DiscordPartyId = discordPartyId;
     }
 
     public int GalaxyAlgo { get; set; }
@@ -33,5 +32,4 @@ public class LobbyResponse
     public byte[] ModsSettings { get; set; }
     public int ModsSettingsCount { get; set; }
     public ushort NumPlayers { get; set; }
-    public string DiscordPartyId { get; set; }
 }

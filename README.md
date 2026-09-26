@@ -51,7 +51,7 @@ The mod supports running the server in a non-GPU environment. Check [the wiki pa
 
 Check the [Wiki](https://github.com/NebulaModTeam/nebula/wiki/About-Nebula) for an overview of features.  
 
-The multiplayer mod currently supports the Dark Fog combat mode in the latest game version (0.10.34.x).  
+The multiplayer mod currently supports the Dark Fog combat mode in the latest game version (0.10.35.x).
 Most battle aspects are synchronized, with only a few features still work in progress.  
 
 <details>

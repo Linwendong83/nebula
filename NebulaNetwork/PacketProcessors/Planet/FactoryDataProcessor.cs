@@ -33,6 +33,7 @@ public class FactoryDataProcessor : PacketProcessor<FactoryData>
 
         var planet = GameMain.galaxy.PlanetById(packet.PlanetId);
         Multiplayer.Session.Planets.PendingFactories.Add(packet.PlanetId, packet.BinaryData);
+        Multiplayer.Session.Planets.PendingBuildAssignments[packet.PlanetId] = packet.BuildAssignments;
         Multiplayer.Session.Planets.PendingTerrainData.Add(packet.PlanetId, packet.TerrainModData);
         Log.Info($"Parsing {packet.BinaryData.Length} bytes of data for factory {planet.name} (ID: {planet.id})");
 

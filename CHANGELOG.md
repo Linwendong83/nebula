@@ -1,5 +1,43 @@
 ## Changelog
 
+0.9.22-dev.5:
+- Compatible with Dyson Sphere Program 0.10.35.29088
+- Redesign the multiplayer lobby with native game UI and integrate server goal settings
+- Add a persistent server list with live ping, player count, server descriptions and direct join
+- Replace the chat window with a floating preview overlay and hotkeys for full chat and player latency
+- Add in-world 3D name tags for teammates with terrain x-ray visibility and distance scaling
+- Fix unkillable or desynced Dark Fog enemies via authoritative server combat state
+- Sync Holo Beacon / Marker Dark Fog attraction toggle
+- Server-side construction drone dispatch to prevent drones from competing for the same target
+- Sync terrain restoration, flattening, pit filling, and independent per-player vegetation collection
+- Sync Ray Receiver catalysts (all types, stack counts, and proliferation bonuses)
+- Adapt research tech queue synchronization for 32 slots
+- Fix mecha respawn wreckage rim light leaking to other players and remote respawn animations freezing
+- Fix inventory sharing when taking over remote mechas
+- Support running headless dedicated servers without Steam on 0.10.35
+- Remove Discord and Ngrok integrations and simplify multiplayer options
+- Polish in-game text prompts and broadcasts: unify server terminology, localize missing warnings, and fix truce and tracking messages
+- Skip the lobby galaxy-select page when joining a running server; new players load straight into the game
+<br>
+
+- 适配《戴森球计划》0.10.35.29088
+- 采用游戏原生 UI 重做多人联机大厅并整合游戏目标设置
+- 新增服务器列表：支持保存服务器并实时显示延迟、在线人数与服务器描述，支持双击加入与直连
+- 聊天窗口改为悬浮气泡预览，新增聊天面板与全员延迟查看热键
+- 新增队友 3D 世界名牌，支持地形穿透显示与视距缩放
+- 修复黑雾敌人锁血、假死及无法击杀的战斗同步问题
+- 同步信号塔吸引黑雾设置开关
+- 建造无人机改由服务端统一调度，避免不同玩家与基站无人机争抢同一目标
+- 同步地形整平、地表还原、填坑及独立玩家植被采集
+- 同步射线接收器全部催化剂类型、堆叠与增产效果
+- 适配 32 格科技研究队列同步
+- 修复机甲重生残骸导致其他机甲材质异常发光，以及丢包时远端重生动画卡死的问题
+- 修复接管离线机甲时物品栏实例未隔离的问题
+- 0.10.35 版本无头专用服务器支持免 Steam 独立启动
+- 移除 Discord 与 Ngrok 集成，精简联机设置并默认使用游戏账号名
+- 全面优化联机文本提示与系统广播：统一服务器术语，补齐异常警报本地化，修复停战协议与玩家追踪显示问题
+- 加入已在运行的服务器时跳过大厅选星页面，新玩家直接进入加载流程
+
 0.9.22-dev.4:
 - Restore vanilla galaxy/birth planet selection flow and spawn management without transpiler fragility
 - Sync shared goal system, client UI tracking and personal action observations

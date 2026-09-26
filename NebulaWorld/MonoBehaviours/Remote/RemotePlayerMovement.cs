@@ -138,23 +138,28 @@ public class RemotePlayerMovement : MonoBehaviour
 
     private void OnEnable()
     {
-        var origPlayerDot = UIRoot.instance.uiGame.planetGlobe.minimapControl.playerDot.gameObject;
-        var uiSailIndicator_targetText = UIRoot.instance.uiGame.sailIndicator.targetText;
-        if (origPlayerDot == null || uiSailIndicator_targetText == null)
+        var minimapControl = UIRoot.instance?.uiGame?.planetGlobe?.minimapControl;
+        var uiSailIndicator_targetText = UIRoot.instance?.uiGame?.sailIndicator?.targetText;
+        if (minimapControl?.playerDot == null || uiSailIndicator_targetText == null)
         {
             return;
         }
-        var parent = origPlayerDot.transform.parent;
-        playerDot = Instantiate(origPlayerDot, parent, false);
-        playerName = Instantiate(origPlayerDot, parent, false);
+        var parent = minimapControl.playerDot.transform.parent;
+        playerDot = Instantiate(minimapControl.playerDot.gameObject, parent, false);
+        playerName = Instantiate(minimapControl.playerDot.gameObject, parent, false);
         playerName.name = "playerName(Clone)";
 
         Destroy(playerName.GetComponent<MeshFilter>());
 
-        var meshRenderer = playerName.GetComponent<MeshRenderer>();
         playerName.AddComponent<TextMesh>();
 
-        meshRenderer.sharedMaterial = uiSailIndicator_targetText.gameObject.GetComponent<MeshRenderer>().sharedMaterial;
+        // targetText is a uGUI Text since game 0.10.35 (it used to be a TextMesh), so its
+        // GameObject has no MeshRenderer anymore and the font material must be used instead.
+        var meshRenderer = playerName.GetComponent<MeshRenderer>();
+        if (meshRenderer != null && uiSailIndicator_targetText.font != null)
+        {
+            meshRenderer.sharedMaterial = uiSailIndicator_targetText.font.material;
+        }
 
         playerName.SetActive(true);
     }

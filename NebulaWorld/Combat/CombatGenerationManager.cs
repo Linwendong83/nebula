@@ -12,6 +12,7 @@ public sealed class CombatGenerationManager : IDisposable
     private readonly CombatGenerationState state = new();
     private readonly HashSet<(ushort Player, long Sequence)> seenDamage = new();
     private readonly Queue<(ushort Player, long Sequence)> damageOrder = new();
+    private readonly Dictionary<(ushort Player, int Astro, int Id, long Generation), long> lastCorrection = new();
 
     public long Get(int astro, int id)
     {
@@ -50,6 +51,30 @@ public sealed class CombatGenerationManager : IDisposable
         lock (gate) return state.Matches(astro, id, generation);
     }
 
+    public long Peek(int astro, int id)
+    {
+        lock (gate) return state.Get(astro, id);
+    }
+
+    public bool ReconcileFromHost(int astro, int id, long expectedGeneration, long generation)
+    {
+        if (!Multiplayer.Session.IsClient) return false;
+        lock (gate) return state.ReplaceIfCurrent(astro, id, expectedGeneration, generation);
+    }
+
+    public bool ShouldSendCorrection(ushort player, int astro, int id, long rejectedGeneration, long tick)
+    {
+        lock (gate)
+        {
+            var key = (player, CombatGenerationState.NormalizeAstro(astro), id, rejectedGeneration);
+            if (lastCorrection.TryGetValue(key, out var previous) && tick >= previous && tick - previous < 60)
+                return false;
+            if (lastCorrection.Count > 65536) lastCorrection.Clear();
+            lastCorrection[key] = tick;
+            return true;
+        }
+    }
+
     public byte[] Export(int planetId = 0)
     {
         var list = new List<(int Astro, int Id, long Generation)>();
@@ -70,5 +95,5 @@ public sealed class CombatGenerationManager : IDisposable
         lock (gate) for (var i = 0; i < count; i++) state.Set(reader.ReadInt32(), reader.ReadInt32(), reader.ReadInt64());
     }
 
-    public void Dispose() { state.Clear(); seenDamage.Clear(); damageOrder.Clear(); }
+    public void Dispose() { state.Clear(); seenDamage.Clear(); damageOrder.Clear(); lastCorrection.Clear(); }
 }

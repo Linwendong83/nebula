@@ -22,10 +22,18 @@
 
     <ItemGroup>
         <!-- Transpiler tests inspect game types; real method bodies can be supplied by the verification script. -->
-        <PackageReference Update="DysonSphereProgram.GameLibs" IncludeAssets="compile;runtime" />
+        <PackageReference Update="DysonSphereProgram.GameLibs" IncludeAssets="compile;runtime" Condition="'$(UseInstalledGameAssemblies)' != 'true'" />
+        <Reference Update="Assembly-CSharp" Private="true" Condition="'$(UseInstalledGameAssemblies)' == 'true'" />
+        <Reference Update="UnityEngine.UI" Private="true" Condition="'$(UseInstalledGameAssemblies)' == 'true'" />
         <PackageReference Update="UnityEngine.Modules" IncludeAssets="compile;runtime" />
         <!-- The test runner does not have BepInEx's runtime assemblies preloaded. -->
         <PackageReference Update="BepInEx.Core" ExcludeAssets="build" />
     </ItemGroup>
+
+    <Target Name="CopyInstalledUnityRuntime" AfterTargets="Build"
+            Condition="'$(UseInstalledGameAssemblies)' == 'true'">
+        <Copy SourceFiles="$(DSPGameDir)DSPGAME_Data\Managed\UnityEngine.CoreModule.dll"
+              DestinationFolder="$(TargetDir)" />
+    </Target>
 
 </Project>

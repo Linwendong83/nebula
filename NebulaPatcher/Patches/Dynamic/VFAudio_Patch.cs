@@ -2,7 +2,6 @@
 
 using System;
 using HarmonyLib;
-using NebulaModel;
 using NebulaWorld;
 
 #endregion
@@ -18,12 +17,11 @@ internal class VFAudio_Patch
     {
         if (!Multiplayer.IsActive) return true;
 
-        // Only play other player sound if the settings is enabled and the event is on the same planet
+        // Only play sounds from events on the same planet.
         if (Multiplayer.Session.Factories.IsIncomingRequest.Value)
         {
             var onLocalPlanet = Multiplayer.Session.Factories.TargetPlanet == GameMain.localPlanet?.id;
-            var fromSelf = Multiplayer.Session.Factories.PacketAuthor == Multiplayer.Session.LocalPlayer.Id;
-            return onLocalPlanet && (fromSelf || Config.Options.EnableOtherPlayerSounds);
+            return onLocalPlanet;
         }
         if (Multiplayer.Session.Planets.IsIncomingRequest.Value)
         {

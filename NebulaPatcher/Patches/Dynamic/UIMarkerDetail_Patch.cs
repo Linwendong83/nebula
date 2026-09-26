@@ -1,6 +1,7 @@
 ﻿#region
 
 using HarmonyLib;
+using NebulaModel.Utils;
 
 #endregion
 
@@ -17,7 +18,7 @@ internal class UIMarkerDetail_Patch
         // So set the inspectPlanet to null first in here
         if (__instance.inspectPlanet != null && __instance.inspectPlanet.factory == null)
         {
-            __instance.inspectPlanet = null;
+            __instance.SetHiddenProperty(nameof(UIMarkerDetail.inspectPlanet), null);
         }
     }
 }

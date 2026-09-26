@@ -70,6 +70,7 @@ public class CombatManager : IDisposable
     public void GameTick()
     {
         if (!Multiplayer.Session.IsGameLoaded) return;
+        Multiplayer.Session.Enemies.TickAuthoritativeState();
         var gameTick = GameMain.gameTick;
         ActivedPlanets.Clear();
         ActivedStars.Clear();

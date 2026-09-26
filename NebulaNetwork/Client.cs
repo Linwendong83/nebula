@@ -21,7 +21,6 @@ using NebulaModel.Utils;
 using NebulaWorld;
 using NebulaWorld.GameStates;
 using UnityEngine;
-using UnityEngine.UI;
 using WebSocketSharp;
 
 #endregion
@@ -35,6 +34,7 @@ public class Client : IClient
     private const float FRAGEMENT_UPDATE_INTERVAL = 0.1f;
     private const float GAME_STATE_UPDATE_INTERVAL = 1f;
     private const float MECHA_SYNCHONIZATION_INTERVAL = 30f;
+    private const float JOIN_RESPONSE_TIMEOUT = 25f;
 
     private readonly AccessTools.FieldRef<WebSocket, MemoryStream> fragmentsBufferRef =
         AccessTools.FieldRefAccess<WebSocket, MemoryStream>("_fragmentsBuffer");
@@ -47,6 +47,7 @@ public class Client : IClient
     private float fragmentUpdateTimer;
     private float gameStateUpdateTimer;
     private float mechaSynchonizationTimer;
+    private float joinResponseTimer;
     private NebulaConnection serverConnection;
     private bool websocketAuthenticationFailure;
 
@@ -141,22 +142,6 @@ public class Client : IClient
 
         ((LocalPlayer)Multiplayer.Session.LocalPlayer).IsHost = false;
 
-        if (Config.Options.RememberLastIP)
-        {
-            // We've successfully connected, remember the address the player typed (host name or IP),
-            // so a domain keeps being resolved on every join instead of being frozen into an IP.
-            // Cut out "ws://" (but not others, like wss) and "/socket".
-            var address = NetUtils.FormatHostPort(ServerHost, ServerPort);
-            Config.Options.LastIP = serverProtocol == "ws" ? address : $"{serverProtocol}://{address}";
-            Config.SaveOptions();
-        }
-
-        if (Config.Options.RememberLastClientPassword && !string.IsNullOrWhiteSpace(serverPassword))
-        {
-            Config.Options.LastClientPassword = serverPassword;
-            Config.SaveOptions();
-        }
-
         try
         {
             NebulaModAPI.OnMultiplayerSessionChange(true);
@@ -172,8 +157,6 @@ public class Client : IClient
     {
         clientSocket?.Close((ushort)DisconnectionReason.ClientRequestedDisconnect, "Player left the game");
 
-        // load settings again to dispose the temp soil setting that could have been received from server
-        Config.LoadOptions();
         try
         {
             NebulaModAPI.OnMultiplayerSessionChange(false);
@@ -239,6 +222,8 @@ public class Client : IClient
     {
         PacketProcessor.ProcessPacketQueue();
 
+        WatchdogJoinResponse();
+
         if (Multiplayer.Session.IsGameLoaded)
         {
             Multiplayer.Session.PowerTowers.SendLocalStateIfChanged();
@@ -276,6 +261,32 @@ public class Client : IClient
         fragmentUpdateTimer = 0f;
     }
 
+    /// <summary>
+    ///     A join where the server accepts the socket but never answers the LobbyRequest used to
+    ///     leave the player staring at the main menu forever, because a broken handshake is
+    ///     dropped as an unparseable packet. Surface a visible error instead of hanging.
+    /// </summary>
+    private void WatchdogJoinResponse()
+    {
+        var session = Multiplayer.Session;
+        if (session == null || session.IsInLobby || session.IsGameLoaded || session.LocalPlayer.IsInitialDataReceived)
+        {
+            joinResponseTimer = 0f;
+            return;
+        }
+
+        joinResponseTimer += Time.unscaledDeltaTime;
+        if (joinResponseTimer <= JOIN_RESPONSE_TIMEOUT) return;
+
+        joinResponseTimer = 0f;
+        Log.Warn("Server did not answer the join request in time");
+        InGamePopup.ShowWarning(
+            "Server Unavailable".Translate(),
+            "Server did not respond to join request.\nPlease make sure the server is running and uses the same mod version.".Translate(),
+            "OK".Translate(),
+            Multiplayer.LeaveGame);
+    }
+
     private void ClientSocket_OnMessage(object sender, MessageEventArgs e)
     {
         if (!Multiplayer.IsLeavingGame)
@@ -296,11 +307,24 @@ public class Client : IClient
         serverConnection = new NebulaConnection(clientSocket, new DnsEndPoint(ServerHost, ServerPort),
             PacketProcessor as NebulaNetPacketProcessor);
 
+        var connection = Multiplayer.LastConnection;
+        if (connection?.RecordId != null && !string.IsNullOrEmpty(serverPassword))
+        {
+            try
+            {
+                ServerMemoryStore.Instance.UpdatePassword(connection.RecordId, serverPassword);
+            }
+            catch (Exception exception)
+            {
+                Log.Warn($"Could not save password for server record: {exception.Message}");
+            }
+        }
+
         //TODO: Maybe some challenge-response authentication mechanism?
 
         SendPacket(new LobbyRequest(
             CryptoUtils.GetPublicKey(CryptoUtils.GetOrCreateUserCert()),
-            !string.IsNullOrWhiteSpace(Config.Options.Nickname) ? Config.Options.Nickname : GameMain.data.account.userName));
+            GameMain.data.account.userName));
     }
 
     private void ClientSocket_OnClose(object sender, CloseEventArgs e)
@@ -371,20 +395,13 @@ public class Client : IClient
                         return;
                     }
                 case (ushort)DisconnectionReason.ProtocolError when websocketAuthenticationFailure:
-                    InGamePopup.AskInput(
-                        "Server Requires Password".Translate(),
+                    // The server rejected the credentials. There is no second chance to type a
+                    // password here: an empty attempt means one is required, anything else was wrong.
+                    InGamePopup.ShowWarning(
+                        (string.IsNullOrEmpty(serverPassword) ? "Password Required" : "Wrong Password").Translate(),
                         "Server is protected. Please enter the correct password:".Translate(),
-                        InputField.ContentType.Password,
-                        serverPassword,
-                        password =>
-                        {
-                            Multiplayer.ShouldReturnToJoinMenu = false;
-                            Multiplayer.LeaveGame();
-                            Multiplayer.ShouldReturnToJoinMenu = true;
-                            Multiplayer.JoinGame(new Client(ServerHost, ServerPort, serverProtocol, password));
-                        },
-                        Multiplayer.LeaveGame
-                    );
+                        "OK".Translate(),
+                        Multiplayer.LeaveGame);
                     return;
                 case (ushort)DisconnectionReason.HostStillLoading:
                     InGamePopup.ShowWarning(

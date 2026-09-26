@@ -18,23 +18,25 @@ internal class GameHistoryTechQueueSyncProcessor : PacketProcessor<GameHistoryTe
     {
         if (packet.IsRequest)
         {
+            if (!IsHost) return;
             packet.IsRequest = false;
-            packet.TechQueue = GameMain.history.techQueue;
+            packet.TechQueue = (int[])GameMain.history.techQueue.Clone();
             conn.SendPacket(packet);
         }
         else
         {
+            if (!ValidQueue(packet.TechQueue, GameMain.history.MaxTechQueueCount())) return;
             using (Multiplayer.Session.History.IsIncomingRequest.On())
             {
-                var length = GameMain.history.techQueue.Length;
+                var length = GameMain.history.techQueueLength;
                 for (var i = 0; i < length; i++)
                 {
-                    // Clear the original queue by dequeue for compatibility
+                    // Clear only occupied slots; the native array can grow to 32.
                     GameMain.history.DequeueTech();
                 }
                 for (var i = 0; i < packet.TechQueue.Length; i++)
                 {
-                    if (packet.TechQueue[i] == 0) return;
+                    if (packet.TechQueue[i] == 0) break;
                     GameMain.history.EnqueueTech(packet.TechQueue[i]);
                 }
             }
@@ -44,5 +46,19 @@ internal class GameHistoryTechQueueSyncProcessor : PacketProcessor<GameHistoryTe
                 Multiplayer.Session.Network.SendPacketExclude(packet, conn);
             }
         }
+    }
+
+    internal static bool ValidQueue(int[] queue, int maxCount)
+    {
+        if (queue == null || queue.Length > 32) return false;
+        var occupied = 0;
+        var ended = false;
+        foreach (var tech in queue)
+        {
+            if (tech == 0) ended = true;
+            else if (tech < 0 || ended) return false;
+            else occupied++;
+        }
+        return occupied <= maxCount;
     }
 }

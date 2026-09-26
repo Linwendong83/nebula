@@ -15,11 +15,20 @@ internal class RayReceiverChangeLensProcessor : PacketProcessor<RayReceiverChang
     protected override void ProcessPacket(RayReceiverChangeLensPacket packet, NebulaConnection conn)
     {
         var pool = GameMain.galaxy.PlanetById(packet.PlanetId)?.factory?.powerSystem?.genPool;
-        if (pool == null || packet.GeneratorId == -1 || packet.GeneratorId >= pool.Length || pool[packet.GeneratorId].id == -1)
+        if (pool == null || packet.GeneratorId <= 0 || packet.GeneratorId >= pool.Length ||
+            pool[packet.GeneratorId].id != packet.GeneratorId || !pool[packet.GeneratorId].gamma ||
+            packet.CatalystCount < 0 || packet.CatalystInc < 0 || packet.LensCount < 0 || packet.LensInc < 0)
         {
             return;
         }
-        pool[packet.GeneratorId].catalystPoint = packet.LensCount;
-        pool[packet.GeneratorId].catalystIncPoint = packet.LensInc;
+        ref var generator = ref pool[packet.GeneratorId];
+        generator.catalystId = packet.CatalystId;
+        generator.curCatalystId = packet.CurrentCatalystId;
+        generator.catalystCount = packet.CatalystCount;
+        generator.catalystInc = packet.CatalystInc;
+        generator.catalystMask = packet.CatalystMask;
+        generator.catalystIncLevel = packet.CatalystIncLevel;
+        generator.catalystPoint = packet.LensCount;
+        generator.catalystIncPoint = packet.LensInc;
     }
 }

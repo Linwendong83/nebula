@@ -41,9 +41,25 @@ internal class UIGalaxySelect_Patch
     [HarmonyPatch(nameof(UIGalaxySelect.ApplySetting))]
     public static bool ApplySetting_Prefix(UIGalaxySelect __instance)
     {
-        if (!Multiplayer.IsInMultiplayerMenu || !Multiplayer.IsActive) return true;
-        if (Multiplayer.Session.IsServer) return true; // Includes vanilla goal selection.
-        if (!__instance.uiCombat.active) Multiplayer.Session.Network.SendPacket(new StartGameMessage());
+        if (!Multiplayer.IsInMultiplayerMenu) return true;
+        var session = Multiplayer.Session;
+        if (session is null || __instance.gameDesc == null) return false;
+        if (session.IsServer) return true; // Includes vanilla goal selection.
+
+        // The combat settings panel is not created on every multiplayer menu path.
+        // Applying settings from those paths must still start the client handshake.
+        if (__instance.uiCombat == null || !__instance.uiCombat.active)
+            session.Network?.SendPacket(new StartGameMessage());
+        return false;
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(UIGalaxySelect.CancelSelect))]
+    public static bool CancelSelect_Prefix(UIGalaxySelect __instance)
+    {
+        if (!Multiplayer.IsInMultiplayerMenu || !Multiplayer.IsActive || Multiplayer.Session?.IsInLobby != true)
+            return true;
+        __instance._Close();
         return false;
     }
 
@@ -53,7 +69,7 @@ internal class UIGalaxySelect_Patch
     {
         if (Multiplayer.IsInMultiplayerMenu && Multiplayer.IsActive && Multiplayer.Session.IsInLobby)
         {
-            Multiplayer.ShouldReturnToJoinMenu = false;
+            Multiplayer.ShouldReturnToJoinMenu = true;
             Multiplayer.Session.IsInLobby = false;
             Multiplayer.LeaveGame();
         }
@@ -84,6 +100,7 @@ internal class LobbyGoalSetting_Patch
         if (!Multiplayer.IsActive || !__instance.galaxySelect.active) return true;
         if (Multiplayer.Session.IsClient) return false;
         if (_data < (int)EGoalLevel.Off || _data > (int)EGoalLevel.Full) return false;
+        NebulaWorld.GameStates.GoalManager.PendingHostLevel = (EGoalLevel)_data;
         __instance.gameDesc.goalLevel = (EGoalLevel)_data;
         UIGalaxySelect_Patch.UpdateParametersUIDisplay_Postfix(__instance.galaxySelect);
         Multiplayer.Session.IsInLobby = false;

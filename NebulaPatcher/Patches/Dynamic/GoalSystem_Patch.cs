@@ -1,5 +1,4 @@
 ﻿using HarmonyLib;
-using NebulaModel.Packets.GameStates;
 using NebulaWorld;
 using NebulaWorld.GameStates;
 
@@ -41,8 +40,16 @@ internal static class PersonalGoalData_Patch
     [HarmonyPrefix]
     public static bool Prefix(int _protoId, ref GoalData __result)
     {
-        if (!Multiplayer.IsActive || !Multiplayer.Session.Goals.CollectingPersonal) return true;
-        __result = Multiplayer.Session.Goals.GetPersonalGoal(_protoId);
+        if (!Multiplayer.IsActive) return true;
+        var goals = Multiplayer.Session.Goals;
+        if (goals.CollectingPersonal)
+        {
+            __result = goals.GetPersonalGoal(_protoId);
+            return false;
+        }
+        if (!goals.RenderingPersonal) return true;
+        GameMain.data.goalSystem.goalDatas.TryGetValue(_protoId, out var shared);
+        __result = goals.GetDisplayGoal(_protoId, shared);
         return false;
     }
 }
@@ -84,10 +91,141 @@ internal static class SharedGoalSetting_Patch
     [HarmonyPrefix]
     public static bool Prefix(UIGoalSetting __instance, int _data)
     {
-        if (!Multiplayer.IsActive || __instance.galaxySelect.active || __instance.loadGameWindow.active) return true;
-        Multiplayer.Session.Goals.Command(new GoalCommandPacket { ChangeLevel = true, Value = _data });
+        if (!Multiplayer.IsActive) return true;
+        if (Multiplayer.Session.Goals.AwaitingSelection)
+        {
+            Multiplayer.Session.Goals.SelectInitialLevel(_data, __instance);
+            return false;
+        }
+        if (__instance.galaxySelect.active || __instance.loadGameWindow.active) return true;
+        Multiplayer.Session.Goals.ChangePersonalLevel(_data);
         __instance.CloseSettingWindow();
         return false;
+    }
+}
+
+[HarmonyPatch(typeof(UIGoalSetting), nameof(UIGoalSetting.OnGoalButtonClick))]
+internal static class EditorGoalPick_Patch
+{
+    [HarmonyPrefix]
+    public static bool Prefix(UIGoalSetting __instance, int _data)
+    {
+        // The stock handler drops the choice while no game is running, which is exactly
+        // the server editor's situation: route it into the editor's combo instead.
+        if (!MultiplayerPage.PickingGoalLevel) return true;
+        MultiplayerPage.SetEditorGoalLevel(_data);
+        __instance.CloseSettingWindow();
+        return false;
+    }
+}
+
+[HarmonyPatch(typeof(UILoadGameWindow), nameof(UILoadGameWindow.OnComboBoxClick))]
+internal static class EditorGoalPageToFront_Patch
+{
+    [HarmonyPostfix]
+    public static void Postfix()
+    {
+        // The cloned combo still opens the picker through the load window's own handler,
+        // but the picker lives under Top Windows, behind the always-last multiplayer page.
+        if (MultiplayerPage.PickingGoalLevel) MultiplayerPage.BringGoalSettingToFront();
+    }
+}
+
+[HarmonyPatch(typeof(UIGoalSetting), nameof(UIGoalSetting.OnQuitButtonClick))]
+internal static class RequiredGoalChoice_Patch
+{
+    [HarmonyPrefix]
+    public static bool Prefix(UIGoalSetting __instance)
+    {
+        if (!Multiplayer.IsActive || !Multiplayer.Session.Goals.AwaitingSelection) return true;
+        __instance.CloseSettingWindow();
+        // The world has not started yet, so leaving must bring the join menu back up.
+        Multiplayer.ShouldReturnToJoinMenu = true;
+        Multiplayer.LeaveGame();
+        return false;
+    }
+}
+
+[HarmonyPatch(typeof(NebulaWorld.GameStates.GoalManager), nameof(NebulaWorld.GameStates.GoalManager.PrepareClientProfile))]
+internal static class GoalPromptUi_Patch
+{
+    [HarmonyPostfix]
+    public static void Postfix(bool __result)
+    {
+        // A false result means the goal choice window is up; the join menu must never
+        // render on top of it, whatever connect path led here.
+        if (!__result) MultiplayerPage.HideForConnection();
+    }
+}
+
+[HarmonyPatch(typeof(UIGoalPanel))]
+internal static class PersonalGoalPanel_Patch
+{
+    [HarmonyPrefix]
+    [HarmonyPatch("_OnOpen")]
+    [HarmonyPatch("_OnUpdate")]
+    [HarmonyPatch(nameof(UIGoalPanel.Determine))]
+    [HarmonyPatch(nameof(UIGoalPanel.DetermineVisiable))]
+    [HarmonyPatch(nameof(UIGoalPanel.DetermineEntry))]
+    [HarmonyPatch(nameof(UIGoalPanel.DetermineTransform))]
+    public static void Prefix()
+    {
+        if (Multiplayer.IsActive) Multiplayer.Session.Goals.BeginUiRender();
+    }
+
+    [HarmonyPostfix]
+    [HarmonyPatch("_OnOpen")]
+    [HarmonyPatch("_OnUpdate")]
+    [HarmonyPatch(nameof(UIGoalPanel.Determine))]
+    [HarmonyPatch(nameof(UIGoalPanel.DetermineVisiable))]
+    [HarmonyPatch(nameof(UIGoalPanel.DetermineEntry))]
+    [HarmonyPatch(nameof(UIGoalPanel.DetermineTransform))]
+    public static void Postfix()
+    {
+        if (Multiplayer.IsActive) Multiplayer.Session.Goals.EndUiRender();
+    }
+
+    [HarmonyPostfix]
+    [HarmonyPatch(nameof(UIGoalPanel.OnSettingButtonClick))]
+    public static void SetPersonalOpeningLevel()
+    {
+        if (Multiplayer.IsActive) UIRoot.instance.goalSetting.SetOpeningGoalLevel(Multiplayer.Session.Goals.PersonalLevel);
+    }
+}
+
+[HarmonyPatch(typeof(UIGoalGroupEntry))]
+internal static class PersonalGoalGroupEntry_Patch
+{
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(UIGoalGroupEntry.DetermineEntry))]
+    [HarmonyPatch(nameof(UIGoalGroupEntry.DetermineTransform))]
+    public static void Prefix()
+    {
+        if (Multiplayer.IsActive) Multiplayer.Session.Goals.BeginUiRender();
+    }
+
+    [HarmonyPostfix]
+    [HarmonyPatch(nameof(UIGoalGroupEntry.DetermineEntry))]
+    [HarmonyPatch(nameof(UIGoalGroupEntry.DetermineTransform))]
+    public static void Postfix()
+    {
+        if (Multiplayer.IsActive) Multiplayer.Session.Goals.EndUiRender();
+    }
+}
+
+[HarmonyPatch(typeof(UIGoalInfoEntry), nameof(UIGoalInfoEntry.DetermineTransform))]
+internal static class PersonalGoalInfoEntry_Patch
+{
+    [HarmonyPrefix]
+    public static void Prefix()
+    {
+        if (Multiplayer.IsActive) Multiplayer.Session.Goals.BeginUiRender();
+    }
+
+    [HarmonyPostfix]
+    public static void Postfix()
+    {
+        if (Multiplayer.IsActive) Multiplayer.Session.Goals.EndUiRender();
     }
 }
 
@@ -98,7 +236,19 @@ internal static class SharedGoalIgnore_Patch
     public static bool Prefix(UIGoalGroupEntry __instance)
     {
         if (!Multiplayer.IsActive) return true;
-        Multiplayer.Session.Goals.Command(new GoalCommandPacket { Value = __instance.protoId });
+        Multiplayer.Session.Goals.IgnorePersonalGoal(__instance.protoId);
+        return false;
+    }
+}
+
+[HarmonyPatch(typeof(UIGoalInfoEntry), nameof(UIGoalInfoEntry.OnClickIgnoreButton))]
+internal static class PersonalGoalInfoIgnore_Patch
+{
+    [HarmonyPrefix]
+    public static bool Prefix(UIGoalInfoEntry __instance)
+    {
+        if (!Multiplayer.IsActive) return true;
+        Multiplayer.Session.Goals.IgnorePersonalGoal(__instance.protoId);
         return false;
     }
 }

@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using NebulaAPI;
+using NebulaAPI.Networking;
 using NebulaAPI.Packets;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
@@ -22,37 +23,61 @@ internal class FoundationBlueprintPasteProcessor : PacketProcessor<FoundationBlu
     {
         var planet = GameMain.galaxy.PlanetById(packet.PlanetId);
         var factory = planet?.factory;
-        if (factory == null) return;
-
-        using (Multiplayer.Session.Planets.IsIncomingRequest.On())
+        if (factory == null || planet.data?.heightData == null) return;
+        if (packet.LevelChangesKeys == null || packet.LevelChangesValues == null ||
+            packet.LevelChangesKeys.Length != packet.LevelChangesValues.Length ||
+            packet.LevelChangesKeys.Length > planet.data.heightData.Length ||
+            packet.ReformData == null || packet.ReformGridIds == null ||
+            packet.ReformData.Length > 4 * 1024 * 1024 || packet.ReformGridIds.Length > 1000000)
+            return;
+        var levelChanges = new Dictionary<int, int>();
+        for (var i = 0; i < packet.LevelChangesKeys.Length; i++)
         {
-            Multiplayer.Session.Factories.TargetPlanet = packet.PlanetId;
-            Multiplayer.Session.Factories.AddPlanetTimer(packet.PlanetId);
-            var specifyPlanet = GameMain.gpuiManager.specifyPlanet;
-            GameMain.gpuiManager.specifyPlanet = planet;
+            var index = packet.LevelChangesKeys[i];
+            if (index < 0 || index >= planet.data.heightData.Length || levelChanges.ContainsKey(index)) return;
+            levelChanges.Add(index, packet.LevelChangesValues[i]);
+        }
+        VegetableCollection collector = null;
+        ushort author = 0;
+        if (IsHost)
+        {
+            var player = Players.Get(conn, EConnectionStatus.Connected);
+            if (player == null || player.Data.LocalPlanetId != packet.PlanetId) return;
+            author = player.Id;
+            collector = Multiplayer.Session.Vegetation.GetRemote(author);
+            if (collector == null) return;
+        }
 
-            // Split BuildTool_BlueprintPaste.DetermineReforms into following functions
-            factory.platformSystem.EnsureReformData();
-            if (packet.ReformData != null && packet.ReformData.Length > 0)
+        var specifyPlanet = GameMain.gpuiManager.specifyPlanet;
+        try
+        {
+            using (Multiplayer.Session.Planets.IsIncomingRequest.On())
             {
-                SetReformByData(factory, packet.ReformData);
-            }
-            else if (packet.ReformGridIds != null && packet.ReformGridIds.Length > 0)
-            {
-                SetReformByGridIds(factory, packet.ReformGridIds, packet.ReformType, packet.ReformColor);
-            }
-            var levelChanges = new Dictionary<int, int>();
-            for (int i = 0; i < packet.LevelChangesKeys.Length; i++)
-            {
-                levelChanges.Add(packet.LevelChangesKeys[i], packet.LevelChangesValues[i]);
-            }
-            AlterHeightMap(planet, levelChanges);
-            RemoveVeges(factory, levelChanges);
-            UpdateGeothermalStrength(factory);
-            AlterVeinModels(factory);
+                Multiplayer.Session.Factories.TargetPlanet = packet.PlanetId;
+                Multiplayer.Session.Factories.AddPlanetTimer(packet.PlanetId);
+                GameMain.gpuiManager.specifyPlanet = planet;
 
+                // Split BuildTool_BlueprintPaste.DetermineReforms into following functions
+                factory.platformSystem.EnsureReformData();
+                if (packet.ReformData.Length > 0)
+                    SetReformByData(factory, packet.ReformData);
+                else if (packet.ReformGridIds.Length > 0)
+                    SetReformByGridIds(factory, packet.ReformGridIds, packet.ReformType, packet.ReformColor);
+                AlterHeightMap(planet, levelChanges);
+                RemoveVeges(factory, levelChanges, collector);
+                UpdateGeothermalStrength(factory);
+                AlterVeinModels(factory);
+            }
+        }
+        finally
+        {
             GameMain.gpuiManager.specifyPlanet = specifyPlanet;
             Multiplayer.Session.Factories.TargetPlanet = NebulaModAPI.PLANET_NONE;
+        }
+        if (IsHost)
+        {
+            Multiplayer.Session.Server.SendPacketToStarExclude(packet, planet.star.id, conn);
+            Multiplayer.Session.Vegetation.CaptureRemote(author);
         }
     }
 
@@ -117,7 +142,8 @@ internal class FoundationBlueprintPasteProcessor : PacketProcessor<FoundationBlu
         }
     }
 
-    static void RemoveVeges(PlanetFactory planetFactory, Dictionary<int, int> heightLevelChanges)
+    static void RemoveVeges(PlanetFactory planetFactory, Dictionary<int, int> heightLevelChanges,
+        VegetableCollection collector)
     {
         PlanetRawData planetRawData = planetFactory.planet.data;
         VegeData[] vegePool = planetFactory.vegePool;
@@ -130,6 +156,7 @@ internal class FoundationBlueprintPasteProcessor : PacketProcessor<FoundationBlu
                 int terrainIndex = planetRawData.QueryIndex(vegePool[vegetationIndex].pos);
                 if (heightLevelChanges.TryGetValue(terrainIndex, out int modificationLevel) && modificationLevel >= 3)
                 {
+                    collector?.AddVegeToPlayer(vegePool[vegetationIndex].protoId, 1);
                     planetFactory.RemoveVegeWithComponents(vegetationIndex);
                 }
             }

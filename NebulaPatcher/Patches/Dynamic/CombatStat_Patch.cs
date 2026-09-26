@@ -12,6 +12,40 @@ namespace NebulaPatcher.Patches.Dynamic;
 internal class CombatStat_Patch
 {
     [HarmonyPrefix]
+    [HarmonyPatch(nameof(CombatStat.HandleZeroHp))]
+    public static bool HandleZeroHp_Prefix(ref CombatStat __instance)
+    {
+        if (!Multiplayer.IsActive || Multiplayer.Session.IsServer ||
+            __instance.objectType != (int)EObjectType.Enemy)
+        {
+            return true;
+        }
+
+        var enemyId = __instance.objectId;
+        var astroId = __instance.originAstroId;
+        EnemyData[] pool;
+        if (astroId > 1000000)
+        {
+            pool = GameMain.spaceSector?.enemyPool;
+        }
+        else
+        {
+            pool = GameMain.galaxy?.PlanetById(astroId)?.factory?.enemyPool;
+        }
+
+        // An orphaned combat stat still needs vanilla cleanup. Only the host may
+        // finalize an enemy that is present in the client's enemy pool.
+        if (pool == null || enemyId <= 0 || enemyId >= pool.Length || pool[enemyId].id != enemyId)
+        {
+            return true;
+        }
+
+        __instance.hp = 1;
+        Multiplayer.Session.Enemies.RequestAuthoritativeState(astroId, enemyId);
+        return false;
+    }
+
+    [HarmonyPrefix]
     [HarmonyPatch(nameof(CombatStat.TickSkillLogic))]
     public static void TickSkillLogic_Prefix(ref CombatStat __instance)
     {

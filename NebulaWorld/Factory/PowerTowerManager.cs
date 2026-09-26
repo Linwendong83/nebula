@@ -27,12 +27,27 @@ public sealed class PowerTowerManager : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    // The game world starts ticking before the handshake assigns local player data
+    // (e.g. while a password prompt is up), and LocalPlayer.Id throws while Data is null.
+    private static bool TryGetLocalPlayerId(out ushort id)
+    {
+        var data = Multiplayer.Session?.LocalPlayer?.Data;
+        if (data != null)
+        {
+            id = data.PlayerId;
+            return true;
+        }
+        id = 0;
+        return false;
+    }
+
     // Called before the local factory's power calculation, on its simulation thread.
     public void UpdateLocalState(PowerSystem powerSystem, bool multithreaded)
     {
         var player = GameMain.mainPlayer;
         var planetId = powerSystem.factory.planetId;
         if (player is null || player.planetId != planetId || GameMain.localPlanet?.id != planetId) return;
+        if (!TryGetLocalPlayerId(out var localPlayerId)) return;
         int generation;
         lock (localStateLock)
         {
@@ -70,13 +85,14 @@ public sealed class PowerTowerManager : IDisposable
         {
             // A leave-planet or demolition event can invalidate a simulation already in flight.
             if (disposed || generation != localStateGeneration || GameMain.localPlanet?.id != planetId) return;
-            state.Replace(Multiplayer.Session.LocalPlayer.Id, planetId, nodes);
+            state.Replace(localPlayerId, planetId, nodes);
         }
     }
 
     // Called by network Update on the main thread, never while holding a state lock.
     public void SendLocalStateIfChanged()
     {
+        if (!TryGetLocalPlayerId(out var localPlayerId)) return;
         var player = GameMain.mainPlayer;
         if (GameMain.localPlanet == null || player is null || !player.isAlive ||
             player.planetId != GameMain.localPlanet.id || player.mecha.coreEnergy >= player.mecha.coreEnergyCap)
@@ -84,7 +100,7 @@ public sealed class PowerTowerManager : IDisposable
             ClearLocalState();
         }
 
-        var snapshot = state.GetPlayerState(Multiplayer.Session.LocalPlayer.Id);
+        var snapshot = state.GetPlayerState(localPlayerId);
         if (lastSent != null && lastSent.PlanetId == snapshot.PlanetId &&
             lastSent.NodeIds.SequenceEqual(snapshot.NodeIds)) return;
 
@@ -97,21 +113,21 @@ public sealed class PowerTowerManager : IDisposable
         lock (localStateLock)
         {
             localStateGeneration++;
-            state.RemovePlayer(Multiplayer.Session.LocalPlayer.Id);
+            if (TryGetLocalPlayerId(out var localPlayerId)) state.RemovePlayer(localPlayerId);
         }
     }
 
     public bool ApplyRemoteState(PowerTowerChargerUpdate snapshot)
     {
         // An echo from the host can be older than our current simulation tick.
-        return snapshot.PlayerId != Multiplayer.Session.LocalPlayer.Id &&
-               state.Replace(snapshot.PlayerId, snapshot.PlanetId, snapshot.NodeIds);
+        if (TryGetLocalPlayerId(out var localPlayerId) && snapshot.PlayerId == localPlayerId) return false;
+        return state.Replace(snapshot.PlayerId, snapshot.PlanetId, snapshot.NodeIds);
     }
 
     public int GetChargerCount(int planetId, int nodeId) => state.GetChargerCount(planetId, nodeId);
 
     public bool IsLocalCharging(int planetId, int nodeId) =>
-        state.IsCharging(Multiplayer.Session.LocalPlayer.Id, planetId, nodeId);
+        TryGetLocalPlayerId(out var localPlayerId) && state.IsCharging(localPlayerId, planetId, nodeId);
 
     public PowerTowerChargerUpdate GetPlayerState(ushort playerId) => state.GetPlayerState(playerId);
 

@@ -20,7 +20,7 @@ using NebulaModel.Utils;
 using NebulaWorld.MonoBehaviours;
 using NebulaWorld.MonoBehaviours.Local;
 using NebulaWorld.MonoBehaviours.Local.Chat;
-using NebulaWorld.UIPlayerList;
+using NebulaWorld.MonoBehaviours.Remote;
 using UnityEngine;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
@@ -37,8 +37,6 @@ public class SimulatedWorld : IDisposable
 {
     private readonly ThreadSafe threadSafe = new();
     private LocalPlayerMovement localPlayerMovement;
-
-    private Text pingIndicator;
 
     private bool IsPlayerJoining { get; set; }
 
@@ -104,6 +102,7 @@ public class SimulatedWorld : IDisposable
                 player.Data.Mecha.UpdateMech(GameMain.mainPlayer);
                 FixPlayerAfterImport();
                 Multiplayer.Session.Life.RestoreLocal((PlayerData)player.Data);
+                Multiplayer.Session.Vegetation.RestoreLocal(((PlayerData)player.Data).VegetableCollectionData);
             }
         }
 
@@ -145,9 +144,6 @@ public class SimulatedWorld : IDisposable
             // Refresh Logistics Distributor traffic for player delivery package changes
             GameMain.mainPlayer.factory?.transport.RefreshDispenserTraffic();
 
-            // Enable Ping Indicator for Clients (Entry-level disabled)
-            // DisplayPingIndicator();
-
             // Notify the server that we are done loading the game
             var clientCert = CryptoUtils.GetPublicKey(CryptoUtils.GetOrCreateUserCert());
             Multiplayer.Session.Network.SendPacket(new SyncComplete(clientCert));
@@ -163,14 +159,6 @@ public class SimulatedWorld : IDisposable
             InGamePopup.FadeOut();
         }
 
-        // store original sand count of host if we are syncing it to preserve it when saving the game
-        if (Config.Options.SyncSoil)
-        {
-            if (player != null)
-            {
-                player.Data.Mecha.SandCount = GameMain.mainPlayer.sandCount;
-            }
-        }
         // Set the name of local player in starmap from Icarus to user name
         if (player != null)
         {
@@ -180,8 +168,7 @@ public class SimulatedWorld : IDisposable
         localPlayerMovement = GameMain.mainPlayer.gameObject.AddComponentIfMissing<LocalPlayerMovement>();
         // ChatManager should exist continuously until the game is closed
         GameMain.mainPlayer.gameObject.AddComponentIfMissing<ChatManager>();
-        // Load the Player List Window (Entry-level disabled)
-        // GameMain.mainPlayer.gameObject.AddComponentIfMissing<UIPlayerWindow>();
+        // The player list is part of ChatManager's canvas overlay.
     }
 
     public static void FixPlayerAfterImport()
@@ -189,8 +176,8 @@ public class SimulatedWorld : IDisposable
         var player = GameMain.mainPlayer;
 
         // Mimic MechaForge.Init(Mecha _mecha)
-        player.mecha.forge.mecha = GameMain.mainPlayer.mecha;
-        player.mecha.forge.player = GameMain.mainPlayer;
+        player.mecha.forge.SetHiddenProperty(nameof(MechaForge.mecha), GameMain.mainPlayer.mecha);
+        player.mecha.forge.SetHiddenProperty(nameof(MechaForge.player), GameMain.mainPlayer);
         player.mecha.forge.gameHistory = GameMain.data.history;
         player.mecha.forge.gameHistory = GameMain.data.history;
         player.mecha.forge.bottleneckItems = new HashSet<int>();
@@ -246,12 +233,6 @@ public class SimulatedWorld : IDisposable
         // Sync overrideName of planets and stars
         player.SendPacket(new NameInputPacket(GameMain.galaxy));
 
-        // add together player sand count and tell others if we are syncing soil
-        if (Config.Options.SyncSoil)
-        {
-            GameMain.mainPlayer.sandCount += player.Data.Mecha.SandCount;
-            Multiplayer.Session.Network.SendPacket(new PlayerSandCount(GameMain.mainPlayer.sandCount));
-        }
         // Initialize the new player's view without interrupting anybody else's charging.
         Multiplayer.Session.PowerTowers.SendSnapshot(player.Connection);
 
@@ -281,13 +262,6 @@ public class SimulatedWorld : IDisposable
     public static void OnPlayerLeftGame(INebulaPlayer player)
     {
         Multiplayer.Session.World.DestroyRemotePlayerModel(player.Id);
-
-        if (Config.Options.SyncSoil)
-        {
-            GameMain.mainPlayer.sandCount -= player.Data.Mecha.SandCount;
-            UIRoot.instance.uiGame.OnSandCountChanged(GameMain.mainPlayer.sandCount, -player.Data.Mecha.SandCount, (ESandSource)0);
-            Multiplayer.Session.Network.SendPacket(new PlayerSandCount(GameMain.mainPlayer.sandCount));
-        }
 
         // (Host only) Trigger when a connected client leave the game
         Log.Info($"Client{player.Data.PlayerId} - {player.Data.Username} left");
@@ -321,13 +295,10 @@ public class SimulatedWorld : IDisposable
             var model = new RemotePlayerModel(playerData.PlayerId, playerData.Username);
             model.Movement.LocalStarId = playerData.LocalStarId;
             model.Movement.localPlanetId = playerData.LocalPlanetId;
-              remotePlayersModels.Add(playerData.PlayerId, model);
-              Multiplayer.Session.Life.ApplyRemote(playerData.PlayerId, ((PlayerData)playerData).Life);
+            remotePlayersModels.Add(playerData.PlayerId, model);
+            Multiplayer.Session.Life.ApplyRemote(playerData.PlayerId, ((PlayerData)playerData).Life);
 
-            // Show connected message
-            var planetName = GameMain.galaxy.PlanetById(playerData.LocalPlanetId)?.displayName ?? "In space";
-            var message = string.Format("{0} connected ({1})".Translate(), playerData.Username, planetName);
-            ChatManager.Instance.SendChatMessage(message, ChatMessageType.SystemInfoMessage);
+            ChatManager.Instance?.NotifyPlayerPresence(playerData.Username, true);
         }
     }
 
@@ -339,9 +310,7 @@ public class SimulatedWorld : IDisposable
             {
                 return;
             }
-            // Show disconnected message
-            var message = string.Format("{0} disconnected".Translate(), player.Username);
-            ChatManager.Instance.SendChatMessage(message, ChatMessageType.SystemInfoMessage);
+            ChatManager.Instance?.NotifyPlayerPresence(player.Username, false);
 
             player.Destroy();
             remotePlayersModels.Remove(playerId);
@@ -478,86 +447,29 @@ public class SimulatedWorld : IDisposable
         {
             foreach (var playerModel in remotePlayersModels.Select(player => player.Value))
             {
-                TextMesh playerNameText;
-                if (playerModel.InGameNameText != null)
+                if (playerModel.InGameNameText != null || playerModel.PlayerTransform == null)
                 {
-                    playerNameText = playerModel.InGameNameText;
+                    continue;
+                }
+
+                var sourceText = UIRoot.instance?.uiGame?.sailIndicator?.targetText;
+                if (sourceText == null || GameCamera.main == null)
+                {
+                    continue;
+                }
+
+                var tagObject = new GameObject("Nebula Player Name Tag");
+                tagObject.transform.SetParent(playerModel.PlayerTransform, false);
+                var tag = tagObject.AddComponent<RemotePlayerNameTag>();
+                if (tag.Initialize(playerModel, sourceText.font))
+                {
+                    playerModel.InGameNameText = tag.NameText;
                 }
                 else
                 {
-                    var uiSailIndicator_targetText = UIRoot.instance.uiGame.sailIndicator.targetText;
-
-                    // Initialise a new game object to contain the text
-                    var go = new GameObject();
-                    // Make it follow the player transform
-                    go.transform.SetParent(playerModel.PlayerTransform, false);
-                    // Add a meshrenderer and textmesh component to show the text with a different font
-                    var meshRenderer = go.AddComponent<MeshRenderer>();
-                    meshRenderer.sharedMaterial =
-                        uiSailIndicator_targetText.gameObject.GetComponent<MeshRenderer>().sharedMaterial;
-
-                    var textMesh = go.AddComponent<TextMesh>();
-                    // Set the text to be their name
-                    textMesh.text = $"{playerModel.Username}";
-                    // Align it to be centered below them
-                    textMesh.anchor = TextAnchor.UpperCenter;
-                    // Copy the font over from the sail indicator
-                    textMesh.font = uiSailIndicator_targetText.font;
-                    textMesh.fontSize = 36;
-
-                    playerModel.InGameNameText = playerNameText = textMesh;
-                    playerNameText.gameObject.SetActive(true);
+                    Object.Destroy(tagObject);
                 }
-
-                // If the player is not on the same planet or is in space, then do not render their in-world tag
-                if (playerModel.Movement.localPlanetId != Multiplayer.Session.LocalPlayer.Data.LocalPlanetId &&
-                    playerModel.Movement.localPlanetId <= 0)
-                {
-                    playerNameText.gameObject.SetActive(false);
-                }
-                else if (!playerNameText.gameObject.activeSelf)
-                {
-                    playerNameText.gameObject.SetActive(true);
-                }
-
-                // Make sure the text is pointing at the camera
-                var transform = GameCamera.main.transform;
-                playerNameText.transform.rotation = transform.rotation;
-
-                // Resizes the text based on distance from camera for better visual quality
-                var distanceFromCamera =
-                    Vector3.Distance(playerNameText.transform.position, transform.position);
-
-                var scaleRatio = Config.Options.NameTagSize / (GameCamera.instance.planetMode ? 10000f : 30000f);
-                playerNameText.characterSize = scaleRatio * Mathf.Clamp(distanceFromCamera, 20f, 200f);
             }
-        }
-    }
-
-    private void DisplayPingIndicator()
-    {
-        // Entry-level disable: Do not create or show the ping indicator
-        var previousObject = GameObject.Find("Ping Indicator");
-        if (previousObject != null)
-        {
-            previousObject.SetActive(false);
-        }
-        pingIndicator = null;
-    }
-
-    public void HidePingIndicator()
-    {
-        if (pingIndicator != null)
-        {
-            pingIndicator.enabled = false;
-        }
-    }
-
-    public void UpdatePingIndicator(string text)
-    {
-        if (pingIndicator != null)
-        {
-            pingIndicator.text = text;
         }
     }
 

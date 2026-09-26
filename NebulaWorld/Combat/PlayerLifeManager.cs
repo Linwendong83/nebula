@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using NebulaModel.DataStructures;
+using NebulaModel.Logger;
 using NebulaModel.Networking.Serialization;
 using NebulaModel.Packets.Combat.Mecha;
 using NebulaModel.Utils;
@@ -57,8 +58,8 @@ public sealed class PlayerLifeManager : IDisposable
 
     public static void StoreServer(PlayerData player, byte[] snapshot)
     {
-        var restored = new PlayerData();
-        restored.Deserialize(new NetDataReader(snapshot));
+        var restored = TryReadSnapshot(snapshot);
+        if (restored == null) return;
         if (restored.Life.Revision < player.Life.Revision) return;
         restored.PlayerId = player.PlayerId;
         restored.Username = player.Username;
@@ -77,9 +78,8 @@ public sealed class PlayerLifeManager : IDisposable
     {
         var path = ServerPath(player.PersistentId);
         if (!File.Exists(path)) return;
-        var snapshot = new PlayerData();
-        snapshot.Deserialize(new NetDataReader(File.ReadAllBytes(path)));
-        if (snapshot.Life.Revision <= player.Life.Revision) return;
+        var snapshot = TryReadSnapshot(File.ReadAllBytes(path));
+        if (snapshot == null || snapshot.Life.Revision <= player.Life.Revision) return;
         player.Mecha = snapshot.Mecha;
         player.Life = snapshot.Life;
         player.LocalPlanetId = snapshot.LocalPlanetId;
@@ -87,14 +87,34 @@ public sealed class PlayerLifeManager : IDisposable
         player.UPosition = snapshot.UPosition;
     }
 
+    /// <summary>
+    ///     Snapshots on disk can come from older builds with a shorter PlayerData layout. A parse
+    ///     failure must degrade to "no snapshot" — it used to escape into the join handshake and
+    ///     leave the connecting player without any response at all.
+    /// </summary>
+    private static PlayerData TryReadSnapshot(byte[] bytes)
+    {
+        if (bytes == null || bytes.Length == 0) return null;
+        try
+        {
+            var snapshot = new PlayerData();
+            snapshot.Deserialize(new NetDataReader(bytes));
+            return snapshot;
+        }
+        catch (Exception e)
+        {
+            Log.Warn($"Ignoring unreadable player snapshot: {e.Message}");
+            return null;
+        }
+    }
+
     public void RestoreLocal(PlayerData data)
     {
         var path = LocalPath();
         if (File.Exists(path))
         {
-            var snapshot = new PlayerData();
-            snapshot.Deserialize(new NetDataReader(File.ReadAllBytes(path)));
-            if (snapshot.Life.Revision > data.Life.Revision &&
+            var snapshot = TryReadSnapshot(File.ReadAllBytes(path));
+            if (snapshot != null && snapshot.Life.Revision > data.Life.Revision &&
                 (snapshot.Life.DeathCount > data.Life.DeathCount || !snapshot.Life.IsAlive))
             {
                 data.Life = snapshot.Life;
@@ -150,7 +170,7 @@ public sealed class PlayerLifeManager : IDisposable
             player.deathCount = life.DeathCount;
             player.timeSinceKilled = life.TimeSinceKilled;
             player.invincibleTicks = life.InvincibleTicks;
-            if (life.RespawnMode == 2 && model.Life.RespawnMode != 2) player.mechaArmorModel.PrepareRespawn();
+            if (model.RespawnVisual.Observe(model.Life, life)) player.mechaArmorModel.PrepareRespawn();
             model.Life = life;
         }
     }
@@ -161,7 +181,7 @@ public sealed class PlayerLifeManager : IDisposable
         if (model.PlayerInstance.isAlive) return;
         using var scope = new RemoteWreckageScope(model);
         var armor = model.PlayerInstance.mechaArmorModel;
-        if (life.RespawnMode == 2) armor.WreckagesRespawnLogic(life.RespawnTick++);
+        if (life.RespawnMode == 2) armor.WreckagesRespawnLogic(model.RespawnVisual.Advance());
         else
         {
             armor.GameTickWreckages();

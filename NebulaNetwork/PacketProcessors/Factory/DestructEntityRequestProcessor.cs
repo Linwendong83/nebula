@@ -68,6 +68,8 @@ public class DestructEntityRequestProcessor : PacketProcessor<DestructEntityRequ
 
             GameMain.gpuiManager.specifyPlanet = GameMain.galaxy.PlanetById(packet.PlanetId);
             pab.DoDismantleObject(packet.ObjId);
+            if (IsHost && packet.AuthorId > 0 && packet.AuthorId <= ushort.MaxValue)
+                Multiplayer.Session.Vegetation.CaptureRemote((ushort)packet.AuthorId);
             GameMain.gpuiManager.specifyPlanet = pData;
 
             pab.factory = tmpFactory;

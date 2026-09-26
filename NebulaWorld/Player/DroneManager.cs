@@ -109,17 +109,6 @@ public class DroneManager : IDisposable
         }
     }
 
-    public float GetClosestRemotePlayerSqrDistance(Vector3 pos)
-    {
-        var result = float.MaxValue;
-        for (var i = 0; i < localPlayerCount; i++)
-        {
-            var sqrMagnitude = (pos - localPlayerPos[i]).sqrMagnitude;
-            if (sqrMagnitude < result) result = sqrMagnitude;
-        }
-        return result;
-    }
-
     public Vector3 GetPlayerEjectPosition(ushort playerId)
     {
         return cachedPositions.TryGetValue(playerId, out var value) ? value.Position : GameMain.mainPlayer.position;
@@ -130,6 +119,21 @@ public class DroneManager : IDisposable
         crafts.Clear();
         craftRecyleIds.Clear();
         drones.Reset();
+    }
+
+    public void CancelRemoteBuildTarget(PlanetFactory factory, ushort playerId, int prebuildId)
+    {
+        if (factory == null || prebuildId <= 0) return;
+        for (var id = 1; id < drones.cursor; id++)
+        {
+            ref var drone = ref drones.buffer[id];
+            if (drone.id != id || drone.owner != factory.planetId ||
+                crafts[drone.craftId].owner != playerId ||
+                drone.targetObjectId != -prebuildId && drone.nextTarget1ObjectId != -prebuildId &&
+                drone.nextTarget2ObjectId != -prebuildId && drone.nextTarget3ObjectId != -prebuildId)
+                continue;
+            RecycleDrone(factory, ref drone);
+        }
     }
 
     public void UpdateDrones(PlanetFactory factory, ObjectRenderer[] renderers, bool sync_gpu_inst, float dt, long time)

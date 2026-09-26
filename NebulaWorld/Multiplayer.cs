@@ -3,7 +3,6 @@
 using NebulaModel;
 using NebulaModel.Networking;
 using NebulaWorld.Chat;
-using NebulaWorld.SocialIntegration;
 using UnityEngine;
 
 #endregion
@@ -12,6 +11,16 @@ namespace NebulaWorld;
 
 public static class Multiplayer
 {
+    public sealed class ConnectionMemory
+    {
+        public string RecordId { get; set; }
+        public string Address { get; set; }
+        public string Password { get; set; }
+        public string TransientWorldId { get; set; }
+        public NebulaModel.PersonalGoalProfile TransientGoals { get; set; }
+    }
+
+    public static ConnectionMemory LastConnection { get; private set; }
     public static MultiplayerSession Session { get; set; }
 
     public static bool IsActive => Session != null;
@@ -33,10 +42,24 @@ public static class Multiplayer
         Session.Server!.Start();
     }
 
-    public static void JoinGame(IClient client)
+    public static void JoinGame(IClient client, string recordId = null, string address = null, string password = null)
     {
         if (!ProtocolReady) throw new System.InvalidOperationException("Multiplayer protocol patches are unavailable");
         IsLeavingGame = false;
+        if (!string.IsNullOrWhiteSpace(address))
+        {
+            var previous = LastConnection;
+            LastConnection = new ConnectionMemory
+            {
+                RecordId = recordId,
+                Address = address,
+                Password = password ?? "",
+                TransientWorldId = previous?.Address == address && previous.RecordId == recordId
+                    ? previous.TransientWorldId : null,
+                TransientGoals = previous?.Address == address && previous.RecordId == recordId
+                    ? previous.TransientGoals : null
+            };
+        }
 
         Session = new MultiplayerSession(client);
         Session.Client!.Start();
@@ -48,13 +71,9 @@ public static class Multiplayer
 
         var wasGameLoaded = Session?.IsGameLoaded ?? false;
 
-        if (wasGameLoaded)
-        {
-            Session.World.HidePingIndicator();
-        }
-
         Session?.Dispose();
         Session = null;
+        if (wasGameLoaded) IsInMultiplayerMenu = false;
 
         if (wasGameLoaded)
         {
@@ -66,11 +85,16 @@ public static class Multiplayer
         }
         else if (ShouldReturnToJoinMenu)
         {
+            UIRoot.instance.CloseMainMenuUI();
             var overlayCanvasGo = GameObject.Find("Overlay Canvas");
-            var multiplayerMenu = overlayCanvasGo.transform.Find("Nebula - Multiplayer Menu");
-            multiplayerMenu.gameObject.SetActive(true);
+            var multiplayerMenu = overlayCanvasGo?.transform.Find("Nebula - Multiplayer Menu");
+            if (multiplayerMenu != null)
+            {
+                multiplayerMenu.SetAsLastSibling();
+                multiplayerMenu.gameObject.SetActive(true);
+            }
+            else UIRoot.instance.OpenMainMenuUI();
         }
         ChatService.Instance.ClearMessages(_ => true);
-        DiscordManager.UpdateRichPresence(string.Empty, DiscordManager.CreateSecret(), updateTimestamp: true);
     }
 }

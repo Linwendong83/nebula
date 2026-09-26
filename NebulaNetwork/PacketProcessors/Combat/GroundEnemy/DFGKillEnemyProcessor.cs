@@ -20,6 +20,7 @@ public class DFGKillEnemyProcessor : PacketProcessor<DFGKillEnemyPacket>
         if (factory == null || packet.EnemyId >= factory.enemyPool.Length) return;
 
         ref var ptr = ref factory.enemyPool[packet.EnemyId];
+        Multiplayer.Session.Enemies.RecordAuthoritativeRemoval(packet.PlanetId, packet.EnemyId, packet.Generation);
         using (Multiplayer.Session.Combat.IsIncomingRequest.On())
         {
             if (ptr.id > 0)

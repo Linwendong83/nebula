@@ -33,6 +33,13 @@ namespace NebulaPatcher.Patches.Dynamic;
 [HarmonyPatch(typeof(PlanetFactory))]
 internal class PlanetFactory_patch
 {
+    [HarmonyPostfix]
+    [HarmonyPatch(nameof(PlanetFactory.RemovePrebuildWithComponents))]
+    public static void RemovePrebuildWithComponents_Postfix(PlanetFactory __instance, int id)
+    {
+        if (Multiplayer.IsActive) Multiplayer.Session.BuildDispatch.TargetRemoved(__instance, id);
+    }
+
     [HarmonyPrefix]
     [HarmonyPatch(nameof(PlanetFactory.FlushPools))]
     public static bool FlushPools_Prefix()
@@ -141,9 +148,41 @@ internal class PlanetFactory_patch
     {
         if (Multiplayer.IsActive && !Multiplayer.Session.Factories.IsIncomingRequest.Value)
         {
-            Multiplayer.Session.Network.SendPacketToLocalStar(
-                new FoundationBuildUpdatePacket(center, radius, reformSize, veinBuried, fade0));
+            var packet = new FoundationBuildUpdatePacket(center, radius, reformSize, veinBuried, fade0);
+            if (Multiplayer.Session.LocalPlayer.IsHost)
+                Multiplayer.Session.Network.SendPacketToLocalStar(packet);
+            else Multiplayer.Session.Network.SendPacket(packet);
         }
+        if (Multiplayer.IsActive) Multiplayer.Session.Vegetation.EnterBulkAction();
+    }
+
+    [HarmonyFinalizer]
+    [HarmonyPatch(nameof(PlanetFactory.FlattenTerrainReform))]
+    public static void FlattenTerrainReform_Finalizer()
+    {
+        if (Multiplayer.IsActive) Multiplayer.Session.Vegetation.LeaveBulkAction();
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(PlanetFactory.RestoreTerrainReform))]
+    public static void RestoreTerrainReform_Prefix(Vector3 center, float radius, int reformSize,
+        bool veinBuried, float fade0)
+    {
+        if (Multiplayer.IsActive && !Multiplayer.Session.Factories.IsIncomingRequest.Value)
+        {
+            var packet = new FoundationBuildUpdatePacket(center, radius, reformSize, veinBuried, fade0, true);
+            if (Multiplayer.Session.LocalPlayer.IsHost)
+                Multiplayer.Session.Network.SendPacketToLocalStar(packet);
+            else Multiplayer.Session.Network.SendPacket(packet);
+        }
+        if (Multiplayer.IsActive) Multiplayer.Session.Vegetation.EnterBulkAction();
+    }
+
+    [HarmonyFinalizer]
+    [HarmonyPatch(nameof(PlanetFactory.RestoreTerrainReform))]
+    public static void RestoreTerrainReform_Finalizer()
+    {
+        if (Multiplayer.IsActive) Multiplayer.Session.Vegetation.LeaveBulkAction();
     }
 
     [HarmonyPrefix]
@@ -203,14 +242,18 @@ internal class PlanetFactory_patch
     [HarmonyPatch(nameof(PlanetFactory.AddVegeData))]
     public static void AddVegeData_Postfix(PlanetFactory __instance, VegeData vege)
     {
-        if (!Multiplayer.IsActive || Multiplayer.Session.Planets.IsIncomingRequest)
+        if (!Multiplayer.IsActive || Multiplayer.Session.Planets.IsIncomingRequest ||
+            Multiplayer.Session.Vegetation.IsBulkAction)
         {
             return;
         }
         using BinaryUtils.Writer writer = new();
         vege.Export(writer.BinaryWriter);
-        Multiplayer.Session.Network.SendPacketToLocalStar(new VegeAddPacket(__instance.planetId, false,
-            writer.CloseAndGetBytes()));
+        var packet = new VegeAddPacket(__instance.planetId, false, writer.CloseAndGetBytes(),
+            Multiplayer.Session.Vegetation.IsPlanting);
+        if (Multiplayer.Session.LocalPlayer.IsHost)
+            Multiplayer.Session.Network.SendPacketToLocalStar(packet);
+        else Multiplayer.Session.Network.SendPacket(packet);
     }
 
     [HarmonyPostfix]
@@ -223,8 +266,10 @@ internal class PlanetFactory_patch
         }
         using BinaryUtils.Writer writer = new();
         vein.Export(writer.BinaryWriter);
-        Multiplayer.Session.Network.SendPacketToLocalStar(new VegeAddPacket(__instance.planetId, true,
-            writer.CloseAndGetBytes()));
+        var packet = new VegeAddPacket(__instance.planetId, true, writer.CloseAndGetBytes());
+        if (Multiplayer.Session.LocalPlayer.IsHost)
+            Multiplayer.Session.Network.SendPacketToLocalStar(packet);
+        else Multiplayer.Session.Network.SendPacket(packet);
     }
 
     [HarmonyPostfix]
@@ -232,9 +277,14 @@ internal class PlanetFactory_patch
     public static void RemoveVegeWithComponents_Postfix(PlanetFactory __instance, int id)
     {
         if (Multiplayer.IsActive && !Multiplayer.Session.Planets.IsIncomingRequest &&
+            !Multiplayer.Session.Vegetation.IsBulkAction &&
             Multiplayer.Session.Planets.EnableVeinPacket)
         {
-            Multiplayer.Session.Network.SendPacketToLocalStar(new VegeMinedPacket(__instance.planetId, id, 0, false));
+            var packet = new VegeMinedPacket(__instance.planetId, id, 0, false,
+                Multiplayer.Session.Vegetation.IsDirectAction);
+            if (Multiplayer.Session.LocalPlayer.IsHost)
+                Multiplayer.Session.Network.SendPacketToLocalStar(packet);
+            else Multiplayer.Session.Network.SendPacket(packet);
         }
     }
 
@@ -252,10 +302,7 @@ internal class PlanetFactory_patch
             Multiplayer.Session.Network.SendPacketToStar(new VegeMinedPacket(__instance.planetId, id, 0, true),
                 __instance.planet.star.id);
         }
-        else
-        {
-            Multiplayer.Session.Network.SendPacketToLocalStar(new VegeMinedPacket(__instance.planetId, id, 0, true));
-        }
+        else Multiplayer.Session.Network.SendPacket(new VegeMinedPacket(__instance.planetId, id, 0, true));
     }
 
     [HarmonyPostfix]
@@ -582,7 +629,7 @@ internal class PlanetFactory_patch
             if (genPool[powerGenId].gamma)
             {
                 Multiplayer.Session.Network.SendPacketToLocalStar(new RayReceiverChangeLensPacket(powerGenId,
-                    genPool[powerGenId].catalystPoint, genPool[powerGenId].catalystIncPoint, __instance.planetId));
+                    genPool[powerGenId], __instance.planetId));
             }
         }
         if (entityData.powerExcId > 0)
@@ -733,13 +780,7 @@ internal class PlanetFactory_patch
             return true;
         }
 
-        // Client: wait for server to approve the unitId and enmeyId recycle
-        // Make this enemyData appear as empty
-        ref var enemyPtr = ref __instance.enemyPool[enemyId];
-        enemyPtr.isInvincible = true;
-        enemyPtr.id = 0;
-        // The damage packet is authoritative input. A predicted death cannot kill an enemy on the host.
-
+        // Keep the enemy targetable until the host confirms its death.
         return false;
     }
 

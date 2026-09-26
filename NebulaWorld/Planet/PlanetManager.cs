@@ -16,6 +16,7 @@ public class PlanetManager : IDisposable
 
     public Dictionary<int, byte[]> PendingFactories { get; set; } = new();
     public Dictionary<int, byte[]> PendingTerrainData { get; set; } = new();
+    public Dictionary<int, byte[]> PendingBuildAssignments { get; set; } = new();
     public bool EnableVeinPacket { get; set; } = true;
     public static byte[] PreservedDashboardData { get; set; }
 
@@ -23,6 +24,7 @@ public class PlanetManager : IDisposable
     {
         PendingFactories = null;
         PendingTerrainData = null;
+        PendingBuildAssignments = null;
         PreservedDashboardData = null;
         GC.SuppressFinalize(this);
     }
@@ -32,6 +34,7 @@ public class PlanetManager : IDisposable
         Log.Info("UnloadAllFactories");
         var gameData = GameMain.data;
         Multiplayer.Session.Drones.ClearAllRemoteDrones();
+        Multiplayer.Session.BuildDispatch.OnFactoriesUnloaded();
         using (Multiplayer.Session.Ships.PatchLockILS.On())
         {
             for (var i = gameData.factoryCount - 1; i >= 0; i--)

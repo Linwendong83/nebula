@@ -8,7 +8,6 @@ using NebulaModel.Packets;
 using NebulaModel.Packets.Chat;
 using NebulaWorld;
 using NebulaWorld.Chat;
-using NebulaWorld.MonoBehaviours.Local.Chat;
 
 #endregion
 
@@ -19,12 +18,6 @@ internal class NewChatMessageProcessor : PacketProcessor<NewChatMessagePacket>
 {
     protected override void ProcessPacket(NewChatMessagePacket packet, NebulaConnection conn)
     {
-        if (ChatManager.Instance == null)
-        {
-            Log.Warn("Unable to process chat packet, chat window assets were not loaded properly");
-            return;
-        }
-
         if (IsHost)
         {
             Server.SendPacketExclude(packet, conn);

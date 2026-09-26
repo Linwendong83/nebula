@@ -17,6 +17,8 @@ public class DFSRemoveEnemyDeferredProcessor : PacketProcessor<DFSRemoveEnemyDef
     {
         var spaceSector = GameMain.spaceSector;
         if (packet.EnemyId <= 0 || packet.EnemyId >= spaceSector.enemyCursor) return;
+        Multiplayer.Session.Enemies.RecordAuthoritativeRemoval(0, packet.EnemyId,
+            Multiplayer.Session.Generations.Peek(0, packet.EnemyId));
 
         using (Multiplayer.Session.Enemies.IsIncomingRequest.On())
         {

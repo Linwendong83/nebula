@@ -11,7 +11,6 @@ using HarmonyLib;
 using NebulaModel;
 using NebulaModel.Attributes;
 using NebulaModel.Logger;
-using NebulaWorld;
 using NebulaWorld.MonoBehaviours.Local;
 using NGPT;
 using UnityEngine;
@@ -26,28 +25,26 @@ namespace NebulaPatcher.Patches.Dynamic;
 [HarmonyPatch(typeof(UIOptionWindow))]
 internal class UIOptionWindow_Patch
 {
-    private const float SubtabOffset = 160f;
-
     // Templates
     private static RectTransform checkboxTemplate;
     private static RectTransform comboBoxTemplate;
     private static RectTransform sliderTemplate;
     private static RectTransform inputTemplate;
-    private static RectTransform subtabTemplate;
     private static RectTransform labelTemplate;
     private static RectTransform multiplayerContent;
     private static int multiplayerTabIndex;
     private static Dictionary<string, Action> tempToUICallbacks;
     private static readonly List<Action> languageCallbacks = [];
     private static MultiplayerOptions tempMultiplayerOptions = new();
-
-    // Sub tabs
-    private static readonly List<UIButton> subtabButtons = [];
-    private static readonly List<Text> subtabTexts = [];
-    private static readonly List<Transform> subtabContents = [];
     private static RectTransform contentContainer;
-    private static Image subtabSlider;
-    private static int subtabIndex = -1;
+
+    private const float TopPadding = 15f;
+    private const float RowHeight = 40f;
+    private const float LabelX = 30f;
+    private const float LabelWidth = 260f;
+    private const float ControlX = 295f;
+    private const float ControlWidth = 200f;
+    private const float ControlHeight = 30f;
 
     [HarmonyPostfix]
     [HarmonyPatch(nameof(UIOptionWindow._OnCreate))]
@@ -59,41 +56,6 @@ internal class UIOptionWindow_Patch
         Localization.OnLanguageChange -= RefreshTranslations;
         Localization.OnLanguageChange += RefreshTranslations;
         tempMultiplayerOptions = new();
-
-        // Clear static lists from previous window creation
-        subtabButtons.Clear();
-        subtabTexts.Clear();
-        subtabContents.Clear();
-        subtabIndex = -1;
-
-        // Diagnostic: Log UI structure (debug only)
-        for (int i = 0; i < __instance.tabButtons.Length; i++)
-        {
-            var btn = __instance.tabButtons[i];
-        }
-        for (int i = 0; i < __instance.tabTweeners.Length; i++)
-        {
-            var tw = __instance.tabTweeners[i];
-            foreach (Transform child in tw.transform)
-            {
-            }
-        }
-
-        // Check Video tab list structure (Tweener[0])
-        var videoList = __instance.tabTweeners[0].transform.Find("list");
-        if (videoList != null)
-        {
-            var scrollContent = videoList.Find("scroll-view/viewport/content");
-            if (scrollContent != null)
-            {
-                foreach (Transform child in scrollContent)
-                {
-                    foreach (Transform subchild in child)
-                    {
-                    }
-                }
-            }
-        }
 
         // Add multiplayer tab button
         var tabButtons = __instance.tabButtons;
@@ -122,7 +84,6 @@ internal class UIOptionWindow_Patch
         var contentRectTransform = tabTweeners[4].GetComponent<RectTransform>();
         multiplayerContent = Object.Instantiate(contentRectTransform, contentRectTransform.parent, true);
         multiplayerContent.name = "multiplayer-content";
-        multiplayerContent.localPosition += new Vector3(0, -65, 0);
 
         // Add revert button
         var newContents = tabTweeners.AddToArray(multiplayerContent.GetComponent<Tweener>());
@@ -132,67 +93,65 @@ internal class UIOptionWindow_Patch
         var newRevertButtons = revertButtons.AddToArray(revertButton.GetComponent<UIButton>());
         __instance.revertButtons = newRevertButtons;
 
-        // Remove unwanted GameObject
+        // The cloned tab still contains the game's combo boxes. Destroy them before the tab is shown,
+        // otherwise SetTabIndex activates a UIComboBox whose dropdown was not duplicated and Awake throws.
+        var staleTabChildren = new List<GameObject>();
         foreach (RectTransform child in multiplayerContent)
         {
             if (child != revertButton)
             {
-                Object.Destroy(child.gameObject);
+                staleTabChildren.Add(child.gameObject);
             }
         }
-
-        // Add subtab-bar for config categories
-        var subtabsBar = (RectTransform)Object.Instantiate(multiplayerTab.parent, multiplayerContent);
-        subtabSlider = Object.Instantiate(__instance.tabSlider, subtabsBar);
-        subtabsBar.name = "subtab-line";
-        subtabsBar.anchoredPosition = new Vector2(0, 25);
-        subtabsBar.anchoredPosition3D = new Vector3(0, 25);
-
-        // Set up default subtab "General"
-        RectTransform subtab = null;
-        foreach (RectTransform child in subtabsBar)
+        foreach (var staleChild in staleTabChildren)
         {
-            switch (child.name)
-            {
-                case "tab-button-multiplayer":
-                    subtab = child;
-                    break;
-                case "bar":
-                    subtabSlider = child.GetComponentInChildren<Image>();
-                    break;
-                default:
-                    Object.Destroy(child.gameObject);
-                    break;
-            }
+            Object.DestroyImmediate(staleChild);
         }
-        if (subtab != null)
-        {
-            subtab.localPosition = new Vector3(20, 38, 0);
-            subtabButtons.Add(subtab.GetComponent<UIButton>());
-            subtab.name = $"tab-button-{subtabButtons.Count}";
-            var subtabText = subtab.GetComponentInChildren<Text>();
-            NebulaLocalizedText.Set(subtabText, "General");
-            subtabTexts.Add(subtabText);
-            subtabTemplate = subtab;
-        }
-        var generalContent = new GameObject("General", typeof(RectTransform));
-        var generalRect = generalContent.GetComponent<RectTransform>();
-        generalRect.anchorMin = Vector2.zero;
-        generalRect.anchorMax = Vector2.one;
-        generalRect.offsetMin = Vector2.zero;
-        generalRect.offsetMax = Vector2.zero;
-        subtabContents.Add(generalContent.transform);
 
         // Add ScrollView
-        var list = Object.Instantiate(tabTweeners[3].transform.Find("list").GetComponent<RectTransform>(), multiplayerContent);
+        var sourceList = tabTweeners[2]?.transform.Find("list")
+                      ?? tabTweeners[0]?.transform.Find("list")
+                      ?? tabTweeners[3]?.transform.Find("list");
+
+        if (sourceList == null)
+        {
+            Log.Error("Failed to find list in tabTweeners!");
+            return;
+        }
+
+        var sourceListRect = sourceList.GetComponent<RectTransform>();
+        var list = Object.Instantiate(sourceListRect, multiplayerContent, false);
         list.name = "list";
-        list.offsetMax = Vector2.zero;
+        list.anchorMin = sourceListRect.anchorMin;
+        list.anchorMax = sourceListRect.anchorMax;
+        list.pivot = sourceListRect.pivot;
+        list.anchoredPosition = sourceListRect.anchoredPosition;
+        list.sizeDelta = sourceListRect.sizeDelta;
+        list.offsetMin = new Vector2(sourceListRect.offsetMin.x, Mathf.Max(sourceListRect.offsetMin.y, 60f));
+        list.offsetMax = new Vector2(sourceListRect.offsetMax.x, 0f);
+
         var listContent = list.Find("scroll-view/viewport/content").GetComponent<RectTransform>();
+        var staleRows = new List<GameObject>();
         foreach (RectTransform child in listContent)
         {
-            Object.Destroy(child.gameObject);
+            staleRows.Add(child.gameObject);
+        }
+        foreach (var stale in staleRows)
+        {
+            Object.DestroyImmediate(stale);
+        }
+        var leftoverCombos = list.GetComponentsInChildren<UIComboBox>(true);
+        for (var i = 0; i < leftoverCombos.Length; i++)
+        {
+            var combo = leftoverCombos[i];
+            if (combo == null || combo.gameObject == list.gameObject) continue;
+            Object.DestroyImmediate(combo.gameObject);
         }
         contentContainer = listContent;
+        contentContainer.anchorMin = new Vector2(0, 1);
+        contentContainer.anchorMax = new Vector2(1, 1);
+        contentContainer.pivot = new Vector2(0, 1);
+        contentContainer.anchoredPosition = Vector2.zero;
 
         // Find control templates - get actual controls, not their parent container
         // The game now uses separate labels/comps containers, so we need to get individual controls
@@ -230,34 +189,24 @@ internal class UIOptionWindow_Patch
             return;
         }
 
-        // Create input template from checkbox + input field
-        inputTemplate = CreateRowTemplate(labelTemplate, listContent);
-        var inputField = Object.Instantiate(
-            UIRoot.instance.saveGameWindow.nameInput.transform.GetComponent<RectTransform>(),
-            inputTemplate, false);
-        inputField.anchoredPosition = new Vector2(250, 0);
-        inputField.sizeDelta = new Vector2(200, 35);
-        inputTemplate.gameObject.SetActive(false);
+        inputTemplate = CreateInputTemplate(multiplayerContent);
+        if (inputTemplate == null)
+        {
+            Log.Error("Failed to create an input field template for multiplayer options!");
+            return;
+        }
 
+        var visibleRows = 0;
         try
         {
-            AddMultiplayerOptionsProperties();
+            visibleRows = AddMultiplayerOptionsProperties();
         }
         catch (Exception ex)
         {
             Log.Error($"Failed to add multiplayer options: {ex}");
         }
 
-        // Attach contents to main container
-        for (var i = 0; i < subtabContents.Count; i++)
-        {
-            subtabContents[i].SetParent(listContent);
-            subtabContents[i].localPosition = Vector3.zero;
-            subtabContents[i].localScale = Vector3.one;
-            subtabButtons[i].data = i;
-            subtabButtons[i].onClick += OnSubtabButtonClick;
-        }
-        SetSubtabIndex(0);
+        contentContainer.sizeDelta = new Vector2(contentContainer.sizeDelta.x, TopPadding + RowHeight * visibleRows + 20f);
     }
 
     [HarmonyPostfix]
@@ -268,6 +217,19 @@ internal class UIOptionWindow_Patch
         tempToUICallbacks?.Clear();
         Localization.OnLanguageChange -= RefreshTranslations;
         languageCallbacks.Clear();
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(UIOptionWindow._OnUpdate))]
+    [SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "Original Function Name")]
+    public static void _OnUpdate_Prefix()
+    {
+        // VFInput.escape is latched for the whole key-down frame and closes this window.
+        // Eat it while a shortcut is being captured, including the frame after capture ends.
+        if (VFInput.escape && KeyBinder.ConsumeEscape())
+        {
+            VFInput.UseEscape();
+        }
     }
 
     [HarmonyPrefix]
@@ -316,39 +278,11 @@ internal class UIOptionWindow_Patch
         foreach (var callback in languageCallbacks) callback();
     }
 
-    private static void OnSubtabButtonClick(int idx)
-    {
-        SetSubtabIndex(idx);
-    }
-
-    private static void SetSubtabIndex(int index)
-    {
-        if (subtabIndex != index)
-        {
-            for (var i = 0; i < subtabButtons.Count; i++)
-            {
-                if (i == index)
-                {
-                    subtabTexts[i].color = Color.white;
-                    subtabContents[i].gameObject.SetActive(true);
-                    contentContainer.sizeDelta =
-                        new Vector2(contentContainer.sizeDelta.x, 40 * (subtabContents[i].childCount + 1));
-                }
-                else
-                {
-                    subtabTexts[i].color = new Color(1f, 1f, 1f, 0.55f);
-                    subtabContents[i].gameObject.SetActive(false);
-                }
-            }
-            subtabSlider.rectTransform.anchoredPosition =
-                new Vector2(SubtabOffset * index, subtabSlider.rectTransform.anchoredPosition.y);
-        }
-        subtabIndex = index;
-    }
-
-    private static void AddMultiplayerOptionsProperties()
+    private static int AddMultiplayerOptionsProperties()
     {
         var properties = AccessTools.GetDeclaredProperties(typeof(MultiplayerOptions));
+        var container = contentContainer;
+        var row = 0;
 
         foreach (var prop in properties)
         {
@@ -356,191 +290,197 @@ internal class UIOptionWindow_Patch
             {
                 var displayAttr = prop.GetCustomAttribute<DisplayNameAttribute>();
                 var descriptionAttr = prop.GetCustomAttribute<DescriptionAttribute>();
-                var categoryAttribute = prop.GetCustomAttribute<CategoryAttribute>();
-                // Entry-level disable: Do not display Chat settings subtab or PlayerListHotkey in settings window
-                if (displayAttr == null || categoryAttribute?.Category == "Chat" || prop.Name == "PlayerListHotkey")
+                if (displayAttr == null)
                 {
                     continue;
                 }
-                var index = 0;
-                if (categoryAttribute != null)
-                {
-                    index = subtabTexts.FindIndex(text => text.text.Translate() == categoryAttribute.Category.Translate());
-                    if (index == -1)
-                    {
-                        CreateSubtab(categoryAttribute.Category);
-                        index = subtabTexts.Count - 1;
-                    }
-                }
-                var container = subtabContents[index];
-                var anchorPosition = new Vector2(30, -40 * container.childCount);
 
                 if (prop.PropertyType == typeof(bool))
                 {
-                    CreateBooleanControl(displayAttr, descriptionAttr, prop, anchorPosition, container);
+                    CreateBooleanControl(displayAttr, descriptionAttr, prop, row, container);
                 }
                 else if (prop.PropertyType == typeof(int) || prop.PropertyType == typeof(float) ||
                          prop.PropertyType == typeof(ushort))
                 {
-                    CreateNumberControl(displayAttr, descriptionAttr, prop, anchorPosition, container);
+                    CreateNumberControl(displayAttr, descriptionAttr, prop, row, container);
                 }
                 else if (prop.PropertyType == typeof(string))
                 {
-                    CreateStringControl(displayAttr, descriptionAttr, prop, anchorPosition, container);
+                    CreateStringControl(displayAttr, descriptionAttr, prop, row, container);
                 }
                 else if (prop.PropertyType.IsEnum)
                 {
-                    CreateEnumControl(displayAttr, descriptionAttr, prop, anchorPosition, container);
+                    CreateEnumControl(displayAttr, descriptionAttr, prop, row, container);
                 }
                 else if (prop.PropertyType == typeof(KeyboardShortcut))
                 {
-                    CreateHotkeyControl(displayAttr, descriptionAttr, prop, anchorPosition, container);
+                    CreateHotkeyControl(displayAttr, descriptionAttr, prop, row, container);
                 }
                 else
                 {
-                    Log.Warn($"MultiplayerOption property \"${prop.Name}\" of type \"{prop.PropertyType}\" not supported.");
+                    Log.Warn($"MultiplayerOption property \"{prop.Name}\" of type \"{prop.PropertyType}\" not supported.");
+                    continue;
                 }
+                row++;
             }
             catch (Exception ex)
             {
                 Log.Error($"Failed to create control for property '{prop.Name}': {ex}");
             }
         }
+
+        return row;
     }
 
-    private static void CreateSubtab(string subtabName)
+    private static RectTransform CreateRowBase(Transform container, int row, string labelText, DescriptionAttribute descriptionAttr)
     {
-        var subtab = Object.Instantiate(subtabTemplate, subtabTemplate.parent);
-        var anchoredPosition = subtabTemplate.anchoredPosition;
-        subtab.anchoredPosition = new Vector2(anchoredPosition.x + SubtabOffset * subtabButtons.Count,
-            anchoredPosition.y);
-        subtabButtons.Add(subtab.GetComponent<UIButton>());
-        subtab.name = $"tab-button-{subtabButtons.Count}";
-        var subtabText = subtab.GetComponentInChildren<Text>();
-        NebulaLocalizedText.Set(subtabText, subtabName);
-        subtabTexts.Add(subtabText);
-
-        var content = new GameObject(subtabName, typeof(RectTransform));
-        var contentRect = content.GetComponent<RectTransform>();
-        contentRect.anchorMin = Vector2.zero;
-        contentRect.anchorMax = Vector2.one;
-        contentRect.offsetMin = Vector2.zero;
-        contentRect.offsetMax = Vector2.zero;
-        subtabContents.Add(content.transform);
-    }
-
-    private static RectTransform CreateRowTemplate(RectTransform labelTpl, Transform parent)
-    {
-        // Create a row container with label placeholder
-        var row = new GameObject("row", typeof(RectTransform));
-        var rowRect = row.GetComponent<RectTransform>();
-        rowRect.SetParent(parent, false);
-        rowRect.anchorMin = new Vector2(0, 1);
-        rowRect.anchorMax = new Vector2(1, 1);
-        rowRect.pivot = new Vector2(0, 1);
-        rowRect.sizeDelta = new Vector2(0, 40);
-
-        // Add label
-        var label = Object.Instantiate(labelTpl, rowRect, false);
-        label.anchorMin = new Vector2(0, 0.5f);
-        label.anchorMax = new Vector2(0, 0.5f);
-        label.pivot = new Vector2(0, 0.5f);
-        label.anchoredPosition = new Vector2(10, 0);
-
-        return rowRect;
-    }
-
-    private static RectTransform CreateControlRow(RectTransform controlTemplate, Transform container, Vector2 anchorPosition, string labelText)
-    {
-        // Create row container
-        var row = new GameObject("row", typeof(RectTransform));
-        var rowRect = row.GetComponent<RectTransform>();
+        var rowGo = new GameObject("row", typeof(RectTransform));
+        var rowRect = rowGo.GetComponent<RectTransform>();
         rowRect.SetParent(container, false);
         rowRect.anchorMin = new Vector2(0, 1);
         rowRect.anchorMax = new Vector2(1, 1);
         rowRect.pivot = new Vector2(0, 1);
-        rowRect.sizeDelta = new Vector2(0, 40);
-        rowRect.anchoredPosition = anchorPosition;
+        rowRect.sizeDelta = new Vector2(0, RowHeight);
+        rowRect.anchoredPosition = new Vector2(0, -(TopPadding + row * RowHeight));
+
+        if (descriptionAttr != null)
+        {
+            var tooltip = rowGo.AddComponent<Tooltip>();
+            tooltip.Title = labelText;
+            tooltip.Text = descriptionAttr.Description;
+        }
 
         // Add label
         var label = Object.Instantiate(labelTemplate, rowRect, false);
+        label.name = "label";
         label.anchorMin = new Vector2(0, 0.5f);
         label.anchorMax = new Vector2(0, 0.5f);
         label.pivot = new Vector2(0, 0.5f);
-        label.anchoredPosition = new Vector2(-10, 0);
+        label.anchoredPosition = new Vector2(LabelX, 0);
+        label.sizeDelta = new Vector2(LabelWidth, ControlHeight);
+
         var labelLocalizer = label.GetComponentInChildren<Localizer>();
         if (labelLocalizer != null) labelLocalizer.enabled = false;
         var labelTextComp = label.GetComponentInChildren<Text>();
-        if (labelTextComp != null) NebulaLocalizedText.Set(labelTextComp, labelText);
-
-        // Add control
-        var control = Object.Instantiate(controlTemplate, rowRect, false);
-        control.anchorMin = new Vector2(0, 0.5f);
-        control.anchorMax = new Vector2(0, 0.5f);
-        control.pivot = new Vector2(0, 0.5f);
-        control.anchoredPosition = new Vector2(250, 0);
+        if (labelTextComp != null)
+        {
+            labelTextComp.alignment = TextAnchor.MiddleLeft;
+            NebulaLocalizedText.Set(labelTextComp, labelText);
+        }
 
         return rowRect;
     }
 
-    private static void CreateBooleanControl(DisplayNameAttribute control, DescriptionAttribute descriptionAttr,
-        PropertyInfo prop, Vector2 anchorPosition, Transform container)
+    private static RectTransform CreateInputTemplate(Transform parent)
     {
-        var row = CreateControlRow(checkboxTemplate, container, anchorPosition, control.DisplayName);
-        row.name = prop.Name;
-        if (descriptionAttr != null)
+        InputField sourceInput = null;
+
+        // Try galaxy-seed from main menu first
+        var overlay = GameObject.Find("Overlay Canvas")?.GetComponent<RectTransform>();
+        if (overlay != null)
         {
-            row.gameObject.AddComponent<Tooltip>();
-            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName;
-            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
+            var galaxySelect = overlay.Find("Galaxy Select");
+            var setting = galaxySelect?.Find("setting-group");
+            var galaxySeed = setting?.Find("stretch-transform/galaxy-seed");
+            sourceInput = galaxySeed?.GetComponentInChildren<InputField>(true);
         }
-        var toggle = row.GetComponentInChildren<UIToggle>();
-        toggle.toggle.onValueChanged.RemoveAllListeners();
-        toggle.toggle.onValueChanged.AddListener(value =>
+
+        // Fallback: search UIRoot for any InputField
+        if (sourceInput == null && UIRoot.instance != null)
         {
-            // lock soil setting while in multiplayer game
-            if (control.DisplayName == "Sync Soil" && Multiplayer.IsActive)
+            sourceInput = UIRoot.instance.GetComponentInChildren<InputField>(true);
+        }
+
+        if (sourceInput == null)
+        {
+            Log.Error("Failed to find any InputField template in the game UI!");
+            return null;
+        }
+
+        var clone = Object.Instantiate(sourceInput.gameObject, parent, false);
+        clone.name = "inputTemplate";
+        RemoveSceneTriggers(clone);
+
+        var rect = clone.GetComponent<RectTransform>();
+        rect.sizeDelta = new Vector2(ControlWidth, ControlHeight);
+
+        var input = clone.GetComponent<InputField>();
+        input.text = string.Empty;
+        input.characterLimit = 0;
+        input.lineType = InputField.LineType.SingleLine;
+
+        clone.SetActive(false);
+        return rect;
+    }
+
+    private static void RemoveSceneTriggers(GameObject target)
+    {
+        foreach (var trigger in target.GetComponentsInChildren<EventTrigger>(true))
+        {
+            Object.DestroyImmediate(trigger);
+        }
+    }
+
+    private static void PositionControl(RectTransform controlRect, float width = ControlWidth, float height = ControlHeight)
+    {
+        controlRect.anchorMin = new Vector2(0, 0.5f);
+        controlRect.anchorMax = new Vector2(0, 0.5f);
+        controlRect.pivot = new Vector2(0, 0.5f);
+        controlRect.anchoredPosition = new Vector2(ControlX, 0);
+        controlRect.sizeDelta = new Vector2(width, height);
+    }
+
+    private static void CreateBooleanControl(DisplayNameAttribute control, DescriptionAttribute descriptionAttr,
+        PropertyInfo prop, int rowIdx, Transform container)
+    {
+        var row = CreateRowBase(container, rowIdx, control.DisplayName, descriptionAttr);
+        row.name = prop.Name;
+
+        var controlObj = Object.Instantiate(checkboxTemplate, row, false);
+        controlObj.name = "checkbox";
+        PositionControl(controlObj, 30f, 30f);
+
+        foreach (var text in controlObj.GetComponentsInChildren<Text>(true))
+        {
+            text.text = string.Empty;
+        }
+
+        var toggle = controlObj.GetComponentInChildren<UIToggle>();
+        if (toggle != null)
+        {
+            toggle.toggle.onValueChanged.RemoveAllListeners();
+            toggle.toggle.onValueChanged.AddListener(value =>
             {
-                // reset to saved value if needed
-                if (value == (bool)prop.GetValue(tempMultiplayerOptions, null))
-                {
-                    return;
-                }
-                toggle.isOn = !value;
-                InGamePopup.ShowInfo("Unavailable".Translate(),
-                    "This setting can only be changed while not in game".Translate(), "OK".Translate());
-                return;
-            }
+                prop.SetValue(tempMultiplayerOptions, value, null);
+            });
 
-            prop.SetValue(tempMultiplayerOptions, value, null);
-        });
+            tempToUICallbacks[prop.Name] = () =>
+            {
+                toggle.isOn = (bool)prop.GetValue(tempMultiplayerOptions, null);
+            };
 
-        tempToUICallbacks[prop.Name] = () =>
-        {
             toggle.isOn = (bool)prop.GetValue(tempMultiplayerOptions, null);
-        };
+        }
     }
 
     private static void CreateNumberControl(DisplayNameAttribute control, DescriptionAttribute descriptionAttr,
-        PropertyInfo prop, Vector2 anchorPosition, Transform container)
+        PropertyInfo prop, int rowIdx, Transform container)
     {
-        var rangeAttr = prop.GetCustomAttribute<UIRangeAttribute>();
-        var sliderControl = rangeAttr is { Slider: true };
-
-        var row = CreateControlRow(sliderControl ? sliderTemplate : comboBoxTemplate, container, anchorPosition, control.DisplayName);
+        var row = CreateRowBase(container, rowIdx, control.DisplayName, descriptionAttr);
         row.name = prop.Name;
-        if (descriptionAttr != null)
-        {
-            row.gameObject.AddComponent<Tooltip>();
-            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName;
-            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
-        }
 
+        var rangeAttr = prop.GetCustomAttribute<UIRangeAttribute>();
+        var isSlider = rangeAttr is { Slider: true };
         var isFloatingPoint = prop.PropertyType == typeof(float) || prop.PropertyType == typeof(double);
 
-        if (sliderControl)
+        if (isSlider)
         {
-            var slider = row.GetComponentInChildren<Slider>();
+            var sliderObj = Object.Instantiate(sliderTemplate, row, false);
+            sliderObj.name = "slider";
+            var rect = sliderObj.GetComponent<RectTransform>();
+            PositionControl(rect, ControlWidth, ControlHeight);
+
+            var slider = sliderObj.GetComponentInChildren<Slider>();
             slider.minValue = rangeAttr.Min;
             slider.maxValue = rangeAttr.Max;
             slider.wholeNumbers = !isFloatingPoint;
@@ -548,19 +488,44 @@ internal class UIOptionWindow_Patch
             slider.onValueChanged.RemoveAllListeners();
             slider.onValueChanged.AddListener(value =>
             {
-                prop.SetValue(tempMultiplayerOptions, value, null);
-                sliderThumbText.text = value.ToString(isFloatingPoint ? "0.00" : "0");
+                prop.SetValue(tempMultiplayerOptions, Convert.ChangeType(value, prop.PropertyType), null);
+                if (sliderThumbText != null)
+                {
+                    sliderThumbText.text = value.ToString(isFloatingPoint ? "0.00" : "0");
+                }
             });
 
             tempToUICallbacks[prop.Name] = () =>
             {
-                slider.value = (float)prop.GetValue(tempMultiplayerOptions, null);
-                sliderThumbText.text = slider.value.ToString(isFloatingPoint ? "0.00" : "0");
+                var val = Convert.ToSingle(prop.GetValue(tempMultiplayerOptions, null));
+                slider.value = val;
+                if (sliderThumbText != null)
+                {
+                    sliderThumbText.text = val.ToString(isFloatingPoint ? "0.00" : "0");
+                }
             };
+
+            var initialVal = Convert.ToSingle(prop.GetValue(tempMultiplayerOptions, null));
+            slider.value = initialVal;
+            if (sliderThumbText != null)
+            {
+                sliderThumbText.text = initialVal.ToString(isFloatingPoint ? "0.00" : "0");
+            }
         }
         else
         {
-            var input = row.GetComponentInChildren<InputField>();
+            var inputFieldObj = Object.Instantiate(inputTemplate.gameObject, row, false);
+            inputFieldObj.name = "number-input";
+            inputFieldObj.SetActive(true);
+            var rect = inputFieldObj.GetComponent<RectTransform>();
+            PositionControl(rect, ControlWidth, ControlHeight);
+
+            var input = inputFieldObj.GetComponent<InputField>();
+            input.contentType = isFloatingPoint ? InputField.ContentType.DecimalNumber : InputField.ContentType.IntegerNumber;
+            if (prop.PropertyType == typeof(ushort))
+            {
+                input.characterLimit = 5;
+            }
 
             input.onValueChanged.RemoveAllListeners();
             input.onValueChanged.AddListener(str =>
@@ -574,95 +539,88 @@ internal class UIOptionWindow_Patch
                     {
                         var min = (IComparable)Convert.ChangeType(rangeAttr.Min, prop.PropertyType);
                         var max = (IComparable)Convert.ChangeType(rangeAttr.Max, prop.PropertyType);
-                        if (value.CompareTo(min) < 0)
-                        {
-                            value = min;
-                        }
-
-                        if (value.CompareTo(max) > 0)
-                        {
-                            value = max;
-                        }
-
-                        input.text = value.ToString();
+                        if (value.CompareTo(min) < 0) value = min;
+                        if (value.CompareTo(max) > 0) value = max;
                     }
 
                     prop.SetValue(tempMultiplayerOptions, value, null);
                 }
                 catch
                 {
-                    // If the char is not a number, rollback to previous value
-                    input.text = prop.GetValue(tempMultiplayerOptions, null).ToString();
+                    // Ignore invalid input while typing
                 }
+            });
+
+            input.onEndEdit.RemoveAllListeners();
+            input.onEndEdit.AddListener(_ =>
+            {
+                input.text = prop.GetValue(tempMultiplayerOptions, null)?.ToString() ?? string.Empty;
             });
 
             tempToUICallbacks[prop.Name] = () =>
             {
-                input.text = prop.GetValue(tempMultiplayerOptions, null).ToString();
+                input.text = prop.GetValue(tempMultiplayerOptions, null)?.ToString() ?? string.Empty;
             };
+
+            input.text = prop.GetValue(tempMultiplayerOptions, null)?.ToString() ?? string.Empty;
         }
     }
 
     private static void CreateStringControl(DisplayNameAttribute control, DescriptionAttribute descriptionAttr,
-        PropertyInfo prop, Vector2 anchorPosition, Transform container)
+        PropertyInfo prop, int rowIdx, Transform container)
     {
-        var characterLimitAttr = prop.GetCustomAttribute<UICharacterLimitAttribute>();
+        var row = CreateRowBase(container, rowIdx, control.DisplayName, descriptionAttr);
+        row.name = prop.Name;
+
         var contentTypeAttr = prop.GetCustomAttribute<UIContentTypeAttribute>();
 
-        var row = CreateControlRow(comboBoxTemplate, container, anchorPosition, control.DisplayName);
-        row.name = prop.Name;
-        if (descriptionAttr != null)
-        {
-            row.gameObject.AddComponent<Tooltip>();
-            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName;
-            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
-        }
+        var inputFieldObj = Object.Instantiate(inputTemplate.gameObject, row, false);
+        inputFieldObj.name = "input";
+        inputFieldObj.SetActive(true);
+        var rect = inputFieldObj.GetComponent<RectTransform>();
+        PositionControl(rect, ControlWidth, ControlHeight);
 
-        // Replace combo with input field
-        var comboToRemove = row.GetComponentInChildren<UIComboBox>();
-        if (comboToRemove != null) Object.Destroy(comboToRemove.gameObject);
-
-        var inputField = Object.Instantiate(
-            UIRoot.instance.saveGameWindow.nameInput.transform.GetComponent<RectTransform>(),
-            row, false);
-        inputField.anchoredPosition = new Vector2(250, 0);
-        inputField.sizeDelta = new Vector2(200, 35);
-
-        var input = inputField.GetComponent<InputField>();
-        if (characterLimitAttr != null)
-        {
-            input.characterLimit = characterLimitAttr.Max;
-        }
+        var input = inputFieldObj.GetComponent<InputField>();
         if (contentTypeAttr != null)
         {
             input.contentType = contentTypeAttr.ContentType;
-        }
-        if (control?.DisplayName != null)
-        {
-            tempMultiplayerOptions.ModifyInputFieldAtCreation(control.DisplayName, ref input);
+            if (contentTypeAttr.ContentType == InputField.ContentType.Password)
+            {
+                input.inputType = InputField.InputType.Password;
+                input.asteriskChar = '*';
+                if (input.placeholder is Text ph)
+                {
+                    ph.text = "Password...".Translate();
+                }
+            }
         }
 
         input.onValueChanged.RemoveAllListeners();
-        input.onValueChanged.AddListener(value => { prop.SetValue(tempMultiplayerOptions, value, null); });
+        input.onValueChanged.AddListener(value =>
+        {
+            prop.SetValue(tempMultiplayerOptions, value, null);
+        });
 
         tempToUICallbacks[prop.Name] = () =>
         {
-            input.text = prop.GetValue(tempMultiplayerOptions, null) as string;
+            input.text = prop.GetValue(tempMultiplayerOptions, null) as string ?? string.Empty;
         };
+
+        input.text = prop.GetValue(tempMultiplayerOptions, null) as string ?? string.Empty;
     }
 
     private static void CreateEnumControl(DisplayNameAttribute control, DescriptionAttribute descriptionAttr, PropertyInfo prop,
-        Vector2 anchorPosition, Transform container)
+        int rowIdx, Transform container)
     {
-        var row = CreateControlRow(comboBoxTemplate, container, anchorPosition, control.DisplayName);
+        var row = CreateRowBase(container, rowIdx, control.DisplayName, descriptionAttr);
         row.name = prop.Name;
-        if (descriptionAttr != null)
-        {
-            row.gameObject.AddComponent<Tooltip>();
-            row.gameObject.GetComponent<Tooltip>().Title = control.DisplayName;
-            row.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
-        }
-        var combo = row.GetComponentInChildren<UIComboBox>();
+
+        var comboObj = Object.Instantiate(comboBoxTemplate, row, false);
+        comboObj.name = "combobox";
+        var rect = comboObj.GetComponent<RectTransform>();
+        PositionControl(rect, ControlWidth, ControlHeight);
+
+        var combo = comboObj.GetComponentInChildren<UIComboBox>();
         var names = Enum.GetNames(prop.PropertyType);
         void RefreshItems()
         {
@@ -681,51 +639,38 @@ internal class UIOptionWindow_Patch
         {
             combo.itemIndex = (int)prop.GetValue(tempMultiplayerOptions, null);
         };
+
+        combo.itemIndex = (int)prop.GetValue(tempMultiplayerOptions, null);
     }
 
     private static void CreateHotkeyControl(DisplayNameAttribute control, DescriptionAttribute descriptionAttr,
-        PropertyInfo prop, Vector2 anchorPosition, Transform container)
+        PropertyInfo prop, int rowIdx, Transform container)
     {
-        var element = KeyBinder.CreateKeyBinder(control.DisplayName);
-        element.SetParent(container);
-        element.anchoredPosition = anchorPosition;
-        if (descriptionAttr != null)
+        var row = CreateRowBase(container, rowIdx, control.DisplayName, descriptionAttr);
+        row.name = prop.Name;
+
+        var entryPrefab = UIRoot.instance != null ? UIRoot.instance.optionWindow?.entryPrefab : null;
+        if (entryPrefab == null)
         {
-            element.gameObject.AddComponent<Tooltip>();
-            element.gameObject.GetComponent<Tooltip>().Title = control.DisplayName;
-            element.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
+            Log.Error("Failed to find the game key entry for multiplayer hotkeys!");
+            return;
         }
 
-        var keybinder = element.GetComponent<KeyBinder>();
-        keybinder.OnEdit += hotkey => prop.SetValue(tempMultiplayerOptions, hotkey, null);
+        var current = (KeyboardShortcut)prop.GetValue(tempMultiplayerOptions, null);
+        var fallback = (KeyboardShortcut)prop.GetValue(new MultiplayerOptions(), null);
+        var keyBinder = KeyBinder.Create(row, entryPrefab, fallback);
+        keyBinder.OnEdit = shortcut =>
+        {
+            prop.SetValue(tempMultiplayerOptions, shortcut, null);
+        };
+        languageCallbacks.Add(keyBinder.RefreshText);
+
         tempToUICallbacks[prop.Name] = () =>
         {
-            keybinder.SetShortcut((KeyboardShortcut)prop.GetValue(tempMultiplayerOptions, null));
+            keyBinder.SetShortcut((KeyboardShortcut)prop.GetValue(tempMultiplayerOptions, null));
         };
-    }
 
-    private static void SetupUIElement(RectTransform element, DisplayNameAttribute display,
-        DescriptionAttribute descriptionAttr, PropertyInfo prop, Vector2 anchorPosition)
-    {
-        element.gameObject.SetActive(true);
-        element.name = prop.Name;
-        element.anchoredPosition = anchorPosition;
-        if (descriptionAttr != null)
-        {
-            element.gameObject.AddComponent<Tooltip>();
-            element.gameObject.GetComponent<Tooltip>().Title = display.DisplayName;
-            element.gameObject.GetComponent<Tooltip>().Text = descriptionAttr.Description;
-        }
-        var localizer = element.GetComponentInChildren<Localizer>();
-        if (localizer != null)
-        {
-            localizer.enabled = false;
-        }
-        var text = element.GetComponentInChildren<Text>();
-        if (text != null)
-        {
-            NebulaLocalizedText.Set(text, display.DisplayName);
-        }
+        keyBinder.SetShortcut(current);
     }
 
     public class Tooltip : MonoBehaviour, IPointerEnterHandler, IPointerExitHandler
@@ -756,181 +701,237 @@ internal class UIOptionWindow_Patch
         }
     }
 
-    // MyKeyBinder modified from LSTM: https://github.com/hetima/DSP_LSTM/blob/main/LSTM/MyKeyBinder.cs
     public class KeyBinder : MonoBehaviour
     {
+        private static readonly List<KeyBinder> Active = [];
+
         public Action<KeyboardShortcut> OnEdit;
-
-        private Text functionText;
+        private UIButton button;
+        private UIButton defaultButton;
+        private UIButton noneButton;
         private Text keyText;
-        private UnityEngine.UI.Toggle setTheKeyToggle;
-        private UIButton inputUIButton;
         private Text waitingText;
-        private bool nextNotOn;
         private KeyboardShortcut shortcut;
+        private KeyboardShortcut defaultShortcut;
+        private Color builtinColor = Color.white;
+        private Color overrideColor = Color.white;
+        private bool listening;
+        private bool suppressEscape;
+        private int armFrame = -1;
 
-        public static RectTransform CreateKeyBinder(string label = "")
+        public static KeyBinder Create(RectTransform row, UIKeyEntry entryPrefab, KeyboardShortcut fallback)
         {
-            var optionWindow = UIRoot.instance.optionWindow;
-            var uikeyEntry = Instantiate(optionWindow.entryPrefab);
-            uikeyEntry.gameObject.SetActive(true);
+            // Keep the prefab instance whole: the row must look exactly like the game's key
+            // entries (key column at 450, bind bar at 800, default/none buttons at 930/1020).
+            // Only the UIKeyEntry component is removed - its Update() depends on BuiltinKey and
+            // the game's option window. Destroying any child (e.g. the waiting text that lives
+            // under the prefab root) would leave destroyed transforms behind and NRE later.
+            var entryObject = Object.Instantiate(entryPrefab.gameObject, row, false);
+            entryObject.SetActive(true);
+            var entry = entryObject.GetComponent<UIKeyEntry>();
 
-            var go = uikeyEntry.gameObject;
-            go.name = "keybinder";
-            var kb = go.AddComponent<KeyBinder>();
+            var functionText = entry.functionText;
+            var binder = row.gameObject.AddComponent<KeyBinder>();
+            binder.defaultShortcut = fallback;
+            binder.builtinColor = entry.builtinColor;
+            binder.overrideColor = entry.overrideColor;
+            binder.button = entry.inputUIButton;
+            binder.defaultButton = entry.setDefaultUIButton;
+            binder.noneButton = entry.setNoneKeyUIButton;
+            binder.keyText = entry.keyText;
+            binder.waitingText = entry.waitingText;
+            Object.DestroyImmediate(entry);
 
-            kb.functionText = uikeyEntry.functionText;
-            NebulaLocalizedText.Set(kb.functionText, label);
-            kb.functionText.fontSize = 18;
+            // The row label created by CreateRowBase already shows the option name, so the
+            // prefab's own function text (rendered by the entry root) would double it.
+            if (functionText != null)
+            {
+                functionText.enabled = false;
+            }
 
-            kb.keyText = uikeyEntry.keyText;
-            kb.keyText.fontSize = 18;
-            kb.keyText.transform.localPosition += new Vector3(-200f, 0f);
+            var entryRect = (RectTransform)entryObject.transform;
+            entryRect.anchorMin = new Vector2(0f, 0.5f);
+            entryRect.anchorMax = new Vector2(0f, 0.5f);
+            entryRect.pivot = new Vector2(0f, 0.5f);
+            entryRect.anchoredPosition = new Vector2(LabelX, 0f);
+            entryRect.localScale = Vector3.one;
 
-            kb.setTheKeyToggle = uikeyEntry.setTheKeyToggle;
-            kb.inputUIButton = uikeyEntry.inputUIButton;
-            kb.inputUIButton.onClick += kb.OnInputUIButtonClick;
-            kb.waitingText = uikeyEntry.waitingText;
-            kb.inputUIButton.transform.parent.localPosition += new Vector3(-350f, 0f);
-
-            Destroy(uikeyEntry.setDefaultUIButton.gameObject);
-            Destroy(uikeyEntry.setNoneKeyUIButton.gameObject);
-            Destroy(uikeyEntry);
-            var rect = go.transform as RectTransform;
-            rect.anchorMax = new Vector2(0, 0);
-            rect.anchorMin = new Vector2(0, 0);
-            return rect;
+            binder.button.onClick += binder.OnButtonClick;
+            binder.defaultButton.onClick += binder.OnDefaultClick;
+            binder.noneButton.onClick += binder.OnNoneClick;
+            binder.RefreshText();
+            return binder;
         }
 
-        public void SetShortcut(KeyboardShortcut keyboardShortcut)
+        public static bool ConsumeEscape()
         {
-            shortcut = keyboardShortcut;
-            keyText.text = shortcut.Serialize();
-            OnEdit.Invoke(shortcut);
+            var eat = false;
+            foreach (var binder in Active)
+            {
+                if (!binder.listening && !binder.suppressEscape) continue;
+                eat = true;
+                binder.StopListening();
+                binder.suppressEscape = false;
+            }
+            return eat;
+        }
+
+        public void SetShortcut(KeyboardShortcut newShortcut)
+        {
+            shortcut = newShortcut;
+            RefreshText();
+        }
+
+        public void RefreshText()
+        {
+            if (keyText == null) return;
+            keyText.text = Format(shortcut);
+            keyText.color = shortcut.Equals(defaultShortcut) ? builtinColor : overrideColor;
+        }
+
+        private void OnEnable()
+        {
+            if (!Active.Contains(this)) Active.Add(this);
+        }
+
+        private void OnDisable()
+        {
+            Active.Remove(this);
+            if (listening) StopListening();
+        }
+
+        private void OnDestroy()
+        {
+            Active.Remove(this);
+            if (button != null) button.onClick -= OnButtonClick;
+            if (defaultButton != null) defaultButton.onClick -= OnDefaultClick;
+            if (noneButton != null) noneButton.onClick -= OnNoneClick;
+        }
+
+        private void OnDefaultClick(int _) => Apply(defaultShortcut);
+
+        private void OnNoneClick(int _) => Apply(KeyboardShortcut.Empty);
+
+        private void OnButtonClick(int _)
+        {
+            if (listening)
+            {
+                StopListening();
+                return;
+            }
+
+            listening = true;
+            armFrame = Time.frameCount;
+            button.highlighted = true;
+            waitingText.gameObject.SetActive(true);
         }
 
         private void Update()
         {
-            if (!setTheKeyToggle.isOn && inputUIButton.highlighted)
+            if (!listening) return;
+
+            button.highlighted = true;
+            waitingText.gameObject.SetActive(true);
+
+            if (Input.GetKeyDown(KeyCode.Escape) || VFInput.escape)
             {
-                setTheKeyToggle.isOn = true;
+                suppressEscape = true;
+                StopListening();
+                return;
             }
-            if (setTheKeyToggle.isOn)
+
+            if (Time.frameCount == armFrame) return;
+
+            if (!button._isPointerEnter && (Input.GetKeyDown(KeyCode.Mouse0) || Input.GetKeyDown(KeyCode.Mouse1)))
             {
-                if (!inputUIButton._isPointerEnter && Input.GetKeyDown(KeyCode.Mouse0))
-                {
-                    inputUIButton.highlighted = false;
-                    setTheKeyToggle.isOn = false;
-                    Reset();
-                }
-                else if (!inputUIButton.highlighted)
-                {
-                    setTheKeyToggle.isOn = false;
-                    Reset();
-                }
-                else
-                {
-                    waitingText.gameObject.SetActive(true);
-                    if (TrySetValue())
-                    {
-                        setTheKeyToggle.isOn = false;
-                        inputUIButton.highlighted = false;
-                        Reset();
-                    }
-                }
+                StopListening();
+                return;
+            }
+
+            if (Input.GetKeyDown(KeyCode.Backspace) || Input.GetKeyDown(KeyCode.Delete))
+            {
+                Apply(KeyboardShortcut.Empty);
+                return;
+            }
+
+            var mouse = ReadMouse();
+            if (mouse != KeyCode.None)
+            {
+                Apply(WithModifiers(mouse));
+                return;
+            }
+
+            foreach (KeyCode code in Enum.GetValues(typeof(KeyCode)))
+            {
+                if (code == KeyCode.None || code == KeyCode.Escape || IsModifier(code) || (int)code >= (int)KeyCode.Mouse0)
+                    continue;
+                if (!Input.GetKeyUp(code)) continue;
+                Apply(WithModifiers(code));
+                return;
             }
         }
 
-        public bool TrySetValue()
+        private void Apply(KeyboardShortcut newShortcut)
         {
-            if (Input.GetKey(KeyCode.Escape))
-            {
-                VFInput.UseEscape();
-                return true;
-            }
-            if (Input.GetKey(KeyCode.Mouse0) || Input.GetKey(KeyCode.Mouse1))
-            {
-                return true;
-            }
-            var anyKey = IsKeyInput();
-            if (!anyKey && lastKey != KeyCode.None)
-            {
-                var k = GetPressedKeysString();
-                if (string.IsNullOrEmpty(k))
-                {
-                    return false;
-                }
-                lastKey = KeyCode.None;
-
-                SetShortcut(KeyboardShortcut.Deserialize(k));
-                return true;
-            }
-
-            return false;
+            shortcut = newShortcut;
+            StopListening();
+            OnEdit?.Invoke(shortcut);
         }
 
-        private KeyCode lastKey;
-        [SuppressMessage("Style", "IDE0300")]
-        private static readonly KeyCode[] modKeys = { KeyCode.RightShift, KeyCode.LeftShift,
-                 KeyCode.RightControl, KeyCode.LeftControl,
-                 KeyCode.RightAlt, KeyCode.LeftAlt,
-                 KeyCode.LeftCommand,  KeyCode.LeftApple, KeyCode.LeftWindows,
-                 KeyCode.RightCommand,  KeyCode.RightApple, KeyCode.RightWindows };
-
-        public string GetPressedKeysString()
+        private void StopListening()
         {
-            var key = lastKey.ToString();
-            if (string.IsNullOrEmpty(key))
-            {
-                return null;
-            }
-            var mod = "";
-            foreach (var modKey in modKeys)
-            {
-                if (Input.GetKey(modKey))
-                {
-                    mod += "+" + modKey.ToString();
-                }
-            }
-
-            if (!string.IsNullOrEmpty(mod))
-            {
-                key += mod;
-            }
-            return key;
+            listening = false;
+            if (button != null) button.highlighted = false;
+            if (waitingText != null) waitingText.gameObject.SetActive(false);
+            RefreshText();
         }
 
-        public bool IsKeyInput()
+        private KeyCode ReadMouse()
         {
-            var isPressed = false;
-            foreach (KeyCode item in Enum.GetValues(typeof(KeyCode)))
-            {
-                if (item != KeyCode.None && !modKeys.Contains(item) && Input.GetKey(item))
-                {
-                    lastKey = item;
-                    isPressed = true;
-                }
-            }
-            return isPressed;
+            if (Input.GetKeyDown(KeyCode.Mouse0) && button._isPointerEnter) return KeyCode.None;
+            if (Input.GetKeyDown(KeyCode.Mouse0)) return KeyCode.Mouse0;
+            if (Input.GetKeyDown(KeyCode.Mouse1)) return KeyCode.Mouse1;
+            if (Input.GetKeyDown(KeyCode.Mouse2)) return KeyCode.Mouse2;
+            if (Input.GetKeyDown(KeyCode.Mouse3)) return KeyCode.Mouse3;
+            if (Input.GetKeyDown(KeyCode.Mouse4)) return KeyCode.Mouse4;
+            if (Input.GetKeyDown(KeyCode.Mouse5)) return KeyCode.Mouse5;
+            if (Input.GetKeyDown(KeyCode.Mouse6)) return KeyCode.Mouse6;
+            return KeyCode.None;
         }
 
-        public void Reset()
+        private static KeyboardShortcut WithModifiers(KeyCode main)
         {
-            waitingText.gameObject.SetActive(false);
-            lastKey = KeyCode.None;
+            var modifiers = new List<KeyCode>();
+            if (Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift))
+                modifiers.Add(KeyCode.LeftShift);
+            if (Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl))
+                modifiers.Add(KeyCode.LeftControl);
+            if (Input.GetKey(KeyCode.LeftAlt) || Input.GetKey(KeyCode.RightAlt))
+                modifiers.Add(KeyCode.LeftAlt);
+            return new KeyboardShortcut(main, modifiers.ToArray());
         }
 
-        public void OnInputUIButtonClick(int data)
-        {
-            inputUIButton.highlighted = true;
+        private static bool IsModifier(KeyCode code) =>
+            code is KeyCode.LeftShift or KeyCode.RightShift
+                or KeyCode.LeftControl or KeyCode.RightControl
+                or KeyCode.LeftAlt or KeyCode.RightAlt
+                or KeyCode.LeftCommand or KeyCode.RightCommand
+                or KeyCode.LeftWindows or KeyCode.RightWindows
+                or KeyCode.LeftApple or KeyCode.RightApple;
 
-            if (nextNotOn)
+        private static string Format(KeyboardShortcut value)
+        {
+            if (value.MainKey == KeyCode.None) return "无按键".Translate();
+
+            byte modifier = 0;
+            foreach (var key in value.Modifiers)
             {
-                nextNotOn = false;
-                inputUIButton.highlighted = false;
-                setTheKeyToggle.isOn = false;
-                waitingText.gameObject.SetActive(false);
+                if (key is KeyCode.LeftShift or KeyCode.RightShift) modifier |= CombineKey.SHIFT_COMB;
+                else if (key is KeyCode.LeftControl or KeyCode.RightControl) modifier |= CombineKey.CTRL_COMB;
+                else if (key is KeyCode.LeftAlt or KeyCode.RightAlt) modifier |= CombineKey.ALT_COMB;
             }
+
+            return new CombineKey((int)value.MainKey, modifier, default, false).ToString();
         }
     }
 }

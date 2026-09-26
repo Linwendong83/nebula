@@ -51,20 +51,21 @@ internal class StartGameMessageProcessor : PacketProcessor<StartGameMessage>
                 //Add current tech bonuses to the connecting player based on the Host's mecha
                 ((MechaData)player.Data.Mecha).TechBonuses = new PlayerTechBonuses(GameMain.mainPlayer.mecha);
 
-                conn.SendPacket(new StartGameMessage(true, (PlayerData)player.Data, Config.Options.SyncSoil));
+                var identity = ((PlayerData)player.Data).PersistentId;
+                var isNewPlayer = !SaveManager.PlayerSaves.TryGetValue(identity, out var savedData) ||
+                                  savedData.Mecha?.ReactorStorage == null;
+                conn.SendPacket(new StartGameMessage(true, (PlayerData)player.Data, isNewPlayer));
             }
             else
             {
-                conn.SendPacket(new StartGameMessage(false, null, false));
+                conn.SendPacket(new StartGameMessage(false, null));
             }
         }
         else if (packet.IsAllowedToStart)
         {
-            // overwrite local setting with host setting, but dont save it as its a temp setting for this session
-            Config.Options.SyncSoil = packet.SyncSoil;
-
             ((LocalPlayer)Multiplayer.Session.LocalPlayer).IsHost = false;
-            ((LocalPlayer)Multiplayer.Session.LocalPlayer).SetPlayerData(packet.LocalPlayerData, true);
+            ((LocalPlayer)Multiplayer.Session.LocalPlayer).SetPlayerData(packet.LocalPlayerData, packet.IsNewPlayer);
+            Multiplayer.Session.Goals.SetExistingPlayer(!packet.IsNewPlayer);
 
             UIRoot.instance.uiGame.planetDetail.gameObject.SetActive(false);
             Multiplayer.Session.IsInLobby = false;
@@ -85,7 +86,7 @@ internal class StartGameMessageProcessor : PacketProcessor<StartGameMessage>
         }
         else
         {
-            InGamePopup.ShowInfo("Unavailable".Translate(), "The host is not ready to let you in, please wait!".Translate(),
+            InGamePopup.ShowInfo("Server Busy".Translate(), "The host is not ready to let you in, please wait!".Translate(),
                 "OK".Translate());
         }
     }

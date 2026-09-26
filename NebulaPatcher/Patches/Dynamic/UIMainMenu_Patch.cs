@@ -1,15 +1,9 @@
-﻿#region
-
 using System;
 using System.Collections;
-using System.Diagnostics.CodeAnalysis;
-using System.Globalization;
-using System.Linq;
-using System.Net;
-using System.Net.Sockets;
 using HarmonyLib;
 using NebulaModel;
 using NebulaModel.Logger;
+using NebulaModel.Networking;
 using NebulaNetwork;
 using NebulaWorld;
 using NebulaWorld.MonoBehaviours.Local;
@@ -18,60 +12,35 @@ using UnityEngine.Events;
 using UnityEngine.UI;
 using Object = UnityEngine.Object;
 
-#endregion
-
 namespace NebulaPatcher.Patches.Dynamic;
 
 [HarmonyPatch(typeof(UIMainMenu))]
-internal class UIMainMenu_Patch
+internal static class UIMainMenu_Patch
 {
-    private static RectTransform mainMenuButtonGroup;
     private static RectTransform multiplayerButton;
-    private static RectTransform multiplayerSubMenu;
-
-    private static RectTransform multiplayerMenu;
-    private static InputField hostIPAddressInput;
-    private static InputField passwordInput;
 
     [HarmonyPostfix]
     [HarmonyPatch(nameof(UIMainMenu._OnOpen))]
-    [SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "Original Function Name")]
     public static void _OnOpen_Postfix()
     {
         Multiplayer.IsLeavingGame = false;
-
-        var overlayCanvas = GameObject.Find("Overlay Canvas");
-        if (overlayCanvas == null)
+        var group = GameObject.Find("Main Menu/button-group")?.GetComponent<RectTransform>();
+        if (group == null) return;
+        if (multiplayerButton == null)
         {
-            Log.Warn("'Overlay Canvas' not found!");
-            return;
+            var template = group.Find("button-new")?.GetComponent<RectTransform>();
+            if (template == null) return;
+            multiplayerButton = Object.Instantiate(template, group, false);
+            multiplayerButton.name = "button-multiplayer";
+            var position = multiplayerButton.anchoredPosition;
+            multiplayerButton.anchoredPosition = new Vector2(position.x,
+                position.y + multiplayerButton.sizeDelta.y + 10);
+            NebulaLocalizedText.Set(multiplayerButton.GetComponentInChildren<Text>(), "Multiplayer");
+            var button = multiplayerButton.GetComponent<Button>();
+            button.onClick = new Button.ButtonClickedEvent();
+            button.onClick.AddListener(new UnityAction(OnMultiplayerButtonClick));
         }
-
-        if (overlayCanvas.transform.Find("Main Menu") == null)
-        {
-            Log.Warn("'Overlay Canvas/Main Menu' not found!");
-            return;
-        }
-
-        // Check if the main menu already includes our modification
-        if (mainMenuButtonGroup != null)
-        {
-            return;
-        }
-
-        mainMenuButtonGroup = GameObject.Find("Main Menu/button-group").GetComponent<RectTransform>();
-
-        AddMultiplayerButton();
-        AddMultiplayerSubMenu();
-        AddMultiplayerJoinMenu();
-    }
-
-    [HarmonyPostfix]
-    [HarmonyPatch(nameof(UIMainMenu.OnUpdateLogButtonClick))]
-    public static void OnUpdateLogButtonClick_Postfix()
-    {
-        // Return to main menu when update log is opened
-        OnMultiplayerBackButtonClick();
+        MultiplayerPage.Create();
     }
 
     [HarmonyPrefix]
@@ -80,364 +49,60 @@ internal class UIMainMenu_Patch
     public static void OnEscSwitch()
     {
         if (!VFInput.escape) return;
-
-        // Go back to the upper level when hitting esc
-        if (multiplayerMenu.gameObject.activeInHierarchy)
-        {
-            OnJoinGameBackButtonClick();
-            VFInput.UseEscape();
-        }
-        else if (UIRoot.instance.loadGameWindow.active)
+        if (UIRoot.instance.loadGameWindow.active && Multiplayer.IsInMultiplayerMenu)
         {
             UIRoot.instance.loadGameWindow.OnCancelClick(0);
             VFInput.UseEscape();
         }
-        else if (multiplayerSubMenu.gameObject.activeInHierarchy)
+        else if (MultiplayerPage.IsOpen)
         {
-            OnMultiplayerBackButtonClick();
+            MultiplayerPage.Close();
             VFInput.UseEscape();
         }
     }
 
-    // Main Menu
-    private static void AddMultiplayerButton()
+    [HarmonyPostfix]
+    [HarmonyPatch(nameof(UIMainMenu.OnUpdateLogButtonClick))]
+    public static void OnUpdateLogButtonClick_Postfix()
     {
-        var buttonTemplate = GameObject.Find("Main Menu/button-group/button-new").GetComponent<RectTransform>();
-        multiplayerButton = Object.Instantiate(buttonTemplate, mainMenuButtonGroup, false);
-        multiplayerButton.name = "button-multiplayer";
-        var anchoredPosition = multiplayerButton.anchoredPosition;
-        multiplayerButton.anchoredPosition = new Vector2(anchoredPosition.x,
-            anchoredPosition.y + multiplayerButton.sizeDelta.y + 10);
-        OverrideButton(multiplayerButton, "Multiplayer", OnMultiplayerButtonClick);
+        if (MultiplayerPage.IsOpen) MultiplayerPage.Close();
     }
 
     public static void OnMultiplayerButtonClick()
     {
-        Multiplayer.IsInMultiplayerMenu = true;
-        mainMenuButtonGroup.gameObject.SetActive(false);
-        multiplayerSubMenu.gameObject.SetActive(true);
+        if (Multiplayer.IsDedicated) { Multiplayer.IsInMultiplayerMenu = true; return; }
+        MultiplayerPage.Open();
     }
 
-    // Multiplayer Sub Menu
-    private static void AddMultiplayerSubMenu()
+    public static void JoinGame(string address, string password = "", string recordId = null)
     {
-        multiplayerSubMenu = Object.Instantiate(mainMenuButtonGroup, mainMenuButtonGroup.parent, true);
-        multiplayerSubMenu.name = "multiplayer-menu";
-
-        var newGameButton = OverrideButton(multiplayerSubMenu.Find("button-multiplayer").GetComponent<RectTransform>(),
-            "New Game (Host)", OnMultiplayerNewGameButtonClick);
-        OverrideButton(multiplayerSubMenu.Find("button-new").GetComponent<RectTransform>(), "Load Game (Host)",
-            OnMultiplayerLoadGameButtonClick);
-        OverrideButton(multiplayerSubMenu.Find("button-continue").GetComponent<RectTransform>(), "Join Game",
-            OnMultiplayerJoinGameButtonClick);
-        OverrideButton(multiplayerSubMenu.Find("button-load").GetComponent<RectTransform>(), "Back",
-            OnMultiplayerBackButtonClick);
-
-        if (BepInEx.Bootstrap.Chainloader.PluginInfos.ContainsKey("dsp.galactic-scale.2") && newGameButton != null)
+        if (!ServerAddress.TryParse(address, Config.Options.HostPort, out var parsed))
         {
-            // Because GalacticScale can't enter new game in MP, temporarily hide New Game (Host) button 
-            newGameButton.gameObject.SetActive(false);
-            Log.Warn("Hide New Game (Host) button due to GalacticScale compatibility");
-        }
-
-        multiplayerSubMenu.Find("button-options").gameObject.SetActive(false);
-        multiplayerSubMenu.Find("button-credits").gameObject.SetActive(false);
-        multiplayerSubMenu.Find("button-exit").gameObject.SetActive(false);
-        multiplayerSubMenu.Find("button-galaxy").gameObject.SetActive(false);
-
-        multiplayerSubMenu.gameObject.SetActive(false);
-    }
-
-    private static void OnMultiplayerNewGameButtonClick()
-    {
-        Log.Info($"Listening server on port {Config.Options.HostPort}");
-        Multiplayer.HostGame(new Server(Config.Options.HostPort));
-
-        Multiplayer.Session.IsInLobby = true;
-
-        UIRoot.instance.galaxySelect._Open();
-        UIRoot.instance.uiMainMenu._Close();
-    }
-
-    private static void OnMultiplayerLoadGameButtonClick()
-    {
-        UIRoot.instance.OpenLoadGameWindow();
-    }
-
-    private static void OnMultiplayerJoinGameButtonClick()
-    {
-        Multiplayer.ShouldReturnToJoinMenu = true;
-
-        UIRoot.instance.CloseMainMenuUI();
-        multiplayerMenu.gameObject.SetActive(true);
-        hostIPAddressInput.characterLimit = 53;
-    }
-
-    private static void OnMultiplayerBackButtonClick()
-    {
-        Multiplayer.IsInMultiplayerMenu = false;
-        Multiplayer.ShouldReturnToJoinMenu = true;
-        multiplayerSubMenu.gameObject.SetActive(false);
-        mainMenuButtonGroup.gameObject.SetActive(true);
-    }
-
-    private static Button OverrideButton(Component buttonObj, string newText, Action newClickCallback)
-    {
-        if (newText != null)
-        {
-            NebulaLocalizedText.Set(buttonObj.GetComponentInChildren<Text>(), newText);
-        }
-
-        var button = buttonObj.GetComponent<Button>();
-        button.onClick.RemoveAllListeners();
-        button.onClick.AddListener(new UnityAction(newClickCallback));
-        button.interactable = true;
-        return button;
-    }
-
-    // Multiplayer Join Menu
-    private static void AddMultiplayerJoinMenu()
-    {
-        var overlayCanvasGo = GameObject.Find("Overlay Canvas");
-        var galaxySelectGo = overlayCanvasGo.transform.Find("Galaxy Select");
-        if (galaxySelectGo == null)
-        {
-            Log.Warn("'Overlay Canvas/Galaxy Select' not found!");
+            InGamePopup.ShowWarning("Invalid Address".Translate(), "Enter a valid server address".Translate(), "OK".Translate());
             return;
         }
-
-        var galaxySelectTemplate = galaxySelectGo.GetComponent<RectTransform>();
-
-        multiplayerMenu = Object.Instantiate(galaxySelectTemplate, galaxySelectTemplate.parent);
-        Object.Destroy(multiplayerMenu.gameObject.GetComponent<UIGalaxySelect>());
-
-        multiplayerMenu.gameObject.name = "Nebula - Multiplayer Menu";
-        for (var i = 0; i < multiplayerMenu.childCount; i++)
-        {
-            var child = multiplayerMenu.GetChild(i);
-            switch (child.name)
-            {
-                case "setting-group":
-                    for (var j = 0; j < child.childCount; j++)
-                    {
-                        var child2 = child.GetChild(j);
-                        switch (child2.name)
-                        {
-                            case "top-title":
-                                child2.GetComponent<Localizer>().enabled = false;
-                                NebulaLocalizedText.Set(child2.GetComponent<Text>(), "Multiplayer");
-                                break;
-                            case "stretch-transform":
-                                for (var k = child2.childCount - 1; k >= 0; k--)
-                                {
-                                    var child3 = child2.GetChild(k);
-                                    if (child3.name != "galaxy-seed")
-                                    {
-                                        Object.Destroy(child3.gameObject);
-                                        continue;
-                                    }
-
-                                    child3.GetComponent<Localizer>().enabled = false;
-                                    NebulaLocalizedText.Set(child3.GetComponent<Text>(), "Host IP Address");
-                                    child3.name = "Host IP Address";
-                                    hostIPAddressInput = child3.GetComponentInChildren<InputField>();
-                                    hostIPAddressInput.onEndEdit.RemoveAllListeners();
-                                    hostIPAddressInput.onValueChanged.RemoveAllListeners();
-                                    //note: the field takes a host name or an IP literal (optionally
-                                    //with scheme and port); 255 chars is the DNS name length limit
-                                    hostIPAddressInput.characterLimit = 255;
-
-                                    var ip = "127.0.0.1";
-                                    if (Config.Options.RememberLastIP && !string.IsNullOrWhiteSpace(Config.Options.LastIP))
-                                    {
-                                        ip = Config.Options.LastIP;
-                                    }
-                                    hostIPAddressInput.text = ip;
-                                    hostIPAddressInput.contentType = Config.Options.StreamerMode
-                                        ? InputField.ContentType.Password
-                                        : InputField.ContentType.Standard;
-                                }
-                                break;
-                            default:
-                                // Remove all unused elements that may be added by other mods
-                                Object.Destroy(child2.gameObject);
-                                break;
-                        }
-                    }
-                    break;
-                case "start-button":
-                    OverrideButton(multiplayerMenu.Find("start-button").GetComponent<RectTransform>(), "Join Game",
-                        OnJoinGameButtonClick);
-                    break;
-                case "cancel-button":
-                    OverrideButton(multiplayerMenu.Find("cancel-button").GetComponent<RectTransform>(), null,
-                        OnJoinGameBackButtonClick);
-                    break;
-                default:
-                    // Remove all unused elements that may be added by other mods
-                    Object.Destroy(child.gameObject);
-                    break;
-            }
-        }
-        if (hostIPAddressInput == null)
-        {
-            Log.Warn("UI Root/Overlay Canvas/Galaxy Select/setting-group/stretch-transform/galaxy-seed not found!");
-        }
-        var addressTransform = hostIPAddressInput.transform.parent;
-        addressTransform.SetParent(multiplayerMenu);
-        addressTransform.localPosition = new Vector3(0, 335, 0);
-        var passwordTransform = Object.Instantiate(addressTransform, multiplayerMenu);
-        passwordTransform.localPosition += new Vector3(0, -36, 0);
-        NebulaLocalizedText.Set(passwordTransform.GetComponent<Text>(), "Password (optional)");
-        passwordTransform.name = "Password (optional)";
-
-        passwordInput = passwordTransform.GetComponentInChildren<InputField>();
-        passwordInput.contentType = InputField.ContentType.Password;
-        passwordInput.text = "";
-        if (Config.Options.RememberLastClientPassword && !string.IsNullOrWhiteSpace(Config.Options.LastClientPassword))
-        {
-            passwordInput.text = Config.Options.LastClientPassword;
-        }
-
-        multiplayerMenu.gameObject.SetActive(false);
+        Multiplayer.ShouldReturnToJoinMenu = true;
+        UIRoot.instance.StartCoroutine(TryConnect(parsed, address.Trim(), password ?? "", recordId));
     }
 
-    private static void OnJoinGameButtonClick()
-    {
-        var s = new string(hostIPAddressInput.text.ToCharArray().Where(c => !char.IsWhiteSpace(c)).ToArray());
-        JoinGame(s, passwordInput.text);
-    }
-
-    public static void JoinGame(string ip, string password = "")
-    {
-        // Remove whitespaces from connection string
-        var s = ip;
-
-        // Parse protocol if set
-        var protocol = "ws";
-        var firstColonPos = s.IndexOf("://");
-        if (firstColonPos > 0)
-        {
-            var candidate = s.Substring(0, firstColonPos);
-            switch (candidate)
-            {
-                case "wss":
-                case "ws":
-                    protocol = candidate;
-                    s = s.Substring(firstColonPos + 3);
-                    break;
-            }
-        }
-
-        // Taken from .net IPEndPoint
-        IPEndPoint result = null;
-        var addressLength = s.Length; // If there's no port then send the entire string to the address parser
-        var lastColonPos = s.LastIndexOf(':');
-
-        // Look to see if this is an IPv6 address with a port.
-        if (lastColonPos > 0)
-        {
-            if (s[lastColonPos - 1] == ']')
-            {
-                addressLength = lastColonPos;
-            }
-            // Look to see if this is IPv4 with a port (IPv6 will have another colon)
-            else if (s.Substring(0, lastColonPos).LastIndexOf(':') == -1)
-            {
-                addressLength = lastColonPos;
-            }
-        }
-
-        if (IPAddress.TryParse(s.Substring(0, addressLength), out var address))
-        {
-            uint port = 0;
-            if (addressLength == s.Length ||
-                uint.TryParse(s.Substring(addressLength + 1), NumberStyles.None, CultureInfo.InvariantCulture, out port) &&
-                port <= IPEndPoint.MaxPort)
-
-            {
-                result = new IPEndPoint(address, (int)port);
-            }
-        }
-
-        var isIP = false;
-        var p = 0;
-        if (result != null)
-        {
-            s = result.AddressFamily == AddressFamily.InterNetworkV6 ? $"[{result.Address}]" : $"{result.Address}";
-            p = result.Port;
-            isIP = true;
-        }
-        else
-        {
-            var tmpP = s.Split(':');
-            if (tmpP.Length == 2)
-            {
-                if (!int.TryParse(tmpP[1], out p))
-                {
-                    p = 0;
-                }
-                else
-                {
-                    s = tmpP[0];
-                }
-            }
-        }
-
-        p = p == 0 ? Config.Options.HostPort : p;
-
-        UIRoot.instance.StartCoroutine(TryConnectToServer(s, protocol, p, isIP, password));
-    }
-
-    private static IEnumerator TryConnectToServer(string ip, string protocol, int port, bool isIP, string password)
+    private static IEnumerator TryConnect(ServerAddress parsed, string address, string password, string recordId)
     {
         InGamePopup.ShowInfo("Connecting".Translate(), "Connecting to server...".Translate(), null);
-        multiplayerMenu.gameObject.SetActive(false);
-
-        // We need to wait here to have time to display the Connecting popup since the game freezes during the connection.
-        yield return new WaitForSeconds(0.5f);
-
-        if (!ConnectToServer(ip, protocol, port, isIP, password))
-        {
-            InGamePopup.FadeOut();
-            //re-enabling the menu again after failed connect attempt
-            InGamePopup.ShowWarning("Connect failed".Translate(), "Was not able to connect to server".Translate(), "OK");
-            multiplayerMenu.gameObject.SetActive(true);
-        }
-        else
-        {
-            InGamePopup.FadeOut();
-        }
-    }
-
-    private static void OnJoinGameBackButtonClick()
-    {
-        multiplayerMenu.gameObject.SetActive(false);
-        UIRoot.instance.OpenMainMenuUI();
-    }
-
-    private static bool ConnectToServer(string connectionString, string protocol, int serverPort, bool isIP, string password)
-    {
+        if (MultiplayerPage.IsOpen) MultiplayerPage.HideForConnection();
+        yield return new WaitForSeconds(.5f);
         try
         {
-            if (isIP)
-            {
-                Multiplayer.JoinGame(new Client(new IPEndPoint(IPAddress.Parse(connectionString), serverPort), protocol, password));
-                return true;
-            }
-
-            //trying to resolve as uri
-            if (!Uri.TryCreate(connectionString, UriKind.RelativeOrAbsolute, out _))
-            {
-                return false;
-            }
-            Multiplayer.JoinGame(new Client(connectionString, serverPort, protocol, password));
-            return true;
+            Multiplayer.JoinGame(new Client(parsed.Host, parsed.Port, parsed.Protocol, password), recordId,
+                address, password);
+            InGamePopup.FadeOut();
         }
         catch (Exception e)
         {
             Log.Error("ConnectToServer error:\n" + e);
+            InGamePopup.FadeOut();
+            InGamePopup.ShowWarning("Connect failed".Translate(),
+                "Was not able to connect to server".Translate(), "OK".Translate());
+            MultiplayerPage.ShowAfterDisconnect();
         }
-        return false;
     }
 }

@@ -116,7 +116,15 @@ public class MechaData : IMechaData
 
     public void UpdateMech(Player destination)
     {
-        destination.package = Inventory;
+        using (var ms = new MemoryStream())
+        {
+            using (var writer = new BinaryWriter(ms, System.Text.Encoding.UTF8, true))
+                Inventory.Export(writer);
+            ms.Position = 0;
+            using var reader = new BinaryReader(ms);
+            destination.package.Import(reader);
+            Inventory = destination.package;
+        }
         using (var ms = new MemoryStream())
         {
             var bw = new BinaryWriter(ms);

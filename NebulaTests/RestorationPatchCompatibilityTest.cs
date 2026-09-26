@@ -8,6 +8,32 @@ namespace NebulaTests;
 public class RestorationPatchCompatibilityTest
 {
     [TestMethod]
+    public void HiddenGamePropertiesUsedByRemotePlayersHaveSetters()
+    {
+        foreach (var (type, name) in new[]
+                 {
+                     (typeof(Player), nameof(Player.transform)),
+                     (typeof(Player), nameof(Player.mecha)),
+                     (typeof(Player), nameof(Player.animator)),
+                     (typeof(Player), nameof(Player.controller)),
+                     (typeof(Player), nameof(Player.cameraTarget)),
+                     (typeof(Player), nameof(Player.vegetableCollection)),
+                     (typeof(MechaForge), nameof(MechaForge.mecha)),
+                     (typeof(ManualBehaviour), nameof(ManualBehaviour.data))
+                 })
+        {
+            var property = AccessTools.Property(type, name);
+            TestAssert.IsNotNull(property, type.Name + "." + name);
+            TestAssert.IsNotNull(property.GetSetMethod(true), type.Name + "." + name);
+        }
+        var armor = (MechaArmorModel)System.Runtime.Serialization.FormatterServices.GetUninitializedObject(
+            typeof(MechaArmorModel));
+        var player = new Player();
+        global::NebulaModel.Utils.NativeGameAccess.SetHiddenProperty(armor, nameof(ManualBehaviour.data), player);
+        TestAssert.AreSame(player, armor.data);
+    }
+
+    [TestMethod]
     public void NewPatchesResolveAgainstRealGameMethodBodies()
     {
         var instructions = PatchProcessor.GetOriginalInstructions(AccessTools.Method(typeof(Player), nameof(Player.PrepareRedeploy)));
@@ -18,10 +44,12 @@ public class RestorationPatchCompatibilityTest
         [
             "UIGalaxySelect_Patch", "LobbyGoalSetting_Patch", "PropertyLogic_Patch", "PropertySystem_Patch",
             "UIPropertyRealize_Patch", "BuyoutTech_Patch", "UIDFCommunicatorWindow_Patch", "PlayerAction_Death_Patch",
+            "MechaArmorModel_Patch", "ArmorWreckage_Patch",
             "UIDeathPanel_Patch", "GoalLogic_Patch", "PersonalGoalData_Patch", "GoalStage_Patch", "GoalLevelRestore_Patch", "SkillSystem_Patch",
             "HeadlessGoalDeterminator_Patch", "HeadlessGoalLoad_Patch", "SharedGoalSetting_Patch", "SharedGoalIgnore_Patch",
             "SharedGoalInventory_Patch", "SharedGoalWarpStorage_Patch", "KillStatistics_Patch", "KillAttribution_Patch",
-            "RemoteKillStatisticsUI_Patch", "GroundEnemyGeneration_Patch", "SpaceEnemyGeneration_Patch",
+            "RemoteKillStatisticsUI_Patch", "PlayerVegetation_Patch", "VegetableCollection_Patch",
+            "GroundEnemyGeneration_Patch", "SpaceEnemyGeneration_Patch",
             "GroundCraftVisualGeneration_Patch", "SpaceCraftVisualGeneration_Patch", "AuthoritativeAttackRendering_Patch",
             "AuthoritativePlasmaRendering_Patch", "AuthoritativeBomberRendering_Patch", "BattleImpact_Patch", "PredictedWorldImpactRendering_Patch"
         ];

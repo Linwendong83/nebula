@@ -37,5 +37,6 @@ public enum MarkerSettingEvent
     SetDetailLevel = 7,
     SetHeight = 8,
     SetRadius = 9,
-    SetDigitalSignalId = 10
+    SetDigitalSignalId = 10,
+    SetDFAttractionFlags = 11
 }

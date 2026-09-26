@@ -602,7 +602,7 @@ public class RemotePlayerEffects : MonoBehaviour
 
     public void UpdateState(ref RemotePlayerAnimation.Snapshot packet)
     {
-        var allowSounds = GameMain.localPlanet?.id == rootMovement.localPlanetId && Config.Options.EnableOtherPlayerSounds;
+        var allowSounds = GameMain.localPlanet?.id == rootMovement.localPlanetId;
         var runActive = rootAnimation.runWeight > 0.001f;
         var driftActive = rootAnimation.driftWeight > 0.001f;
         var flyActive = rootAnimation.flyWeight > 0.001f;

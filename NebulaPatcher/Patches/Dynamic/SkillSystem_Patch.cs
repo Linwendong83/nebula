@@ -146,8 +146,13 @@ internal class SkillSystem_Patch
         var module = ground ? GameMain.mainPlayer.mecha.groundCombatModule : GameMain.mainPlayer.mecha.spaceCombatModule;
         if (module?.moduleFleets == null) return false;
         foreach (var fleet in module.moduleFleets)
-            if (fleet.fighters != null) foreach (var fighter in fleet.fighters)
+        {
+            if (fleet.fighters == null) continue;
+            foreach (var fighter in fleet.fighters)
+            {
                 if (fighter.craftId == id) return true;
+            }
+        }
         return false;
     }
 

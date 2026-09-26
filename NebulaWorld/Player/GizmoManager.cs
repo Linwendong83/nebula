@@ -1,9 +1,6 @@
 #region
 
 using System;
-using System.Text;
-using NebulaWorld.Chat.ChatLinks;
-using NebulaWorld.MonoBehaviours.Local.Chat;
 using UnityEngine;
 #pragma warning disable IDE1006 // Naming Styles
 
@@ -69,15 +66,7 @@ public class GizmoManager : IDisposable
 
     public void OnUpdate()
     {
-        // Entry-level disable: Map ping to chat is disabled
-        // if (VFInput.alt && VFInput.control && Input.GetMouseButtonDown(0)) GetMapPing();
         UpdateIndicator();
-    }
-
-    private static void GetMapPing()
-    {
-        // Entry-level disable: Map ping to chat is disabled
-        return;
     }
 
     private void UpdateIndicator()

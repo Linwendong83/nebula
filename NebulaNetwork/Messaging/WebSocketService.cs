@@ -18,13 +18,6 @@ public class WebSocketService : WebSocketBehavior
 
     public WebSocketService() { }
 
-    public WebSocketService(Server server, NebulaNetPacketProcessor packetProcessor)
-    {
-        Server = server;
-        PacketProcessor = packetProcessor;
-        connections.Clear();
-    }
-
     protected override void OnOpen()
     {
         if (Multiplayer.Session.IsGameLoaded == false && Multiplayer.Session.IsInLobby == false)
@@ -39,7 +32,7 @@ public class WebSocketService : WebSocketBehavior
         var conn = new NebulaConnection(Context.WebSocket, Context.UserEndPoint, PacketProcessor);
         Server.OnSocketConnection(conn);
 
-        connections.Add(Context.UserEndPoint.GetHashCode(), conn);
+        connections[Context.UserEndPoint.GetHashCode()] = conn;
     }
 
     protected override void OnMessage(MessageEventArgs e)

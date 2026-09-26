@@ -20,9 +20,4 @@ public static class AssembliesUtils
     {
         return AppDomain.CurrentDomain.GetAssemblies().Where(a => a.FullName.StartsWith("Nebula"));
     }
-
-    public static Assembly GetAssemblyByName(string name)
-    {
-        return AppDomain.CurrentDomain.GetAssemblies().FirstOrDefault(a => a.FullName.StartsWith($"{name}."));
-    }
 }

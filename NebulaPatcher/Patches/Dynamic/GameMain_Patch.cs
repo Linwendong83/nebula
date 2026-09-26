@@ -3,7 +3,6 @@
 using HarmonyLib;
 using NebulaModel.Logger;
 using NebulaWorld;
-using NebulaWorld.SocialIntegration;
 
 #endregion
 
@@ -21,7 +20,6 @@ public class GameMain_Patch
             Log.Warn("Multiplayer is still running, closing now...");
             Multiplayer.LeaveGame();
         }
-        DiscordManager.Cleanup();
     }
 
     [HarmonyPostfix]

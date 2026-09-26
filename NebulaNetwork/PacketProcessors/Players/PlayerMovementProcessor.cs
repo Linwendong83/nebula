@@ -30,6 +30,9 @@ public class PlayerMovementProcessor : PacketProcessor<PlayerMovement>
                 player.Data.Rotation = packet.Rotation;
                 player.Data.BodyRotation = packet.BodyRotation;
                 player.Data.LocalPlanetPosition = packet.LocalPlanetPosition;
+                Multiplayer.Session.BuildDispatch.UpdateRemoteBuilder(player.Id, packet.BuildArea,
+                    packet.ConstructionDroneCount, packet.ConstructionDronesEnabled,
+                    packet.CanLaunchConstructionDrone);
                 if (changedPlanet) Multiplayer.Session.BattleVisuals.SendInitial(conn, player.Data.LocalStarId, packet.LocalPlanetId);
 
                 Server.SendPacketExclude(packet, conn);

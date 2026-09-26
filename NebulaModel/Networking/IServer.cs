@@ -10,13 +10,6 @@ namespace NebulaModel.Networking;
 public interface IServer : INetworkProvider
 {
     ushort Port { get; set; }
-    string NgrokAddress { get; }
-    bool NgrokActive { get; }
-    bool NgrokEnabled { get; }
-    string NgrokLastErrorCode { get; }
-    string NgrokLastErrorCodeDesc { get; }
-    public event EventHandler<INebulaConnection> Connected;
-    public event EventHandler<INebulaConnection> Disconnected;
 
     public ConcurrentPlayerCollection Players { get; }
 

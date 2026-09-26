@@ -49,7 +49,6 @@ namespace NebulaModel.Networking
             private readonly BufferedStream bs;
             private readonly BinaryReader br;
 
-            public MemoryStream MemoryStream => ms;
             public BinaryReader BinaryReader => br;
 
             public Reader(byte[] bytes)

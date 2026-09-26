@@ -43,7 +43,7 @@ public class LogisticShipRenderer_Transpiler
             {
                 if (index >= stationComponent.Length && Multiplayer.IsActive && Multiplayer.Session.LocalPlayer.IsClient)
                 {
-                    WarningManager.DisplayCriticalWarning("IndexOutOfBounds in LogisticShipRenderer. Consider reconnecting!");
+                    WarningManager.DisplayCriticalWarning("IndexOutOfBounds in LogisticShipRenderer. Consider reconnecting!".Translate());
                 }
                 return index < stationComponent.Length;
             }))

@@ -5,6 +5,7 @@ using System.Diagnostics.CodeAnalysis;
 using HarmonyLib;
 using NebulaModel;
 using NebulaModel.Packets.GameStates;
+using NebulaModel.Utils;
 using NebulaWorld;
 using NebulaWorld.GameStates;
 
@@ -17,38 +18,27 @@ internal class GameSave_Patch
 {
     [HarmonyPrefix]
     [HarmonyPatch(nameof(GameSave.SaveCurrentGame))]
-    public static bool SaveCurrentGame_Prefix(string saveName)
+    public static bool SaveCurrentGame_Prefix()
     {
         if (!Multiplayer.IsActive || !Multiplayer.Session.LocalPlayer.IsHost)
         {
             return !Multiplayer.IsActive || Multiplayer.Session.LocalPlayer.IsHost;
         }
-        // temp revert sand count back to original value before saving if we sync it (see SimulatedWorld.SetupInitialPlayerState() )
-        if (Config.Options.SyncSoil)
-        {
-            (GameMain.mainPlayer.sandCount, Multiplayer.Session.LocalPlayer.Data.Mecha.SandCount) = (
-                Multiplayer.Session.LocalPlayer.Data.Mecha.SandCount, GameMain.mainPlayer.sandCount);
-        }
-        SaveManager.SaveServerData(saveName);
-
+        if (!SaveManager.CanSave) return false;
         // Only save if in single player or if you are the host
         return !Multiplayer.IsActive || Multiplayer.Session.LocalPlayer.IsHost;
     }
 
     [HarmonyPostfix]
     [HarmonyPatch(nameof(GameSave.SaveCurrentGame))]
-    public static void SaveCurrentGame_Postfix()
+    public static void SaveCurrentGame_Postfix(string saveName, bool __result)
     {
         if (!Multiplayer.IsActive || !Multiplayer.Session.LocalPlayer.IsHost)
         {
             return;
         }
-        // if we sync soil we need to revert changes from above after saving the game
-        if (Config.Options.SyncSoil)
-        {
-            (GameMain.mainPlayer.sandCount, Multiplayer.Session.LocalPlayer.Data.Mecha.SandCount) = (
-                Multiplayer.Session.LocalPlayer.Data.Mecha.SandCount, GameMain.mainPlayer.sandCount);
-        }
+        if (!__result) return;
+        SaveManager.SaveServerData(saveName);
         // Update last save time in clients
         GameStatesManager.LastSaveTime = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         Multiplayer.Session.Server.SendPacket(new GameStateSaveInfoPacket(GameStatesManager.LastSaveTime));

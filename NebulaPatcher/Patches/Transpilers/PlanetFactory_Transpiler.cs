@@ -20,8 +20,6 @@ namespace NebulaPatcher.Patches.Transpilers;
 [HarmonyPatch(typeof(PlanetFactory))]
 internal class PlanetFactory_Transpiler
 {
-    public delegate bool BoundsChecker(PlanetFactory factory, int index);
-
     public static readonly List<int> CheckPopupPresent = [];
     public static readonly Dictionary<int, List<int>> FaultyVeins = [];
 

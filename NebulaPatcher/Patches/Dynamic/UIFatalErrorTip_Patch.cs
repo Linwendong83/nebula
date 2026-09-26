@@ -138,7 +138,7 @@ internal class UIFatalErrorTip_Patch
         {
             return;
         }
-        var log = "Server report an error: \n".Translate() + UIFatalErrorTip.instance.errorLogText.text;
+        var log = "Server reported an error:\n".Translate() + UIFatalErrorTip.instance.errorLogText.text;
         Log.Warn(log);
         Multiplayer.Session.Network.SendPacket(new NewChatMessagePacket(ChatMessageType.SystemWarnMessage, log,
             DateTime.Now, ""));

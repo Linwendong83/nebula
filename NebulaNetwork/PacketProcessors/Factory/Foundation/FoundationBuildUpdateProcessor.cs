@@ -1,12 +1,16 @@
 ﻿#region
 
 using System;
+using System.Linq;
 using NebulaAPI;
 using NebulaAPI.DataStructures;
+using NebulaAPI.Networking;
 using NebulaAPI.Packets;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.Factory.Foundation;
+using NebulaModel.Packets.Players;
+using NebulaModel.DataStructures;
 using NebulaWorld;
 using UnityEngine;
 
@@ -21,10 +25,39 @@ internal class FoundationBuildUpdateProcessor : PacketProcessor<FoundationBuildU
 
     protected override void ProcessPacket(FoundationBuildUpdatePacket packet, NebulaConnection conn)
     {
+        if (packet.ReformSize <= 0 || packet.ReformSize > 64 || packet.ReformIndices == null ||
+            packet.CollectionBefore == null || packet.CollectionBefore.Length > VegetableCollectionState.MaxBytes ||
+            packet.ReformIndices.Length > 4096 || packet.IsRestore && packet.IsCircle ||
+            !packet.IsCircle && packet.ReformIndices.Length < packet.ReformSize * packet.ReformSize ||
+            packet.IsCircle && (packet.CirclePointCount < 0 || packet.CirclePointCount > packet.ReformIndices.Length))
+            return;
+
         var planet = GameMain.galaxy.PlanetById(packet.PlanetId);
         var factory = planet?.factory;
-        if (factory != null)
+        if (factory == null) return;
+        ushort author = 0;
+        if (IsHost)
         {
+            var player = Players.Get(conn, EConnectionStatus.Connected);
+            if (player == null || player.Data.LocalStarId != planet.star.id) return;
+            author = player.Id;
+            var collection = Multiplayer.Session.Vegetation.GetRemote(author);
+            if (collection == null) return;
+            var canonicalBefore = VegetableCollectionState.Capture(collection);
+            if (!packet.CollectionBefore.SequenceEqual(canonicalBefore))
+            {
+                conn.SendPacket(new VegetableCollectionSnapshotPacket(canonicalBefore, true));
+                Multiplayer.Session.Server.Disconnect(conn, DisconnectionReason.InvalidData,
+                    "Vegetation collection is out of sync. Reconnect to reload the planet.");
+                return;
+            }
+            packet.CollectionBefore = canonicalBefore;
+        }
+        else Multiplayer.Session.Vegetation.BeginReplay(packet.CollectionBefore);
+
+        try
+        {
+            Multiplayer.Session.Factories.PacketAuthor = author;
             // Increase reformPoints for mods that increase brush size over 10
             if (packet.ReformSize * packet.ReformSize > reformPoints.Length)
             {
@@ -40,7 +73,6 @@ internal class FoundationBuildUpdateProcessor : PacketProcessor<FoundationBuildU
 
             Multiplayer.Session.Factories.TargetPlanet = packet.PlanetId;
             Multiplayer.Session.Factories.AddPlanetTimer(packet.PlanetId);
-            Multiplayer.Session.Factories.TargetPlanet = NebulaModAPI.PLANET_NONE;
 
             //Perform terrain operation
             var center = packet.ExtraCenter.ToVector3();
@@ -49,42 +81,65 @@ internal class FoundationBuildUpdateProcessor : PacketProcessor<FoundationBuildU
             var getSandCount = 0; // dummy value, won't use
             if (!packet.IsCircle) //Normal reform
             {
-                var reformPointsCount = factory.planet.aux.ReformSnap(packet.GroundTestPos.ToVector3(), packet.ReformSize,
+                var reformPointsCount = factory.planet.aux.ReformSnap(packet.GroundTestPos.ToVector3(), packet.ReformMode,
+                    packet.ReformSize,
                     packet.ReformType, packet.ReformColor, reformPoints, packet.ReformIndices, factory.platformSystem,
                     out var reformCenterPoint);
-                factory.ComputeFlattenTerrainReform(reformPoints, reformCenterPoint, packet.Radius, reformPointsCount, ref costSandCount, ref getSandCount);
+                if (packet.IsRestore)
+                    factory.ComputeRestoreTerrainReform(reformPoints, reformCenterPoint, packet.Radius,
+                        reformPointsCount, ref costSandCount, ref getSandCount);
+                else
+                    factory.ComputeFlattenTerrainReform(reformPoints, reformCenterPoint, packet.Radius,
+                        reformPointsCount, ref costSandCount, ref getSandCount);
                 center = reformCenterPoint;
                 area = packet.ReformSize * packet.ReformSize;
             }
             else //Remove pit
             {
-                factory.ComputeFlattenTerrainReform(reformPoints, center, packet.Radius, packet.CirclePointCount, ref costSandCount, ref getSandCount, 3f, 1f);
+                factory.ComputeFlattenTerrainReform(reformPoints, center, packet.Radius, packet.CirclePointCount,
+                    ref costSandCount, ref getSandCount, 3f, 1f);
             }
             using (Multiplayer.Session.Factories.IsIncomingRequest.On())
             {
-                factory.FlattenTerrainReform(center, packet.Radius, packet.ReformSize, packet.VeinBuried);
+                if (packet.IsRestore)
+                    factory.RestoreTerrainReform(center, packet.Radius, packet.ReformSize, packet.VeinBuried,
+                        packet.Fade0);
+                else
+                    factory.FlattenTerrainReform(center, packet.Radius, packet.ReformSize, packet.VeinBuried,
+                        packet.Fade0);
             }
-            var platformSystem = factory.platformSystem;
-            for (var i = 0; i < area; i++)
+            if (!packet.IsRestore)
             {
-                var index = packet.ReformIndices[i];
-                if (index < 0)
+                var platformSystem = factory.platformSystem;
+                for (var i = 0; i < area; i++)
                 {
-                    continue;
-                }
-                var type = platformSystem.GetReformType(index);
-                var color = platformSystem.GetReformColor(index);
-                if (type != packet.ReformType || color != packet.ReformColor)
-                {
-                    factory.platformSystem.SetReformType(index, packet.ReformType);
-                    factory.platformSystem.SetReformColor(index, packet.ReformColor);
+                    var index = packet.ReformIndices[i];
+                    if (index < 0)
+                    {
+                        continue;
+                    }
+                    var type = platformSystem.GetReformType(index);
+                    var color = platformSystem.GetReformColor(index);
+                    if (type != packet.ReformType || color != packet.ReformColor)
+                    {
+                        factory.platformSystem.SetReformType(index, packet.ReformType);
+                        factory.platformSystem.SetReformColor(index, packet.ReformColor);
+                    }
                 }
             }
         }
-
-        if (IsHost && planet != null)
+        finally
         {
-            Multiplayer.Session.Network.SendPacketToStar(packet, planet.star.id);
+            Multiplayer.Session.Factories.PacketAuthor = NebulaModAPI.AUTHOR_NONE;
+            Multiplayer.Session.Factories.TargetPlanet = NebulaModAPI.PLANET_NONE;
+            if (!IsHost) Multiplayer.Session.Vegetation.EndReplay();
+        }
+
+        if (IsHost)
+        {
+            Multiplayer.Session.Server.SendPacketToStarExclude(packet, planet.star.id, conn);
+            var authoritative = Multiplayer.Session.Vegetation.CaptureRemote(author);
+            conn.SendPacket(new VegetableCollectionSnapshotPacket(authoritative, true));
         }
     }
 }

@@ -33,11 +33,11 @@ public class CombatTruceUpdateProcessor : PacketProcessor<CombatTruceUpdatePacke
                 userName = player.Username;
             }
         }
-        var message = string.Format("{0} set ".Translate(), userName);
         var second = (int)(GameMain.history.dfTruceTimer / 60L);
         var minute = second / 60;
         var hour = minute / 60;
-        message += string.Format("停战时间".Translate(), hour, minute % 60, second % 60);
+        var message = string.Format("{0} set truce time to {1:D2}:{2:D2}:{3:D2}".Translate(),
+            userName, hour, minute % 60, second % 60);
         ChatManager.Instance.SendChatMessage(message, ChatMessageType.BattleMessage);
     }
 }

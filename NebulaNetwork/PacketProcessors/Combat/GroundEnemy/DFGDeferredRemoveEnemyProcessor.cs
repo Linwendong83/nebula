@@ -17,6 +17,8 @@ public class DFGDeferredRemoveEnemyProcessor : PacketProcessor<DFGDeferredRemove
     {
         var factory = GameMain.galaxy.PlanetById(packet.PlanetId)?.factory;
         if (factory == null) return;
+        Multiplayer.Session.Enemies.RecordAuthoritativeRemoval(packet.PlanetId, packet.EnemyId,
+            Multiplayer.Session.Generations.Peek(packet.PlanetId, packet.EnemyId));
 
         using (Multiplayer.Session.Combat.IsIncomingRequest.On())
         {

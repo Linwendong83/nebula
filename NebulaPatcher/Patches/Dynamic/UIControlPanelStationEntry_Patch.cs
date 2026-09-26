@@ -76,7 +76,7 @@ internal class UIControlPanelStationEntry_Patch
         if (!Multiplayer.IsActive) return true;
         if (__instance.factory == null || __instance.station == null)
         {
-            UIRealtimeTip.Popup("Unavailable".Translate());
+            UIRealtimeTip.Popup("Remote planet facility cannot be operated".Translate());
             return false;
         }
 

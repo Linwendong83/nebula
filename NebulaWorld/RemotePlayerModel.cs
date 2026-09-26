@@ -1,6 +1,8 @@
 ﻿#region
 
+using NebulaWorld.Combat;
 using NebulaWorld.MonoBehaviours.Remote;
+using NebulaModel.Utils;
 using UnityEngine;
 using UnityEngine.UI;
 using static UnityEngine.MeshSubsetCombineUtility;
@@ -46,7 +48,8 @@ public class RemotePlayerModel
         {
             PlayerTransform.gameObject.name = $"Remote Player ({playerId})";
 
-            PlayerInstance = new global::Player { transform = PlayerTransform };
+            PlayerInstance = new global::Player();
+            PlayerInstance.SetHiddenProperty(nameof(global::Player.transform), PlayerTransform);
         }
         if (Animator != null)
         {
@@ -55,10 +58,10 @@ public class RemotePlayerModel
         MechaInstance = new Mecha();
         if (PlayerInstance != null)
         {
-            PlayerInstance.mecha = MechaInstance;
+            PlayerInstance.SetHiddenProperty(nameof(global::Player.mecha), MechaInstance);
             MechaInstance.Init(GameMain.data, PlayerInstance);
             MechaInstance.SetForNewGame();
-            PlayerInstance.animator = Animator.PlayerAnimator;
+            PlayerInstance.SetHiddenProperty(nameof(global::Player.animator), Animator.PlayerAnimator);
 
             //Fix MechaDroneRenderers
             //todo:replace
@@ -69,9 +72,10 @@ public class RemotePlayerModel
             //Fix MechaArmorModel
             if (PlayerModelTransform != null)
             {
-                PlayerInstance.mechaArmorModel = PlayerModelTransform.GetComponent<MechaArmorModel>();
+                PlayerInstance.SetHiddenProperty(nameof(global::Player.mechaArmorModel),
+                    PlayerModelTransform.GetComponent<MechaArmorModel>());
                 var mechaArmorModel = PlayerInstance.mechaArmorModel;
-                mechaArmorModel.data = PlayerInstance;
+                mechaArmorModel.SetHiddenProperty(nameof(ManualBehaviour.data), PlayerInstance);
                 mechaArmorModel.player = PlayerInstance;
                 mechaArmorModel.mecha = MechaInstance;
                 mechaArmorModel._OnCreate();
@@ -83,7 +87,8 @@ public class RemotePlayerModel
                 }
             }
 
-            PlayerInstance.controller = PlayerTransform.gameObject.GetComponent<PlayerController>();
+            PlayerInstance.SetHiddenProperty(nameof(global::Player.controller),
+                PlayerTransform.gameObject.GetComponent<PlayerController>());
             var controller = PlayerInstance.controller;
             controller.gameData = GameMain.data;
             controller.player = PlayerInstance;
@@ -96,7 +101,7 @@ public class RemotePlayerModel
             PlayerInstance.isAlive = true; // TODO: Load remote player alive state
             var gameObject = new GameObject("Camera Target"); // Dummy object to avoid NRE
             gameObject.transform.SetParent(PlayerInstance.transform, false);
-            PlayerInstance.cameraTarget = gameObject.transform;
+            PlayerInstance.SetHiddenProperty(nameof(global::Player.cameraTarget), gameObject.transform);
         }
 
         PlayerId = playerId;
@@ -106,6 +111,7 @@ public class RemotePlayerModel
     public string Username { get; set; }
     public ushort PlayerId { get; set; }
     public NebulaModel.DataStructures.PlayerLifeData Life { get; set; } = new();
+    public RemoteRespawnVisualState RespawnVisual { get; } = new();
     public System.Collections.Generic.List<ArmorWreckage> Wreckages { get; set; } = new();
     public Transform PlayerTransform { get; set; }
     public Transform PlayerModelTransform { get; set; }

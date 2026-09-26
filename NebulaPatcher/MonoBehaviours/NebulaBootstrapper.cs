@@ -3,6 +3,7 @@
 using NebulaModel.Networking;
 using NebulaPatcher.Patches.Misc;
 using NebulaWorld;
+using NebulaWorld.Player;
 using UnityEngine;
 
 #endregion
@@ -27,14 +28,13 @@ public class NebulaBootstrapper : MonoBehaviour
 
         // This makes sure that even if the game is minimized, it will still receive and send packets
         Application.runInBackground = true;
-        // make sure chat window starts out closed
-        //InGameChatAssetLoader.ChatManager()?.Toggle(forceClosed: true);
     }
 
     private void LateUpdate()
     {
         if (Multiplayer.IsActive)
         {
+            PlayerLatencyTracker.Update();
             (Multiplayer.Session.Network as IServer)?.Update();
             (Multiplayer.Session.Network as IClient)?.Update();
         }

@@ -6,6 +6,7 @@ using NebulaModel.Logger;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.GameHistory;
+using NebulaModel.Utils;
 using NebulaWorld;
 
 #endregion
@@ -22,7 +23,7 @@ internal class GameHistoryResearchUpdateProcessor : PacketProcessor<GameHistoryR
         {
             Log.Warn($"CurrentTech mismatch! Server:{packet.TechId} Local:{data.currentTech}");
             //Replace currentTech to match with server
-            data.currentTech = packet.TechId;
+            data.SetHiddenProperty(nameof(GameHistoryData.currentTech), packet.TechId);
             data.techQueue[0] = packet.TechId;
         }
         var state = data.techStates[data.currentTech];

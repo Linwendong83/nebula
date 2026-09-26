@@ -20,10 +20,13 @@ public class RestorationPersistenceTest
     }
 
     [TestMethod]
-    public void PlayerRevisionNineRoundTripsDeathAndRevisionEightRemainsReadable()
+    public void PlayerRevisionTenKeepsVegetationAndOlderRevisionsRemainReadable()
     {
+        var collection = new VegetableCollection();
+        collection.AddVegeToPlayer(1101, 3);
         var player = new PlayerData(7, 102, "test")
         {
+            VegetableCollectionData = VegetableCollectionState.Capture(collection),
             Life = new PlayerLifeData
             {
                 IsAlive = false,
@@ -42,8 +45,15 @@ public class RestorationPersistenceTest
         TestAssert.IsFalse(restored.Life.IsAlive);
         TestAssert.AreEqual(4, restored.Life.DeathCount);
         TestAssert.IsTrue(restored.Life.RedeployItemsDropped);
+        var restoredCollection = new VegetableCollection();
+        VegetableCollectionState.Restore(restoredCollection, restored.VegetableCollectionData);
+        TestAssert.AreEqual(3, restoredCollection.playerVegeDict[1101]);
+        var revisionNineBytes = data.Take(data.Length - sizeof(int) - player.VegetableCollectionData.Length).ToArray();
+        var revisionNine = new PlayerData(); revisionNine.Import(new NetDataReader(revisionNineBytes), 9);
+        TestAssert.IsFalse(revisionNine.Life.IsAlive);
+        TestAssert.IsEmpty(revisionNine.VegetableCollectionData);
         var lifeWriter = new NetDataWriter(); player.Life.Serialize(lifeWriter);
-        var legacyBytes = data.Take(data.Length - lifeWriter.Length - sizeof(int)).ToArray();
+        var legacyBytes = revisionNineBytes.Take(revisionNineBytes.Length - lifeWriter.Length - sizeof(int)).ToArray();
         var legacy = new PlayerData(); legacy.Import(new NetDataReader(legacyBytes), 8);
         TestAssert.IsTrue(legacy.Life.IsAlive);
         TestAssert.AreEqual("test", legacy.Username);

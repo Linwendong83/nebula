@@ -4,7 +4,6 @@ using HarmonyLib;
 using NebulaAPI;
 using NebulaModel;
 using NebulaModel.Packets.Combat.Mecha;
-using NebulaModel.Packets.Players;
 using NebulaWorld;
 
 #endregion
@@ -40,15 +39,7 @@ internal class Player_Patch
         // Only call SetSandCount when there is sand change in client
         if (gainedSand > 0)
         {
-            if (Config.Options.SyncSoil && Multiplayer.Session.IsClient)
-            {
-                // Report to server to add sand in shared pool
-                Multiplayer.Session.Client.SendPacket(new PlayerSandCount(gainedSand, true));
-            }
-            else
-            {
-                __instance.SetSandCount(__instance.sandCount + gainedSand, (ESandSource)0);
-            }
+            __instance.SetSandCount(__instance.sandCount + gainedSand, (ESandSource)0);
         }
         return false;
     }
@@ -56,58 +47,17 @@ internal class Player_Patch
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(Player.SetSandCount))]
-    public static bool SetSandCount_Prefix(long newSandCount)
+    public static bool SetSandCount_Prefix()
     {
         if (!Multiplayer.IsActive)
         {
             return true;
         }
 
-        if (!Config.Options.SyncSoil)
-        {
-            return Multiplayer.Session.Factories.PacketAuthor == Multiplayer.Session.LocalPlayer.Id ||
-                   Multiplayer.Session.LocalPlayer.IsHost &&
-                   Multiplayer.Session.Factories.PacketAuthor == NebulaModAPI.AUTHOR_NONE ||
-                   !Multiplayer.Session.Factories.IsIncomingRequest.Value;
-        }
-
-        if (Multiplayer.Session.LocalPlayer.IsHost)
-        {
-            //Soil should be given in singleplayer or to the host who then syncs it back to all players.
-            var deltaSandCount = (int)(newSandCount - GameMain.mainPlayer.sandCount);
-            if (deltaSandCount != 0)
-            {
-                UpdateSyncedSandCount(deltaSandCount);
-                Multiplayer.Session.Server.SendPacket(new PlayerSandCount(newSandCount));
-            }
-        }
-        else
-        {
-            //Or client that use reform tool
-            if (GameMain.mainPlayer.controller.actionBuild.reformTool.drawing)
-            {
-                Multiplayer.Session.Client.SendPacket(new PlayerSandCount(newSandCount));
-            }
-        }
-
-        return Multiplayer.Session.LocalPlayer.IsHost;
-        //Soil should be given in singleplayer or to the player who is author of the "Build" request, or to the host if there is no author.
-    }
-
-    private static void UpdateSyncedSandCount(long deltaSandCount)
-    {
-        var connectedPlayers = Multiplayer.Session.Server.Players.Connected;
-        foreach (var kvp in connectedPlayers)
-        {
-            kvp.Value.Data.Mecha.SandCount += deltaSandCount / (connectedPlayers.Count + 1);
-            // dont be too picky here, a little bit more or less sand is ignorable i guess
-            if (kvp.Value.Data.Mecha.SandCount < 0)
-            {
-                kvp.Value.Data.Mecha.SandCount = 0;
-            }
-        }
-
-        Multiplayer.Session.LocalPlayer.Data.Mecha.SandCount += deltaSandCount / (connectedPlayers.Count + 1);
+        return Multiplayer.Session.Factories.PacketAuthor == Multiplayer.Session.LocalPlayer.Id ||
+               Multiplayer.Session.LocalPlayer.IsHost &&
+               Multiplayer.Session.Factories.PacketAuthor == NebulaModAPI.AUTHOR_NONE ||
+               !Multiplayer.Session.Factories.IsIncomingRequest.Value;
     }
 
     [HarmonyPrefix]

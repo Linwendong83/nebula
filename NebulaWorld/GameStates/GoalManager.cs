@@ -2,6 +2,9 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using NebulaModel;
+using NebulaModel.Logger;
+using NebulaModel.Utils;
 using NebulaModel.Packets.GameStates;
 
 namespace NebulaWorld.GameStates;
@@ -9,14 +12,37 @@ namespace NebulaWorld.GameStates;
 public sealed class GoalManager : IDisposable
 {
     private const int GoalLevelKey = -1708469030;
+    public static EGoalLevel PendingHostLevel { get; set; } = EGoalLevel.None;
     public static void RestoreLevel(GameData data)
     {
-        if (data.gameDesc.goalLevel == EGoalLevel.None)
+        if (!Multiplayer.Session.IsServer) return;
+        var manager = Multiplayer.Session.Goals;
+        if (!manager.legacyCaptured)
         {
-            data.history.featureValues.TryGetValue(GoalLevelKey, out var level);
-            data.gameDesc.goalLevel = level >= (int)EGoalLevel.Off && level <= (int)EGoalLevel.Full ? (EGoalLevel)level : EGoalLevel.Full;
+            var level = data.gameDesc.goalLevel;
+            if (level == EGoalLevel.None)
+            {
+                data.history.featureValues.TryGetValue(GoalLevelKey, out var oldLevel);
+                level = oldLevel >= (int)EGoalLevel.Off && oldLevel <= (int)EGoalLevel.Full
+                    ? (EGoalLevel)oldLevel : EGoalLevel.Full;
+            }
+            manager.legacyLevel = level;
+            if (data.goalSystem != null)
+            {
+                foreach (var goal in data.goalSystem.goalDatas.Values)
+                {
+                    if (goal.isManualIgnore) manager.legacyIgnored.Add(goal.protoId);
+                    if (goal.stage == EGoalStage.Ignored)
+                    {
+                        goal.isManualIgnore = false;
+                        goal.stage = EGoalStage.Enabled;
+                    }
+                }
+            }
+            manager.legacyCaptured = true;
         }
-        if (Multiplayer.Session.IsServer) data.history.featureValues[GoalLevelKey] = (int)data.gameDesc.goalLevel;
+        data.gameDesc.goalLevel = EGoalLevel.Full;
+        data.history.featureValues[GoalLevelKey] = (int)EGoalLevel.Full;
     }
     public static readonly HashSet<string> PersonalDeterminators = new(StringComparer.Ordinal)
     {
@@ -25,6 +51,9 @@ public sealed class GoalManager : IDisposable
         "GD_SailOrbitCheck", "GD_StarTravelledCheck", "GD_SpaceCapsuleRecycled", "GD_MechaAndFactoryItemProduction"
     };
     private readonly Dictionary<int, GoalData> personalData = new();
+    private readonly Dictionary<int, GoalData> displayData = new();
+    private readonly HashSet<int> localIgnored = new();
+    private readonly HashSet<int> legacyIgnored = new();
     private readonly Dictionary<int, GoalDeterminator> collectors = new();
     private readonly Dictionary<int, long> sentProgress = new();
     private readonly Dictionary<(ushort Player, int Goal), (long Sequence, long Value)> observed = new();
@@ -33,9 +62,259 @@ public sealed class GoalManager : IDisposable
     private long observationSequence;
     private long lastTick = -1;
     private bool snapshotReady;
+    private bool legacyCaptured;
+    private bool existingPlayer;
+    private bool hasPersonalProfile;
+    private bool awaitingSelection;
+    private int uiDepth;
+    private EGoalLevel savedWorldLevel;
+    private EGoalLevel legacyLevel = EGoalLevel.Full;
+    private EGoalLevel localLevel = EGoalLevel.Full;
+    private Action continueAfterSelection;
     public bool CollectingPersonal { get; private set; }
     public bool Applying { get; private set; }
     public bool Dirty { get; set; }
+    public bool RenderingPersonal => uiDepth > 0;
+    public bool AwaitingSelection => awaitingSelection;
+    public EGoalLevel PersonalLevel => localLevel;
+
+    public void SetExistingPlayer(bool value) => existingPlayer = value;
+
+    public void PrepareHostProfile()
+    {
+        if (!Multiplayer.Session.IsServer || Multiplayer.IsDedicated) return;
+        var profile = ServerMemoryStore.Instance.FindProfile(null, SaveManager.WorldId,
+            CryptoUtils.GetCurrentUserPublicKeyHash());
+        if (profile != null) LoadProfile(profile);
+        else
+        {
+            localLevel = PendingHostLevel is >= EGoalLevel.Off and <= EGoalLevel.Full
+                ? PendingHostLevel : legacyLevel;
+            localIgnored.UnionWith(legacyIgnored);
+            hasPersonalProfile = true;
+        }
+        if (PendingHostLevel is >= EGoalLevel.Off and <= EGoalLevel.Full)
+            localLevel = PendingHostLevel;
+        SavePersonalProfile();
+        PendingHostLevel = EGoalLevel.None;
+    }
+
+    public bool PrepareClientProfile(Action continueLoading)
+    {
+        var connection = Multiplayer.LastConnection;
+        PersonalGoalProfile profile = null;
+        if (!string.IsNullOrEmpty(connection?.RecordId))
+            profile = ServerMemoryStore.Instance.FindProfile(connection.RecordId, SaveManager.WorldId,
+                CryptoUtils.GetCurrentUserPublicKeyHash());
+        else if (connection?.TransientWorldId == SaveManager.WorldId)
+            profile = connection.TransientGoals;
+        if (profile != null)
+        {
+            LoadProfile(profile);
+            return true;
+        }
+        var recordLevel = GetSavedServerLevel();
+        if (recordLevel >= 0)
+        {
+            // The level picked for this server on the multiplayer page: matching the
+            // load-game window, the stored choice applies without asking again.
+            localLevel = (EGoalLevel)recordLevel;
+            if (existingPlayer) localIgnored.UnionWith(legacyIgnored);
+            hasPersonalProfile = true;
+            SavePersonalProfile();
+            return true;
+        }
+        awaitingSelection = true;
+        continueAfterSelection = continueLoading;
+        UIRoot.instance.CloseLoadingUI();
+        NebulaWorld.InGamePopup.FadeOut();
+        var setting = UIRoot.instance.goalSetting;
+        setting._Open();
+        setting.SetOpeningGoalLevel(legacyLevel);
+        setting.transform.SetAsLastSibling();
+        return false;
+    }
+
+    private int GetSavedServerLevel()
+    {
+        var recordId = Multiplayer.LastConnection?.RecordId;
+        if (string.IsNullOrEmpty(recordId)) return -1;
+        var level = ServerMemoryStore.Instance.FindServer(recordId)?.GoalLevel ?? 0;
+        return level >= (int)EGoalLevel.Off && level <= (int)EGoalLevel.Full ? level : -1;
+    }
+
+    private void SyncServerRecordLevel(int level)
+    {
+        // Hosts keep their level in the lobby/legacy state; only clients have a server record.
+        if (!Multiplayer.Session.IsClient) return;
+        if (level < (int)EGoalLevel.Off || level > (int)EGoalLevel.Full) return;
+        try { ServerMemoryStore.Instance.UpdateGoalLevel(Multiplayer.LastConnection?.RecordId, level); }
+        catch (Exception e) { Log.Warn($"Could not save server goal level: {e.Message}"); }
+    }
+
+    public void SelectInitialLevel(int level, UIGoalSetting setting)
+    {
+        if (!awaitingSelection || level < (int)EGoalLevel.Off || level > (int)EGoalLevel.Full) return;
+        localLevel = (EGoalLevel)level;
+        if (existingPlayer) localIgnored.UnionWith(legacyIgnored);
+        hasPersonalProfile = true;
+        SavePersonalProfile();
+        SyncServerRecordLevel(level);
+        awaitingSelection = false;
+        setting.CloseSettingWindow();
+        UIRoot.instance.OpenLoadingUI();
+        var callback = continueAfterSelection;
+        continueAfterSelection = null;
+        callback?.Invoke();
+    }
+
+    public void ChangePersonalLevel(int level)
+    {
+        if (level < (int)EGoalLevel.Off || level > (int)EGoalLevel.Full) return;
+        localLevel = (EGoalLevel)level;
+        if (Multiplayer.Session.IsClient && GameMain.data != null) GameMain.data.gameDesc.goalLevel = localLevel;
+        SavePersonalProfile();
+        SyncServerRecordLevel(level);
+        GameMain.gameScenario?.goalLogic?.NotifyOnGoalLevelChanged();
+        UIRoot.instance?.uiGame?.goalPanel?.Reset();
+    }
+
+    public void IgnorePersonalGoal(int id)
+    {
+        if (id <= 0 || GameMain.data?.goalSystem?.GetGoalDataById(id)?.stage == EGoalStage.Completed) return;
+        localIgnored.Add(id);
+        SavePersonalProfile();
+        UIRoot.instance?.uiGame?.goalPanel?.Reset();
+    }
+
+    public GoalData GetDisplayGoal(int id, GoalData shared)
+    {
+        if (!RenderingPersonal || shared == null) return shared;
+        if (!displayData.TryGetValue(id, out var data))
+            displayData[id] = data = new GoalData(id);
+        SyncDisplayGoal(id, shared, data);
+        return data;
+    }
+
+    private void SyncDisplayGoal(int id, GoalData shared, GoalData data)
+    {
+        data._stage = localIgnored.Contains(id) && shared.stage != EGoalStage.Completed
+            ? EGoalStage.Ignored : shared.stage;
+        data.currentValue = shared.currentValue;
+        data.targetValue = shared.targetValue;
+        data.isManualIgnore = localIgnored.Contains(id);
+        data.isPatched = shared.isPatched;
+        data.currentIgnoreLevel = shared.currentIgnoreLevel;
+    }
+
+    public void BeginUiRender()
+    {
+        if (uiDepth++ != 0 || GameMain.data?.gameDesc == null) return;
+        savedWorldLevel = GameMain.data.gameDesc.goalLevel;
+        GameMain.data.gameDesc.goalLevel = localLevel;
+    }
+
+    public void EndUiRender()
+    {
+        if (uiDepth == 0 || --uiDepth != 0 || GameMain.data?.gameDesc == null) return;
+        GameMain.data.gameDesc.goalLevel = savedWorldLevel;
+    }
+
+    private void LoadProfile(PersonalGoalProfile profile)
+    {
+        localLevel = profile.Level >= (int)EGoalLevel.Off && profile.Level <= (int)EGoalLevel.Full
+            ? (EGoalLevel)profile.Level : EGoalLevel.Full;
+        localIgnored.Clear();
+        if (profile.IgnoredGoalIds != null) localIgnored.UnionWith(profile.IgnoredGoalIds);
+        hasPersonalProfile = true;
+    }
+
+    private void SavePersonalProfile()
+    {
+        if (!hasPersonalProfile) return;
+        var recordId = Multiplayer.Session.IsServer ? null : Multiplayer.LastConnection?.RecordId;
+        var profile = new PersonalGoalProfile
+        { Level = (int)localLevel, IgnoredGoalIds = localIgnored.OrderBy(x => x).ToList() };
+        if (Multiplayer.Session.IsServer || !string.IsNullOrEmpty(recordId))
+        {
+            try
+            {
+                ServerMemoryStore.Instance.SaveProfile(recordId, SaveManager.WorldId,
+                    CryptoUtils.GetCurrentUserPublicKeyHash(), profile.Level, profile.IgnoredGoalIds);
+            }
+            catch (Exception e) { Log.Warn($"Could not save personal goals: {e.Message}"); }
+        }
+        else if (Multiplayer.LastConnection != null)
+        {
+            Multiplayer.LastConnection.TransientWorldId = SaveManager.WorldId;
+            Multiplayer.LastConnection.TransientGoals = profile;
+        }
+    }
+
+    public void LoadLegacyDefaults()
+    {
+        if (!Multiplayer.Session.IsServer) return;
+        var path = Path.Combine(GameConfig.gameSaveFolder, "Nebula", SaveManager.WorldId, "goal-defaults.bin");
+        foreach (var candidate in new[] { path, path + ".bak" })
+        {
+            if (!File.Exists(candidate)) continue;
+            try
+            {
+                using var stream = File.OpenRead(candidate);
+                using var reader = new BinaryReader(stream);
+                var level = reader.ReadInt32();
+                var count = reader.ReadInt32();
+                if (count < 0 || count > LDB.goals.Length) throw new InvalidDataException("Invalid goal defaults");
+                var ids = new HashSet<int>();
+                for (var i = 0; i < count; i++) ids.Add(reader.ReadInt32());
+                legacyLevel = level >= (int)EGoalLevel.Off && level <= (int)EGoalLevel.Full
+                    ? (EGoalLevel)level : EGoalLevel.Full;
+                legacyIgnored.Clear();
+                legacyIgnored.UnionWith(ids);
+                return;
+            }
+            catch (Exception e) { Log.Warn($"Could not load {candidate}: {e.Message}"); }
+        }
+        if (File.Exists(path)) return; // Keep damaged data for manual recovery.
+        using var output = new MemoryStream();
+        using (var writer = new BinaryWriter(output, System.Text.Encoding.UTF8, true))
+        {
+            writer.Write((int)legacyLevel);
+            writer.Write(legacyIgnored.Count);
+            foreach (var id in legacyIgnored.OrderBy(x => x)) writer.Write(id);
+        }
+        try { AtomicFile.Write(path, output.ToArray()); }
+        catch (Exception e) { Log.Warn($"Could not save goal defaults: {e.Message}"); }
+    }
+
+    public void ReadDefaults(byte[] bytes)
+    {
+        using var stream = new MemoryStream(bytes, false);
+        using var reader = new BinaryReader(stream);
+        reader.ReadInt32();
+        reader.ReadBoolean();
+        reader.ReadBoolean();
+        var defaultLevel = reader.ReadInt32();
+        var count = reader.ReadInt32();
+        if (count < 0 || count > LDB.goals.Length) throw new InvalidDataException("Invalid goal count");
+        for (var i = 0; i < count; i++)
+        {
+            reader.ReadInt32(); reader.ReadInt32(); reader.ReadInt64(); reader.ReadInt64();
+            reader.ReadBoolean(); reader.ReadBoolean(); reader.ReadInt32();
+        }
+        var queueCount = reader.ReadInt32();
+        if (queueCount < 0 || queueCount > LDB.goals.Length * 2) throw new InvalidDataException("Invalid goal queue");
+        for (var i = 0; i < queueCount; i++) reader.ReadInt32();
+        legacyLevel = defaultLevel >= (int)EGoalLevel.Off && defaultLevel <= (int)EGoalLevel.Full
+            ? (EGoalLevel)defaultLevel : EGoalLevel.Full;
+        legacyIgnored.Clear();
+        if (stream.Position == stream.Length) return;
+        var storedLevel = (EGoalLevel)reader.ReadInt32();
+        if (storedLevel >= EGoalLevel.Off && storedLevel <= EGoalLevel.Full) legacyLevel = storedLevel;
+        var ignoredCount = reader.ReadInt32();
+        if (ignoredCount < 0 || ignoredCount > LDB.goals.Length) throw new InvalidDataException("Invalid ignored goals");
+        for (var i = 0; i < ignoredCount; i++) legacyIgnored.Add(reader.ReadInt32());
+    }
 
     public GoalData GetPersonalGoal(int id)
     {
@@ -63,6 +342,9 @@ public sealed class GoalManager : IDisposable
         }
         writer.Write(system.queueCursor);
         for (var i = 0; i < system.queueCursor; i++) writer.Write(system.goalQueue[i]);
+        writer.Write((int)legacyLevel);
+        writer.Write(legacyIgnored.Count);
+        foreach (var id in legacyIgnored.OrderBy(x => x)) writer.Write(id);
         return stream.ToArray();
     }
 
@@ -76,10 +358,7 @@ public sealed class GoalManager : IDisposable
             if (reader.ReadInt32() != 1) throw new InvalidDataException("Unknown goal snapshot version");
             GameMain.data.gameDesc.isSandboxMode = reader.ReadBoolean();
             GameMain.sandboxToolsEnabled = reader.ReadBoolean();
-            var level = (EGoalLevel)reader.ReadInt32();
-            if (level < EGoalLevel.Off || level > EGoalLevel.Full) level = EGoalLevel.Full;
-            var levelChanged = GameMain.data.gameDesc.goalLevel != level;
-            GameMain.data.gameDesc.goalLevel = level;
+            reader.ReadInt32(); // Server evaluation level; the local level is per player.
             var count = reader.ReadInt32();
             if (count < 0 || count > LDB.goals.Length) throw new InvalidDataException("Invalid goal count");
             var system = GameMain.data.goalSystem;
@@ -87,11 +366,12 @@ public sealed class GoalManager : IDisposable
             {
                 var id = reader.ReadInt32(); var stage = (EGoalStage)reader.ReadInt32();
                 var current = reader.ReadInt64(); var target = reader.ReadInt64();
-                var ignore = reader.ReadBoolean(); var patched = reader.ReadBoolean(); var ignoreLevel = reader.ReadInt32();
+                reader.ReadBoolean(); var patched = reader.ReadBoolean(); var ignoreLevel = reader.ReadInt32();
                 if (!system.goalDatas.TryGetValue(id, out var data)) throw new InvalidDataException("Unknown goal prototype");
                 var changed = data.stage != stage;
                 data._stage = stage; data.currentValue = current; data.targetValue = target;
-                data.isManualIgnore = ignore; data.isPatched = patched; data.currentIgnoreLevel = ignoreLevel;
+                data.isManualIgnore = false; data.isPatched = patched; data.currentIgnoreLevel = ignoreLevel;
+                if (displayData.TryGetValue(id, out var visual)) SyncDisplayGoal(id, data, visual);
                 // displayingState belongs to each UI, not to the host's renderer.
                 if (changed) GameMain.gameScenario?.goalLogic?.NotifyOnGoalStageChanged(id, (int)stage);
             }
@@ -100,11 +380,6 @@ public sealed class GoalManager : IDisposable
             Array.Clear(system.goalQueue, 0, system.goalQueue.Length);
             system.queueCursor = queueCount;
             for (var i = 0; i < queueCount; i++) system.goalQueue[i] = reader.ReadInt32();
-            if (levelChanged)
-            {
-                GameMain.gameScenario?.goalLogic?.NotifyOnGoalLevelChanged();
-                UIRoot.instance?.uiGame?.goalPanel?.Reset();
-            }
             snapshotReady = true;
         }
         finally { Applying = false; }
@@ -115,25 +390,6 @@ public sealed class GoalManager : IDisposable
         if (packet.Version <= version) return;
         Apply(packet.Data);
         version = packet.Version;
-    }
-
-    public void Command(GoalCommandPacket packet)
-    {
-        if (Multiplayer.Session.IsClient) { Multiplayer.Session.Network.SendPacket(packet); return; }
-        if (packet.ChangeLevel)
-        {
-            if (packet.Value < (int)EGoalLevel.Off || packet.Value > (int)EGoalLevel.Full) return;
-            GameMain.data.gameDesc.goalLevel = (EGoalLevel)packet.Value;
-            GameMain.history.featureValues[GoalLevelKey] = packet.Value;
-            GameMain.gameScenario.goalLogic.NotifyOnGoalLevelChanged();
-            UIRoot.instance?.uiGame?.goalPanel?.Reset();
-        }
-        else if (GameMain.data.goalSystem.goalDatas.TryGetValue(packet.Value, out var goal))
-        {
-            if (!goal.isIgnoredOrCompleted) goal.stage = EGoalStage.Ignored;
-            goal.isManualIgnore = true;
-        }
-        Dirty = true;
     }
 
     public void GameTick()
@@ -231,6 +487,7 @@ public sealed class GoalManager : IDisposable
     public void Dispose()
     {
         foreach (var collector in collectors.Values) collector.Free();
-        collectors.Clear(); personalData.Clear(); observed.Clear(); sentProgress.Clear();
+        collectors.Clear(); personalData.Clear(); displayData.Clear(); localIgnored.Clear();
+        observed.Clear(); sentProgress.Clear();
     }
 }

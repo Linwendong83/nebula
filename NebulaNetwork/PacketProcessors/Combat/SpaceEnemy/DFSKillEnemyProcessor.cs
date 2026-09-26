@@ -21,6 +21,7 @@ public class DFSKillEnemyProcessor : PacketProcessor<DFSKillEnemyPacket>
         if (hive == null || packet.EnemyId < 0 || packet.EnemyId >= spaceSector.enemyCursor) return;
 
         ref var ptr = ref spaceSector.enemyPool[packet.EnemyId];
+        Multiplayer.Session.Enemies.RecordAuthoritativeRemoval(0, packet.EnemyId, packet.Generation);
         using (Multiplayer.Session.Enemies.IsIncomingRequest.On())
         {
             if (ptr.id > 0)

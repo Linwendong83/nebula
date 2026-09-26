@@ -98,6 +98,10 @@ internal class MarkerSettingUpdateProcessor : PacketProcessor<MarkerSettingUpdat
                 case MarkerSettingEvent.SetDigitalSignalId:
                     marker.SetDigitalSignalId(packet.IntValue);
                     break;
+
+                case MarkerSettingEvent.SetDFAttractionFlags:
+                    marker.SetDFAttractionFlags(packet.IntValue);
+                    break;
             }
 
             try

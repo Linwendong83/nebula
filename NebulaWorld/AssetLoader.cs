@@ -12,6 +12,7 @@ namespace NebulaWorld;
 public static class AssetLoader
 {
     private static AssetBundle assetBundle;
+    private static AssetBundle nameTagAssetBundle;
 
     public static AssetBundle AssetBundle
     {
@@ -32,6 +33,26 @@ public static class AssetLoader
             assetBundle = AssetBundle.LoadFromFile(fullAssetPath);
 
             return assetBundle;
+        }
+    }
+
+    public static AssetBundle NameTagAssetBundle
+    {
+        get
+        {
+            if (nameTagAssetBundle != null)
+            {
+                return nameTagAssetBundle;
+            }
+
+            var pluginFolder = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            if (pluginFolder == null)
+            {
+                return null;
+            }
+
+            nameTagAssetBundle = AssetBundle.LoadFromFile(Path.Combine(pluginFolder, "nebulanametag"));
+            return nameTagAssetBundle;
         }
     }
 }

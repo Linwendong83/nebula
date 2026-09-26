@@ -27,11 +27,10 @@ internal static class PluginInfo
     public const string PLUGIN_ID = "dsp.nebula-multiplayer";
 
     /// <summary>
-    ///     Fork-specific dev suffix and revision number.
+    ///     Fork-specific dev suffix.
     ///     Empty string means pure upstream release build.
     /// </summary>
-    public const string FORK_SUFFIX = "-dev.4";
-    public const int FORK_REVISION = 4;
+    public const string FORK_SUFFIX = "-dev.5";
 
     /// <summary>
     ///     Base version from upstream (e.g. "0.9.22").

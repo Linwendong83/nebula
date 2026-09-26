@@ -44,12 +44,7 @@ internal class SpaceSector_Patch
             return true;
         }
 
-        // Client: wait for server to approve the unitId and enmeyId recycle
-        // Make this enemyData appear as empty        
-        enemyPtr.isInvincible = true;
-        enemyPtr.id = 0;
-        // Wait for the host's damage result; do not submit an unvalidated kill request.
-
+        // Keep the enemy targetable until the host confirms its death.
         return false;
     }
 

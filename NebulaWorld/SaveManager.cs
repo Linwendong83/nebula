@@ -16,7 +16,7 @@ namespace NebulaWorld;
 public static class SaveManager
 {
     private const string FILE_EXTENSION = ".server";
-    private const ushort REVISION = 9;
+    private const ushort REVISION = 10;
     public static string WorldId { get; private set; } = Guid.NewGuid().ToString("N");
 
     public static void SetWorldId(string worldId)
@@ -51,11 +51,16 @@ public static class SaveManager
     private static string pendingLoadFileName;
     private static bool pendingLoadSaveFile;
     private static bool hasPendingLoad;
+    private static bool serverDataLoadFailed;
+    public static bool CanSave => !serverDataLoadFailed;
     public static IReadOnlyDictionary<string, IPlayerData> PlayerSaves => playerSaves;
 
     public static void SaveServerData(string saveName)
     {
+        if (serverDataLoadFailed)
+            throw new InvalidOperationException("Multiplayer data could not be loaded; refusing to overwrite the save.");
         Multiplayer.Session.Kills.CapturePlayersForSave();
+        Multiplayer.Session.Vegetation.CaptureRemoteForSave();
         var path = GameConfig.gameSaveFolder + saveName + FILE_EXTENSION;
         // var playerManager = Multiplayer.Session.Network.PlayerManager;
         var netDataWriter = new NetDataWriter();
@@ -79,9 +84,10 @@ public static class SaveManager
         netDataWriter.Put(CryptoUtils.GetCurrentUserPublicKeyHash());
         var hostData = (PlayerData)Multiplayer.Session.LocalPlayer.Data;
         hostData.Life = PlayerLifeData.Capture(GameMain.mainPlayer, hostData.Life.Revision, hostData.Life.TransactionId);
+        hostData.VegetableCollectionData = VegetableCollectionState.Capture(GameMain.mainPlayer.vegetableCollection);
         Multiplayer.Session.LocalPlayer.Data.Serialize(netDataWriter);
 
-        if (File.Exists(path) && !File.Exists(path + ".pre-v9")) File.Copy(path, path + ".pre-v9");
+        if (File.Exists(path) && !File.Exists(path + ".pre-v10")) File.Copy(path, path + ".pre-v10");
         AtomicFile.Write(path, netDataWriter.CopyData());
 
         // If the saveName is the autoSave, we need to rotate the server autosave file.
@@ -159,6 +165,7 @@ public static class SaveManager
 
     private static void LoadServerDataNow(bool loadSaveFile, string saveName)
     {
+        serverDataLoadFailed = false;
         playerSaves.Clear();
         WorldId = Guid.NewGuid().ToString("N");
 
@@ -192,7 +199,7 @@ public static class SaveManager
             Log.Info($"Loading server data revision {revision} (Latest {REVISION})");
             if (revision != REVISION)
             {
-                // Supported revision: 5~9. Revision 8 uses the full current MechaData layout.
+                // Supported revision: 5~10. Revision 10 adds each player's vegetation collection.
                 if (revision is < 5 or > REVISION)
                 {
                     throw new Exception($"Unsupported version {revision}");
@@ -200,6 +207,7 @@ public static class SaveManager
             }
 
             if (revision >= 9) SetWorldId(netDataReader.GetString());
+            if (revision < REVISION) BackupLegacySave(saveName);
 
             var playerNum = netDataReader.GetInt();
 
@@ -232,10 +240,53 @@ public static class SaveManager
         }
         catch (Exception e)
         {
+            serverDataLoadFailed = true;
             playerSaves.Clear();
-            Log.WarnInform("Skipping server data due to exception:\n".Translate() + e.Message);
+            Log.WarnInform("Multiplayer data load failed; saving is disabled to preserve the original file:\n".Translate() + e.Message);
             Log.Warn(e);
             return;
+        }
+    }
+
+    private static void BackupLegacySave(string saveName)
+    {
+        var backupRoot = Path.Combine(GameConfig.gameSaveFolder, "Nebula", "compat-backups",
+            Path.GetFileName(saveName) + ".pre-v10");
+        var marker = Path.Combine(backupRoot, "complete");
+        if (File.Exists(marker)) return;
+        Directory.CreateDirectory(backupRoot);
+        foreach (var extension in new[] { ".dsv", FILE_EXTENSION, ".server.world-id" })
+        {
+            var source = Path.Combine(GameConfig.gameSaveFolder, saveName + extension);
+            if (File.Exists(source)) File.Copy(source, Path.Combine(backupRoot, Path.GetFileName(source)), true);
+        }
+        var worldFolder = Path.Combine(GameConfig.gameSaveFolder, "Nebula", WorldId);
+        CopyDirectory(worldFolder, Path.Combine(backupRoot, "world"));
+        var propertyRoot = Path.Combine(GameConfig.propertyFolder, "Nebula");
+        if (Directory.Exists(propertyRoot))
+        {
+            foreach (var identityFolder in Directory.GetDirectories(propertyRoot))
+            {
+                var source = Path.Combine(identityFolder, WorldId + ".transactions");
+                if (!File.Exists(source)) continue;
+                var destination = Path.Combine(backupRoot, "properties", Path.GetFileName(identityFolder));
+                Directory.CreateDirectory(destination);
+                File.Copy(source, Path.Combine(destination, Path.GetFileName(source)), true);
+            }
+        }
+        AtomicFile.Write(marker, System.Text.Encoding.UTF8.GetBytes("complete"));
+        Log.Info($"Preserved pre-v10 multiplayer save in {backupRoot}");
+    }
+
+    private static void CopyDirectory(string source, string destination)
+    {
+        if (!Directory.Exists(source)) return;
+        foreach (var file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var relative = file.Substring(source.Length).TrimStart(Path.DirectorySeparatorChar);
+            var target = Path.Combine(destination, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(target));
+            File.Copy(file, target, true);
         }
     }
 

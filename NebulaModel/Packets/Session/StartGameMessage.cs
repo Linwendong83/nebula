@@ -10,14 +10,14 @@ public class StartGameMessage
 {
     public StartGameMessage() { }
 
-    public StartGameMessage(bool isAllowedToStart, PlayerData localPlayerData, bool syncSoil)
+    public StartGameMessage(bool isAllowedToStart, PlayerData localPlayerData, bool isNewPlayer = false)
     {
         IsAllowedToStart = isAllowedToStart;
         LocalPlayerData = localPlayerData;
-        SyncSoil = syncSoil;
+        IsNewPlayer = isNewPlayer;
     }
 
     public bool IsAllowedToStart { get; set; }
     public PlayerData LocalPlayerData { get; set; }
-    public bool SyncSoil { get; set; }
+    public bool IsNewPlayer { get; set; }
 }

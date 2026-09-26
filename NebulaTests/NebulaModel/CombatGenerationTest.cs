@@ -39,4 +39,16 @@ public class CombatGenerationTest
         TestAssert.AreEqual(30L, state.Get(0, 2));
         TestAssert.AreEqual(30L, state.Get(1000002, 2));
     }
+
+    [TestMethod]
+    public void ExplicitHostCorrectionCanReplaceWrongFutureGenerationButNotAChangedOne()
+    {
+        var state = new CombatGenerationState();
+        state.Set(101, 7, 300);
+        TestAssert.IsTrue(state.ReplaceIfCurrent(101, 7, 300, 200));
+        TestAssert.AreEqual(200L, state.Get(101, 7));
+        state.Set(101, 7, 400);
+        TestAssert.IsFalse(state.ReplaceIfCurrent(101, 7, 200, 100));
+        TestAssert.AreEqual(400L, state.Get(101, 7));
+    }
 }

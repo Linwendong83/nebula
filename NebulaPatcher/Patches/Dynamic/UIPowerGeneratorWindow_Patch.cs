@@ -44,15 +44,13 @@ internal class UIPowerGeneratorWindow_Patch
     [HarmonyPatch(nameof(UIPowerGeneratorWindow.OnCataButtonClick))]
     public static void OnCataButtonClick_Postfix(UIPowerGeneratorWindow __instance)
     {
-        //Notify about changing amount of gravitational lens
+        // The receiver can now hold different catalyst item types.
         if (!Multiplayer.IsActive)
         {
             return;
         }
         var packet = new RayReceiverChangeLensPacket(__instance.generatorId,
-            __instance.powerSystem.genPool[__instance.generatorId].catalystPoint,
-            __instance.powerSystem.genPool[__instance.generatorId].catalystIncPoint,
-            GameMain.localPlanet?.id ?? -1);
+            __instance.powerSystem.genPool[__instance.generatorId], GameMain.localPlanet?.id ?? -1);
         Multiplayer.Session.Network.SendPacketToLocalStar(packet);
     }
 

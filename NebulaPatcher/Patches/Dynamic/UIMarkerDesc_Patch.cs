@@ -12,6 +12,17 @@ namespace NebulaPatcher.Patches.Dynamic;
 internal class UIMarkerDesc_Patch
 {
     [HarmonyPostfix]
+    [HarmonyPatch(nameof(UIMarkerDesc.OnDFBeaconSwitchToggle))]
+    public static void OnDFBeaconSwitchToggle_Postfix(UIMarkerDesc __instance)
+    {
+        if (!Multiplayer.IsActive || Multiplayer.Session.Warning.IsIncomingMarkerPacket ||
+            __instance.marker == null || __instance.factory == null) return;
+        Multiplayer.Session.Network.SendPacket(new MarkerSettingUpdatePacket(
+            __instance.factory.planetId, __instance.marker.id,
+            MarkerSettingEvent.SetDFAttractionFlags, intValue: __instance.marker.dfAttractionFlags));
+    }
+
+    [HarmonyPostfix]
     [HarmonyPatch(nameof(UIMarkerDesc.OnTitleInputFieldEndEdit))]
     public static void OnTitleInputFieldEndEdit_Postfix(UIMarkerDesc __instance)
     {

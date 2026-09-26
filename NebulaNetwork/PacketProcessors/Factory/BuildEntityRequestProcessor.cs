@@ -65,6 +65,9 @@ public class BuildEntityRequestProcessor : PacketProcessor<BuildEntityRequest>
                 GameMain.gpuiManager.specifyPlanet = pData;
             }
 
+            if (IsHost && packet.AuthorId > 0 && packet.AuthorId <= ushort.MaxValue)
+                Multiplayer.Session.Vegetation.CaptureRemote((ushort)packet.AuthorId);
+
             Multiplayer.Session.Factories.EventFactory = null;
             Multiplayer.Session.Factories.PacketAuthor = NebulaModAPI.AUTHOR_NONE;
             Multiplayer.Session.Factories.TargetPlanet = NebulaModAPI.PLANET_NONE;

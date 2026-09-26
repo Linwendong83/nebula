@@ -6,12 +6,6 @@ public class GoalSnapshotPacket
     public byte[] Data { get; set; }
 }
 
-public class GoalCommandPacket
-{
-    public bool ChangeLevel { get; set; }
-    public int Value { get; set; }
-}
-
 public class GoalObservationPacket
 {
     public int GoalId { get; set; }

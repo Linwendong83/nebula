@@ -266,7 +266,6 @@ internal class Dedicated_Server_Patches
     public static bool RecalculatePhysicsShape_Prefix(PlanetATField __instance, out bool __state)
     {
         __state = false;
-        if (__instance == null) throw new ArgumentNullException(nameof(__instance));
         HeadlessShieldCompute.EnterScope();
         __state = true;
         return true;

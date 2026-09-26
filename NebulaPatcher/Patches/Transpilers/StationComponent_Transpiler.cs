@@ -451,8 +451,6 @@ public class StationComponent_Transpiler
         }
     }
 
-    private delegate void ShipEnterWarpState(StationComponent stationComponent, int j);
-
     private delegate void AddItem(StationComponent stationComponent, ref ShipData shipData);
 
     private delegate void TakeItem(StationComponent stationComponent, ref int itemId, ref int itemCount, int j);

@@ -61,7 +61,6 @@ public class GameStatesManager : IDisposable
     private readonly float BUFFERING_TIME = 30f;
     private float averageUPS = 60f;
     private int averageRTT;
-    private bool hasChanged;
 
     // Store data get from GlobalGameDataResponse
     private bool sandboxToolsEnabled;
@@ -82,7 +81,7 @@ public class GameStatesManager : IDisposable
         if (birthPlanetId <= 0 || data?.galaxy == null) return;
         data.galaxy.birthStarId = birthStarId;
         data.galaxy.birthPlanetId = birthPlanetId;
-        data.gameDesc.goalLevel = goalLevel;
+        data.gameDesc.goalLevel = Multiplayer.Session.IsClient ? Multiplayer.Session.Goals.PersonalLevel : goalLevel;
     }
 
     public GameStatesManager()
@@ -119,7 +118,6 @@ public class GameStatesManager : IDisposable
         var rtt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() - sentTime;
         averageRTT = (int)(averageRTT * 0.8 + rtt * 0.2);
         averageUPS = averageUPS * 0.8f + unitsPerSecond * 0.2f;
-        Multiplayer.Session.World.UpdatePingIndicator(string.Format("Ping: {0}ms".Translate(), averageRTT));
 
         // We offset the tick received to account for the time it took to receive the packet
         var tickOffsetSinceSent = (long)Math.Round(unitsPerSecond * rtt / 2 / 1000);
@@ -137,24 +135,6 @@ public class GameStatesManager : IDisposable
             }
             Log.Debug(
                 $"GameStateUpdate unstable. RTT:{rtt}(avg{averageRTT}) UPS:{unitsPerSecond:F2}(avg{averageUPS:F2})");
-            return;
-        }
-
-        if (!Config.Options.SyncUps)
-        {
-            // We allow for a small drift of 5 ticks since the tick offset using the ping is only an approximation
-            if (GameMain.gameTick > 0 && Mathf.Abs(diff) > 5)
-            {
-                Log.Debug($"Game Tick desync. {GameMain.gameTick} skip={diff} UPS:{unitsPerSecond:F2}(avg{averageUPS:F2})");
-                GameMain.gameTick = currentGameTick;
-            }
-            // Reset FixUPS when user turns off the option
-            if (!hasChanged)
-            {
-                return;
-            }
-            FPSController.SetFixUPS(0);
-            hasChanged = false;
             return;
         }
 
@@ -190,7 +170,6 @@ public class GameStatesManager : IDisposable
             GameMain.gameTick += skipTick;
         }
         FPSController.SetFixUPS(ups);
-        hasChanged = true;
         // Tick difference in the next second. Expose for other mods
         NotifyTickDifference(diff / 1f + averageUPS - ups);
     }
@@ -215,7 +194,6 @@ public class GameStatesManager : IDisposable
             return;
         }
         bufferLength = length;
-        Multiplayer.Session.World.UpdatePingIndicator(LoadingMessage());
     }
 
     public static string LoadingMessage()
@@ -233,6 +211,7 @@ public class GameStatesManager : IDisposable
                 break;
             case GlobalGameDataResponse.EDataType.Goals:
                 goalBinaryData = packet.BinaryData;
+                Multiplayer.Session.Goals.ReadDefaults(goalBinaryData);
                 break;
             case GlobalGameDataResponse.EDataType.Session:
                 using (var reader = new BinaryUtils.Reader(packet.BinaryData))
@@ -285,11 +264,15 @@ public class GameStatesManager : IDisposable
                     sandboxToolsEnabled = br.ReadBoolean();
                 }
                 Log.Info("Loading GlobalGameData complete. Initializing...");
-                DSPGame.GameDesc.goalLevel = goalLevel;
-                // We are ready to start the game now
-                DSPGame.StartGameSkipPrologue(DSPGame.GameDesc);
+                if (Multiplayer.Session.Goals.PrepareClientProfile(StartClientWorld)) StartClientWorld();
                 break;
         }
+    }
+
+    private static void StartClientWorld()
+    {
+        DSPGame.GameDesc.goalLevel = Multiplayer.Session.Goals.PersonalLevel;
+        DSPGame.StartGameSkipPrologue(DSPGame.GameDesc);
     }
 
     public void OverwriteGlobalGameData(GameData data)

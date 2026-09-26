@@ -43,9 +43,11 @@ public class GameLogic_Patch
         Multiplayer.Session.Metadata.GameTick();
         Multiplayer.Session.PropertyTransactions.GameTick();
         Multiplayer.Session.Drops.GameTick();
+        Multiplayer.Session.BuildDispatch.Tick();
         Multiplayer.Session.Life.GameTick();
         Multiplayer.Session.Goals.GameTick();
         Multiplayer.Session.Kills.GameTick();
+        Multiplayer.Session.Vegetation.Tick();
         Multiplayer.Session.BattleVisuals.GameTick();
 
         if (Multiplayer.Session.IsServer)

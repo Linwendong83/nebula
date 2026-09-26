@@ -74,19 +74,13 @@ internal class VFPreload_Patch
     {
         if (GameStatesManager.DuringReconnect)
         {
-            var ip = "127.0.0.1:8469";
-            if (Config.Options.RememberLastIP && !string.IsNullOrWhiteSpace(Config.Options.LastIP))
+            var connection = Multiplayer.LastConnection;
+            if (connection != null)
             {
-                ip = Config.Options.LastIP;
+                var record = ServerMemoryStore.Instance.FindServer(connection.RecordId);
+                UIMainMenu_Patch.JoinGame(record?.Address ?? connection.Address,
+                    !string.IsNullOrEmpty(record?.Password) ? record.Password : connection.Password, record?.Id);
             }
-
-            var password = "";
-            if (Config.Options.RememberLastClientPassword && !string.IsNullOrWhiteSpace(Config.Options.LastClientPassword))
-            {
-                password = Config.Options.LastClientPassword;
-            }
-
-            UIMainMenu_Patch.JoinGame(ip, password);
             GameStatesManager.DuringReconnect = false;
         }
 

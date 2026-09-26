@@ -97,6 +97,11 @@ internal class GameData_Patch
         }
 
         // Assign the factory to the result
+        if (Multiplayer.Session.Planets.PendingBuildAssignments.TryGetValue(planet.id, out var assignments))
+        {
+            Multiplayer.Session.BuildDispatch.ImportSnapshot(planet.factory, assignments);
+            Multiplayer.Session.Planets.PendingBuildAssignments.Remove(planet.id);
+        }
         __result = __instance.factories[planet.factoryIndex];
 
         // Do not run the original method
@@ -109,7 +114,7 @@ internal class GameData_Patch
     private static void HandleRemoteDataImportError(InvalidOperationException e)
     {
         WarningManager.DisplayCriticalWarning(
-            "Failed to properly decompress and import factory data.\nPlease do a reconnect.\nSee the logfile for more information.");
+            "Failed to properly decompress and import factory data.\nPlease do a reconnect.\nSee the logfile for more information.".Translate());
         Log.Error(
             $"There was an error while decompressing and importing factory data, probably due to an instable internet connection. See full error below.\n{e.StackTrace}");
     }
@@ -216,6 +221,7 @@ internal class GameData_Patch
             });
 
             Multiplayer.Session.Trashes.Refresh();
+            Multiplayer.Session.BuildDispatch.RefreshFactoryQueues(planet.factory);
             Multiplayer.Session.Combat.OnFactoryLoadFinished(planet.factory);
             Multiplayer.Session.Enemies.OnFactoryLoadFinished(planet.factory);
 
@@ -370,6 +376,8 @@ internal class GameData_Patch
         //Players should clear the list of drone orders of other players when they leave the planet
         if (Multiplayer.IsActive)
         {
+            Multiplayer.Session.BuildDispatch.AbortLocalConstructionDrones(GameMain.localPlanet?.factory);
+            Multiplayer.Session.BuildDispatch.ReleaseLocalPlayerTargets(GameMain.localPlanet?.id ?? -1);
             Multiplayer.Session.BattleVisuals.LeavePlanet(Multiplayer.Session.LocalPlayer.Id, GameMain.localPlanet?.id ?? -1);
             Multiplayer.Session.Trashes.Refresh();
             Multiplayer.Session.PowerTowers.ClearLocalState();
