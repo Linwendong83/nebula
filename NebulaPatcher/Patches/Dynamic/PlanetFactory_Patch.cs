@@ -59,10 +59,14 @@ internal class PlanetFactory_patch
             return;
         }
 
-        // If the host game called the method, we need to compute the PrebuildId ourself
+        // If the host game called the method, we need to compute the PrebuildId ourself.
+        // PacketAuthor is the player who placed it; the host executes that request locally.
         if (Multiplayer.Session.LocalPlayer.IsHost)
         {
-            Multiplayer.Session.Factories.SetPrebuildRequest(__instance.planetId, __result, Multiplayer.Session.LocalPlayer.Id);
+            var author = Multiplayer.Session.Factories.PacketAuthor == NebulaModAPI.AUTHOR_NONE
+                ? Multiplayer.Session.LocalPlayer.Id
+                : Multiplayer.Session.Factories.PacketAuthor;
+            Multiplayer.Session.Factories.SetPrebuildRequest(__instance.planetId, __result, (ushort)author);
         }
     }
 

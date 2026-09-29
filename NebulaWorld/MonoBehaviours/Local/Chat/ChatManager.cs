@@ -12,6 +12,7 @@ namespace NebulaWorld.MonoBehaviours.Local.Chat;
 public class ChatManager : MonoBehaviour
 {
     public static ChatManager Instance;
+    public static RectTransform Overlay { get; private set; }
     private PreviewOverlayView view;
 
     private void Awake()
@@ -32,6 +33,7 @@ public class ChatManager : MonoBehaviour
         var parent = UIRoot.instance.uiGame.inventoryWindow.transform.parent;
         var root = new GameObject("Nebula Overlay", typeof(RectTransform));
         root.transform.SetParent(parent, false);
+        Overlay = root.GetComponent<RectTransform>();
         view = root.AddComponent<PreviewOverlayView>();
         view.OnMessageSubmitted += OnMessageSubmitted;
     }
@@ -45,6 +47,7 @@ public class ChatManager : MonoBehaviour
             Destroy(view.gameObject);
         }
         if (Instance == this) Instance = null;
+        Overlay = null;
     }
 
     private static void ApplyConfig()

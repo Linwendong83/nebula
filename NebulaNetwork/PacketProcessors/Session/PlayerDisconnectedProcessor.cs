@@ -16,7 +16,7 @@ public class PlayerDisconnectedProcessor : PacketProcessor<PlayerDisconnected>
     protected override void ProcessPacket(PlayerDisconnected packet, NebulaConnection conn)
     {
         Multiplayer.Session.NumPlayers = packet.NumPlayers;
-        Multiplayer.Session.World.DestroyRemotePlayerModel(packet.PlayerId);
+        Multiplayer.Session.World.DestroyRemotePlayerModel(packet.PlayerId, true);
         Multiplayer.Session.PowerTowers.RemovePlayer(packet.PlayerId);
         Multiplayer.Session.BattleVisuals.RemoveOwner(packet.PlayerId);
         Multiplayer.Session.Life.Remove(packet.PlayerId);

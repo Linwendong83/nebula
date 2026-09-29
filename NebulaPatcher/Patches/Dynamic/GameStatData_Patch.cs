@@ -23,11 +23,14 @@ internal class GameStatData_Patch
             return;
         }
         var hostTechHashedFor10Frames = Multiplayer.Session.Statistics.TechHashedFor10Frames;
-        __instance.techHashedThisFrame = hostTechHashedFor10Frames / 10;
+        var hostShare = hostTechHashedFor10Frames / 10;
         if (GameMain.gameTick % 10 < hostTechHashedFor10Frames % 10)
         {
-            ++__instance.techHashedThisFrame;
+            ++hostShare;
         }
+        // The mecha lab reports its own hashes before this record runs. Keep them: the host's
+        // ten-frame total arrives only every two seconds and would otherwise show the research as idle.
+        if (__instance.techHashedThisFrame < hostShare) __instance.techHashedThisFrame = hostShare;
     }
 
     [HarmonyPostfix]

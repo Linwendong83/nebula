@@ -37,6 +37,8 @@ public interface IFactoryManager : IDisposable
 
     void SetPrebuildRequest(int planetId, int prebuildId, ushort playerId);
 
+    bool TryGetPrebuildRequest(int planetId, int prebuildId, out ushort playerId);
+
     bool RemovePrebuildRequest(int planetId, int prebuildId);
 
     bool ContainsPrebuildRequest(int planetId, int prebuildId);

@@ -48,6 +48,17 @@ internal class MechaArmorModel_Patch
         return true;
     }
 
+    private static readonly int InvincibleShaderId = Shader.PropertyToID("_Global_Player_Invicible");
+
+    [HarmonyPostfix]
+    [HarmonyPatch(nameof(MechaArmorModel.RefreshMaterialParametersDynamic))]
+    public static void RefreshMaterialParametersDynamic_Postfix()
+    {
+        // The Icarus shader reads this from $Globals, so the value reaches every mecha on screen.
+        // Vanilla writes it for the only local player; in multiplayer that lights everyone.
+        if (NebulaWorld.Multiplayer.IsActive) Shader.SetGlobalInt(InvincibleShaderId, 0);
+    }
+
     [HarmonyPrefix]
     [HarmonyPatch(nameof(MechaArmorModel.WreckagesRespawnLogic))]
     public static bool WreckagesRespawnLogic_Prefix(MechaArmorModel __instance, int tick)

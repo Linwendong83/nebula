@@ -163,6 +163,14 @@ public class FactoryManager : IFactoryManager
         }
     }
 
+    public bool TryGetPrebuildRequest(int planetId, int prebuildId, out ushort playerId)
+    {
+        using (GetPrebuildRequests(out var prebuildRequests))
+        {
+            return prebuildRequests.TryGetValue(new PrebuildOwnerKey(planetId, prebuildId), out playerId);
+        }
+    }
+
     public bool RemovePrebuildRequest(int planetId, int prebuildId)
     {
         using (GetPrebuildRequests(out var prebuildRequests))

@@ -422,6 +422,11 @@ public sealed class BuildDispatchManager : IDisposable
                 module.droneEnabled && module.droneConstructEnabled && local.speed <= 20f, module.droneCount);
         }
 
+        // The player who placed the prebuild builds it. Another player or a battle base is only a
+        // fallback once that player has no drone, has left the planet, or is outside build range.
+        if (Multiplayer.Session.Factories.TryGetPrebuildRequest(factory.planetId, prebuildId, out var placerId) &&
+            TrySelectPlacer(factory, pos, placerId, out kind, out ownerId)) return true;
+
         foreach (var entry in Multiplayer.Session.Server.Players.Connected)
         {
             var player = entry.Value;
@@ -445,6 +450,47 @@ public sealed class BuildDispatchManager : IDisposable
                 battleBase.energy < Configs.freeMode.droneEjectEnergy) continue;
             Consider(BuildOwnerKind.Base, module.entityId, entity.pos, module.baseBuildRange,
                 module.droneEnabled && module.droneConstructEnabled, module.droneCount);
+        }
+        kind = selectedKind;
+        ownerId = selectedId;
+        return kind != BuildOwnerKind.None;
+    }
+
+    private bool TrySelectPlacer(PlanetFactory factory, Vector3 pos, ushort placerId,
+        out BuildOwnerKind kind, out int ownerId)
+    {
+        kind = BuildOwnerKind.None;
+        ownerId = 0;
+        var selectedKind = BuildOwnerKind.None;
+        var selectedId = 0;
+        var score = 0f;
+        void Remember(Vector3 location, float range, bool enabled, int droneCount)
+        {
+            if (!enabled || droneCount <= 0 ||
+                CountQueued(factory.planetId, BuildOwnerKind.Player, placerId) >= 120) return;
+            var candidate = BuildCandidateScore.Calculate(BuildOwnerKind.Player,
+                (pos - location).sqrMagnitude, range);
+            if (candidate <= score) return;
+            score = candidate;
+            selectedKind = BuildOwnerKind.Player;
+            selectedId = placerId;
+        }
+
+        var local = GameMain.mainPlayer;
+        if (local != null && Multiplayer.Session.LocalPlayer.Id == placerId && local.factory == factory &&
+            local.planetId == factory.planetId && !Multiplayer.IsDedicated)
+        {
+            var module = local.mecha.constructionModule;
+            Remember(local.position, local.mecha.buildArea,
+                module.droneEnabled && module.droneConstructEnabled && local.speed <= 20f, module.droneCount);
+        }
+        foreach (var entry in Multiplayer.Session.Server.Players.Connected)
+        {
+            var player = entry.Value;
+            if (player.Id != placerId || player.Data.LocalPlanetId != factory.planetId ||
+                !remoteBuilders.TryGetValue(player.Id, out var capability)) continue;
+            Remember(player.Data.LocalPlanetPosition.ToVector3(), capability.BuildArea,
+                capability.Enabled && capability.CanLaunch, capability.DroneCount);
         }
         kind = selectedKind;
         ownerId = selectedId;

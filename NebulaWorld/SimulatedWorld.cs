@@ -228,7 +228,7 @@ public class SimulatedWorld : IDisposable
 
     public static void OnPlayerJoinedGame(INebulaPlayer player)
     {
-        Multiplayer.Session.World.SpawnRemotePlayerModel(player.Data);
+        Multiplayer.Session.World.SpawnRemotePlayerModel(player.Data, true);
 
         // Sync overrideName of planets and stars
         player.SendPacket(new NameInputPacket(GameMain.galaxy));
@@ -261,7 +261,7 @@ public class SimulatedWorld : IDisposable
 
     public static void OnPlayerLeftGame(INebulaPlayer player)
     {
-        Multiplayer.Session.World.DestroyRemotePlayerModel(player.Id);
+        Multiplayer.Session.World.DestroyRemotePlayerModel(player.Id, true);
 
         // (Host only) Trigger when a connected client leave the game
         Log.Info($"Client{player.Data.PlayerId} - {player.Data.Username} left");
@@ -283,7 +283,7 @@ public class SimulatedWorld : IDisposable
         Multiplayer.Session.CanPause = false;
     }
 
-    public void SpawnRemotePlayerModel(IPlayerData playerData)
+    public void SpawnRemotePlayerModel(IPlayerData playerData, bool announcePresence = false)
     {
         using (GetRemotePlayersModels(out var remotePlayersModels))
         {
@@ -298,11 +298,13 @@ public class SimulatedWorld : IDisposable
             remotePlayersModels.Add(playerData.PlayerId, model);
             Multiplayer.Session.Life.ApplyRemote(playerData.PlayerId, ((PlayerData)playerData).Life);
 
-            ChatManager.Instance?.NotifyPlayerPresence(playerData.Username, true);
+            // The snapshot sent when this client finishes loading lists everyone already in the
+            // game. Only a player who actually arrives afterwards is announced.
+            if (announcePresence) ChatManager.Instance?.NotifyPlayerPresence(playerData.Username, true);
         }
     }
 
-    public void DestroyRemotePlayerModel(ushort playerId)
+    public void DestroyRemotePlayerModel(ushort playerId, bool announcePresence = false)
     {
         using (GetRemotePlayersModels(out var remotePlayersModels))
         {
@@ -310,7 +312,7 @@ public class SimulatedWorld : IDisposable
             {
                 return;
             }
-            ChatManager.Instance?.NotifyPlayerPresence(player.Username, false);
+            if (announcePresence) ChatManager.Instance?.NotifyPlayerPresence(player.Username, false);
 
             player.Destroy();
             remotePlayersModels.Remove(playerId);
