@@ -1,5 +1,25 @@
 ## Changelog
 
+0.9.22-dev.6:
+- Compatible with Dyson Sphere Program 0.10.35.29104
+- New host-authoritative world replication (Authority) architecture: Dark Fog combat, factory combat, construction dispatch, drones and resource accounting are simulated by the host alone; clients subscribe to scoped, versioned snapshots instead of stitching the world together from per-entity packets
+- Replace the legacy per-entity combat/enemy/drone packet sync with authority envelopes: scoped snapshot subscription, command windows, backpressure, and automatic scope recovery and resync after packet loss or reconnect
+- Persist host-only facts (resource ledger, drone budgets, construction task table) in an authority sidecar next to the server save; older saves migrate automatically
+- Host-only game rules are now guarded on clients: ground-unit AI, mecha fuel replacement and similar writes run only on the host (legacy rooms and single-player behave as before)
+- Session protocol raised to version 3; a room mixing dev.6 with older dev builds is refused at the handshake instead of desyncing
+- Construction drones prioritize the player who placed the prebuild, falling back to other players and battle bases afterwards
+- Fix join/leave announcements firing for players who are still loading; keep the chat overlay above pickup tips; fix the invincibility shader lighting every mecha in multiplayer
+<br>
+
+- 适配《戴森球计划》0.10.35.29104
+- 全新主机权威（Authority）世界复制架构：黑雾战斗、工厂战斗、建造调度、无人机与资源结算统一由主机模拟，客户端按需订阅分作用域、带版本的状态快照，不再靠逐实体同步包拼凑世界
+- 以权威信封包替换旧的战斗/敌人/无人机逐实体同步：作用域快照订阅、命令窗口、背压控制，丢包或重连后自动恢复并重同步
+- 服务器存档旁写入权威旁车文件，持久化主机专属数据（资源账本、无人机预算、建造任务表），旧存档自动迁移
+- 客户端禁写主机专属规则：地面单位 AI、机甲燃料更换等写入仅在主机执行（传统房间与单人游戏行为不变）
+- 会话协议版本升至 3，dev.6 与旧开发版混房间将在握手阶段直接拒绝，避免出现不同步
+- 建造无人机优先派给放置预建造的玩家，其次再分配给其他玩家和战斗基地
+- 修复玩家进出广播在加载阶段误发的问题；拾取提示不再遮挡聊天悬浮窗；修复多人模式下无敌着色器让所有机甲发光的问题
+
 0.9.22-dev.5:
 - Compatible with Dyson Sphere Program 0.10.35.29088
 - Redesign the multiplayer lobby with native game UI and integrate server goal settings

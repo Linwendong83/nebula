@@ -13,7 +13,7 @@
         <UseInstalledGameAssemblies Condition="'$(UseInstalledGameAssemblies)' == '' And Exists('$(DSPGameDir)DSPGAME_Data\Managed\Assembly-CSharp.dll')">true</UseInstalledGameAssemblies>
         <PluginOutputDirectory>$(DSPGameDir)BepInEx\plugins\nebula-NebulaMultiplayerMod\</PluginOutputDirectory>
         <PropSheetPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))</PropSheetPath>
-        <SupportedDSPVersion>0.10.35.29088</SupportedDSPVersion>
+        <SupportedDSPVersion>0.10.35.29104</SupportedDSPVersion>
         <PluginOutputDirectory Condition="Exists('$(PropSheetPath).remoteBuild')">$(PropSheetPath)dist\release\nebula-NebulaMultiplayerMod\</PluginOutputDirectory>
     </PropertyGroup>
 
@@ -37,8 +37,8 @@
     </PropertyGroup>
 
     <PropertyGroup Label="Fork Properties">
-        <ForkDevTag>dev.5</ForkDevTag>
-        <ForkDevRevision>5</ForkDevRevision>
+        <ForkDevTag>dev.6</ForkDevTag>
+        <ForkDevRevision>6</ForkDevRevision>
         <DefineConstants Condition="'$(ForkDevTag)' != ''">$(DefineConstants);NEBULA_FORK</DefineConstants>
     </PropertyGroup>
 
