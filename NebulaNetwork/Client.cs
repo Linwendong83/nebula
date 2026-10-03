@@ -14,7 +14,6 @@ using NebulaModel.Logger;
 using NebulaModel.Networking;
 using NebulaModel.Networking.Serialization;
 using NebulaModel.Packets.GameStates;
-using NebulaModel.Packets.Players;
 using NebulaModel.Packets.Routers;
 using NebulaModel.Packets.Session;
 using NebulaModel.Utils;
@@ -33,7 +32,6 @@ public class Client : IClient
 
     private const float FRAGEMENT_UPDATE_INTERVAL = 0.1f;
     private const float GAME_STATE_UPDATE_INTERVAL = 1f;
-    private const float MECHA_SYNCHONIZATION_INTERVAL = 30f;
     private const float JOIN_RESPONSE_TIMEOUT = 25f;
 
     private readonly AccessTools.FieldRef<WebSocket, MemoryStream> fragmentsBufferRef =
@@ -46,7 +44,6 @@ public class Client : IClient
 
     private float fragmentUpdateTimer;
     private float gameStateUpdateTimer;
-    private float mechaSynchonizationTimer;
     private float joinResponseTimer;
     private NebulaConnection serverConnection;
     private bool websocketAuthenticationFailure;
@@ -227,13 +224,6 @@ public class Client : IClient
         if (Multiplayer.Session.IsGameLoaded)
         {
             Multiplayer.Session.PowerTowers.SendLocalStateIfChanged();
-
-            mechaSynchonizationTimer += Time.deltaTime;
-            if (mechaSynchonizationTimer > MECHA_SYNCHONIZATION_INTERVAL)
-            {
-                SendPacket(new PlayerMechaData(GameMain.mainPlayer));
-                mechaSynchonizationTimer = 0f;
-            }
 
             gameStateUpdateTimer += Time.deltaTime;
             if (gameStateUpdateTimer >= GAME_STATE_UPDATE_INTERVAL)

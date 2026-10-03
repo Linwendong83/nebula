@@ -61,7 +61,6 @@ internal class DysonSphereDataProcessor : PacketProcessor<DysonSphereData>
                 GameMain.data.dysonSpheres[packet.StarIndex].Init(GameMain.data, GameMain.data.galaxy.stars[packet.StarIndex]);
 
                 var star = GameMain.galaxy.stars[packet.StarIndex];
-                Log.Info($"Parsing {packet.BinaryData.Length} bytes of data for DysonSphere {star.name} (INDEX: {star.id})");
                 using (var reader = new BinaryUtils.Reader(packet.BinaryData))
                 {
                     GameMain.data.dysonSpheres[packet.StarIndex].Import(reader.BinaryReader);

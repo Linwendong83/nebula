@@ -3,7 +3,6 @@
 using System;
 using System.Collections.Generic;
 using NebulaModel;
-using NebulaModel.Logger;
 using NebulaModel.Networking;
 using NebulaModel.Packets.Session;
 using UnityEngine;
@@ -133,8 +132,6 @@ public class GameStatesManager : IDisposable
                 averageRTT = (int)rtt;
                 GameMain.gameTick = currentGameTick;
             }
-            Log.Debug(
-                $"GameStateUpdate unstable. RTT:{rtt}(avg{averageRTT}) UPS:{unitsPerSecond:F2}(avg{averageUPS:F2})");
             return;
         }
 
@@ -166,7 +163,6 @@ public class GameStatesManager : IDisposable
         }
         if (skipTick != 0)
         {
-            Log.Debug($"Game Tick desync. skip={skipTick} diff={diff,2}, RTT={rtt}ms, UPS={unitsPerSecond:F2}(avg{averageUPS:F2})");
             GameMain.gameTick += skipTick;
         }
         FPSController.SetFixUPS(ups);
@@ -228,32 +224,26 @@ public class GameStatesManager : IDisposable
                 break;
             case GlobalGameDataResponse.EDataType.History:
                 historyBinaryData = packet.BinaryData;
-                Log.Info("Waiting for GalacticTransport data from the server...");
                 break;
 
             case GlobalGameDataResponse.EDataType.GalacticTransport:
                 galacticTransportBinaryData = packet.BinaryData;
-                Log.Info("Waiting for SpaceSector data from the server...");
                 break;
 
             case GlobalGameDataResponse.EDataType.SpaceSector:
                 spaceSectorBinaryData = packet.BinaryData;
-                Log.Info("Waiting for MilestoneSystem data from the server...");
                 break;
 
             case GlobalGameDataResponse.EDataType.MilestoneSystem:
                 milestoneSystemBinaryData = packet.BinaryData;
-                Log.Info("Waiting for TrashSystem data from the server...");
                 break;
 
             case GlobalGameDataResponse.EDataType.TrashSystem:
                 trashSystemBinaryData = packet.BinaryData;
-                Log.Info("Waiting for GalacticDigital data from the server...");
                 break;
 
             case GlobalGameDataResponse.EDataType.GalacticDigital:
                 galacticDigitalBinaryData = packet.BinaryData;
-                Log.Info("Waiting for the remaining data from the server...");
                 break;
 
             case GlobalGameDataResponse.EDataType.Ready:
@@ -263,7 +253,6 @@ public class GameStatesManager : IDisposable
                     var br = reader.BinaryReader;
                     sandboxToolsEnabled = br.ReadBoolean();
                 }
-                Log.Info("Loading GlobalGameData complete. Initializing...");
                 if (Multiplayer.Session.Goals.PrepareClientProfile(StartClientWorld)) StartClientWorld();
                 break;
         }
@@ -295,7 +284,6 @@ public class GameStatesManager : IDisposable
 
         if (historyBinaryData != null)
         {
-            Log.Info("Parsing History data from the server...");
             GameMain.sandboxToolsEnabled = sandboxToolsEnabled;
 
             if (data.history != null)
@@ -425,7 +413,6 @@ public class GameStatesManager : IDisposable
         }
         if (galacticTransportBinaryData != null)
         {
-            Log.Info("Parsing GalacticTransport data from the server...");
             data.galacticTransport.Init(data);
             using (var reader = new BinaryUtils.Reader(galacticTransportBinaryData))
             {
@@ -435,7 +422,6 @@ public class GameStatesManager : IDisposable
         }
         if (spaceSectorBinaryData != null)
         {
-            Log.Info("Parsing SpaceSector data from the server...");
             using (Multiplayer.Session.Enemies.IsIncomingRequest.On())
             {
                 var previous = Combat.CombatManager.SerializeOverwrite;
@@ -455,7 +441,6 @@ public class GameStatesManager : IDisposable
         }
         if (milestoneSystemBinaryData != null)
         {
-            Log.Info("Parsing MilestoneSystem data from the server...");
             data.milestoneSystem.Init(data);
             using (var reader = new BinaryUtils.Reader(milestoneSystemBinaryData))
             {
@@ -465,7 +450,6 @@ public class GameStatesManager : IDisposable
         }
         if (trashSystemBinaryData != null)
         {
-            Log.Info("Parsing TrashSystem data from the server...");
             using (var reader = new BinaryUtils.Reader(trashSystemBinaryData))
             {
                 data.trashSystem.Import(reader.BinaryReader);
@@ -480,7 +464,6 @@ public class GameStatesManager : IDisposable
         }
         if (galacticDigitalBinaryData != null)
         {
-            Log.Info("Parsing GalacticDigital data from the server...");
             using (var reader = new BinaryUtils.Reader(galacticDigitalBinaryData))
             {
                 data.galacticDigital.Import(reader.BinaryReader);

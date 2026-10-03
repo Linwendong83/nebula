@@ -2,7 +2,6 @@
 
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using NebulaModel.Logger;
 using NebulaWorld.Chat.ChatLinks;
 
 #endregion
@@ -28,11 +27,9 @@ public static class RichChatLinkRegistry
         }
         if (handlers.ContainsKey(linkID))
         {
-            Log.Debug($"Can't register handler, because handler for {linkID} was already registered!");
             return;
         }
 
-        Log.Debug($"Registering Chat Link handler for {linkID}");
         handlers.Add(linkID, handler);
     }
 

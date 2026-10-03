@@ -150,7 +150,6 @@ public class DysonSphereManager : IDisposable
     {
         var starData = GameMain.galaxy.stars[starIndex];
         RequestingIndex = starIndex;
-        Log.Info($"Requesting DysonSphere for system {starData.displayName} (Index: {starData.index})");
         Multiplayer.Session.Network.SendPacket(new DysonSphereLoadRequest(starData.index, DysonSphereRequestEvent.Load));
         ClearSelection(starIndex);
         if (showInfo)

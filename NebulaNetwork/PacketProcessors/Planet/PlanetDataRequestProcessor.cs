@@ -2,7 +2,6 @@
 
 using BepInEx;
 using NebulaAPI.Packets;
-using NebulaModel.Logger;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.Planet;
@@ -78,7 +77,6 @@ public class PlanetDataRequestProcessor : PacketProcessor<PlanetDataRequest>
             planet.ExportRuntime(writer.BinaryWriter);
             data = writer.CloseAndGetBytes();
         }
-        Log.Info($"Returning terrain for {planet.name} (id:{planet.id} time:{highStopwatch.duration:F4}s)");
         return data;
     }
 }

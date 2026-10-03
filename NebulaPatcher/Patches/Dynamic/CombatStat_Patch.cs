@@ -1,7 +1,7 @@
 ﻿#region
 
 using HarmonyLib;
-using NebulaModel.Packets.Combat;
+using NebulaModel.Authority;
 using NebulaWorld;
 
 #endregion
@@ -15,73 +15,62 @@ internal class CombatStat_Patch
     [HarmonyPatch(nameof(CombatStat.HandleZeroHp))]
     public static bool HandleZeroHp_Prefix(ref CombatStat __instance)
     {
-        if (!Multiplayer.IsActive || Multiplayer.Session.IsServer ||
-            __instance.objectType != (int)EObjectType.Enemy)
+        // A05: in the new mode the client must not manufacture a death at all. The old path stood
+        // the dying enemy up at 1 hp and asked the host to decide, which keeps two health models
+        // alive; the new mode gets an absolute host value through the replica instead. The guard
+        // returns the legacy decision in a legacy room, so this changes nothing there.
+        if (!AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.CombatStatHandleZeroHp,
+                detail: $"objectType={__instance.objectType} objectId={__instance.objectId}"))
         {
-            return true;
+            return false;
         }
 
-        var enemyId = __instance.objectId;
-        var astroId = __instance.originAstroId;
-        EnemyData[] pool;
-        if (astroId > 1000000)
+        // A22: HandleZeroHp is the vanilla commit where every damage-target class dies once —
+        // kill statistics, then the per-kind KillXxxFinally. On the host in authority mode that
+        // vanilla chain stays the rule (statistics and drops are vanilla-delegated); the capture
+        // adds the authority bookkeeping: the death is identified here, where the pool slot is
+        // provably still occupied, and the ledger commits the tombstone and the one construction-
+        // task release at the frame boundary. The ledger dedups every later report of the same
+        // generation. Single-player runs the vanilla path untouched.
+        if (Multiplayer.IsActive &&
+            Multiplayer.Session?.AuthorityRuntime?.IsHostAuthority == true)
         {
-            pool = GameMain.spaceSector?.enemyPool;
-        }
-        else
-        {
-            pool = GameMain.galaxy?.PlanetById(astroId)?.factory?.enemyPool;
-        }
-
-        // An orphaned combat stat still needs vanilla cleanup. Only the host may
-        // finalize an enemy that is present in the client's enemy pool.
-        if (pool == null || enemyId <= 0 || enemyId >= pool.Length || pool[enemyId].id != enemyId)
-        {
-            return true;
+            Multiplayer.Session.AuthorityRuntime.HostDeathCapture?.Capture(
+                __instance.originAstroId, __instance.objectType, __instance.objectId);
         }
 
-        __instance.hp = 1;
-        Multiplayer.Session.Enemies.RequestAuthoritativeState(astroId, enemyId);
-        return false;
+        return true;
     }
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(CombatStat.TickSkillLogic))]
-    public static void TickSkillLogic_Prefix(ref CombatStat __instance)
+    public static bool TickSkillLogic_Prefix(ref CombatStat __instance)
     {
-        if (!Multiplayer.IsActive || Multiplayer.Session.IsServer) return;
-
-        // objectType 0:entity
-        if (__instance.objectType == 0)
+        // A05: a client that ran the vanilla tick would keep a second regen/death model alive. The
+        // guard refuses the whole call outside a replica apply, so the client's health mirror can
+        // only ever move because the host said so.
+        if (!AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.CombatStatTickSkillLogic,
+                detail: $"objectType={__instance.objectType} objectId={__instance.objectId}"))
         {
-            // Client: leave building hp at 1 until server send Kill event
-            var newHp = __instance.hp + __instance.hpRecover;
-            if (newHp <= 0)
-            {
-                __instance.hp = 1;
-            }
+            return false;
         }
+
+        return true;
     }
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(CombatStat.HandleFullHp))]
-    public static void HandleFullHp_Prefix(ref CombatStat __instance)
+    public static bool HandleFullHp_Prefix(ref CombatStat __instance)
     {
-        if (!Multiplayer.IsActive) return;
-
-        // objectType 0:entity
-        if (__instance.objectType == 0 && __instance.originAstroId > 100 && __instance.originAstroId <= 204899 && __instance.originAstroId % 100 > 0)
+        // A05: clearing the entity's combatStatId is what E06 turned into "a joining client wipes
+        // the host's damage records". On a client that is a world write; the new mode only lets it
+        // happen inside a replica apply, and A08 removes it from the host's factory-load path.
+        if (!AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.CombatStatHandleFullHp,
+                detail: $"objectType={__instance.objectType} objectId={__instance.objectId}"))
         {
-            var packet = new CombatStatFullHpPacket(__instance.originAstroId, __instance.objectType, __instance.objectId);
-            if (Multiplayer.Session.IsServer)
-            {
-                var starId = __instance.originAstroId / 100;
-                Multiplayer.Session.Server.SendPacketToStar(packet, starId);
-            }
-            else
-            {
-                Multiplayer.Session.Client.SendPacket(packet);
-            }
+            return false;
         }
+
+        return true;
     }
 }

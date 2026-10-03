@@ -1,7 +1,6 @@
 ﻿#region
 
 using HarmonyLib;
-using NebulaModel.Logger;
 using NebulaModel.Packets.Logistics;
 using NebulaWorld;
 
@@ -57,8 +56,6 @@ internal class PlanetTransport_Patch
         // After host has added the StationComponent it has planetId, id and gId, now we can inform all clients about this station
         // so they can add it to their GalacticTransport as they don't do that. Note that we're doing this in
         // PlanetTransport.NewStationComponent and not GalacticTransport.AddStationComponent because stationId will be set at this point.
-        Log.Info(
-            $"Send AddStationComponent to all clients for planet {__result.planetId}, id {__result.id} with gId of {__result.gid}");
         Multiplayer.Session.Network.SendPacket(new ILSAddStationComponent(__result.planetId, __result.id, __result.gid,
             __result.entityId, _desc.stationMaxShipCount));
     }

@@ -114,6 +114,9 @@ public class Server : IServer
         }
 
         if (player != null) Multiplayer.Session.BuildDispatch?.PlayerLeft(player.Id);
+        // The departing player's connection epoch is retired, so a reconnect gets a fresh dedup
+        // window and no queued command from the old connection can still be executed.
+        if (player != null) Multiplayer.Session.AuthorityRuntime?.ForgetPlayerConnection(player.Id);
         if (player?.Data is PlayerData { SessionCounted: true } counted)
         {
             counted.SessionCounted = false;

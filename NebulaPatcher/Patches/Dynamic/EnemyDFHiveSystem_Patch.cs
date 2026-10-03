@@ -3,8 +3,7 @@
 using System;
 using HarmonyLib;
 using NebulaAPI.DataStructures;
-using NebulaModel.Packets.Combat.DFHive;
-using NebulaModel.Packets.Combat.SpaceEnemy;
+using NebulaModel.Authority;
 using NebulaWorld;
 using UnityEngine;
 
@@ -99,7 +98,6 @@ internal class EnemyDFHiveSystem_Patch
                 enemyFormation.units[port] = 1;
             }
             __instance.sector.RemoveEnemyFinal(enemyId);
-            Multiplayer.Session.Network.SendPacket(new DFSDeactivateUnitPacket(__instance.hiveAstroId, enemyId));
         }
         return false;
     }
@@ -118,7 +116,6 @@ internal class EnemyDFHiveSystem_Patch
             return false;
         }
 
-        var hiveAstroId = __instance.hiveAstroId;
         if (__instance._add_relay_list != null && __instance._add_relay_list.Count > 0)
         {
             foreach (var dockIndex in __instance._add_relay_list)
@@ -132,7 +129,6 @@ internal class EnemyDFHiveSystem_Patch
                     dfrelayComponent.SetDockIndex(dockIndex);
                     __instance.AddIdleRelay(dfRelayId);
                 }
-                Multiplayer.Session.Network.SendPacket(new DFSAddIdleRelayPacket(hiveAstroId, dockIndex, enemyId));
             }
             __instance._add_relay_list.Clear();
         }
@@ -149,7 +145,6 @@ internal class EnemyDFHiveSystem_Patch
                     tinder.SetDockIndex(__instance, dockIndex);
                     __instance.AddIdleTinder(dfTinderId);
                 }
-                Multiplayer.Session.Network.SendPacket(new DFSAddIdleTinderPacket(hiveAstroId, dockIndex, enemyId));
             }
             __instance._add_tinder_list.Clear();
             __instance._add_tinder_list = null;
@@ -163,7 +158,6 @@ internal class EnemyDFHiveSystem_Patch
             foreach (var enemyId in __instance._rmv_id_list)
             {
                 __instance.sector.RemoveEnemyFinal(enemyId);
-                Multiplayer.Session.Network.SendPacket(new DFSRemoveEnemyDeferredPacket(enemyId));
             }
             __instance._rmv_id_list.Clear();
         }
@@ -171,8 +165,7 @@ internal class EnemyDFHiveSystem_Patch
         {
             foreach (var builderIndex in __instance._add_bidx_list)
             {
-                var enemyId = __instance.sector.CreateEnemyFinal(__instance, builderIndex, false);
-                Multiplayer.Session.Network.SendPacket(new DFSAddEnemyDeferredPacket(hiveAstroId, builderIndex, enemyId));
+                __instance.sector.CreateEnemyFinal(__instance, builderIndex, false);
             }
             __instance._add_bidx_list.Clear();
         }
@@ -204,10 +197,6 @@ internal class EnemyDFHiveSystem_Patch
                     {
                         ptr.stateTick = item.stateTick;
                         ptr.behavior = item.behavior;
-
-                        var packet = new DFSActivateUnitPacket(__instance.hiveAstroId, item.formId, item.port,
-                            (byte)item.behavior, item.stateTick, unitId, ptr.enemyId);
-                        Multiplayer.Session.Server.SendPacket(packet);
                     }
                 }
             }
@@ -226,15 +215,16 @@ internal class EnemyDFHiveSystem_Patch
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(EnemyDFHiveSystem.GameTickLogic))]
-    public static void GameTickLogic_Prefix(EnemyDFHiveSystem __instance, long gameTick)
+    public static bool GameTickLogic_Prefix(EnemyDFHiveSystem __instance, long gameTick)
     {
-        if (!Multiplayer.IsActive) return;
-
-        if (Multiplayer.Session.IsServer)
+        // I01: migrated hive AI. Host runs the real AI; a client outside a replica apply must not
+        // run it at all. Single-player runs vanilla (the guard allows when not in authority mode).
+        if (!AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.EnemyDFHiveSystemGameTickLogic,
+                detail: $"hive={__instance.hiveAstroId}"))
         {
-            // Broadcast hive level changes before adding units
-            Multiplayer.Session.Enemies.BroadcastHiveStatusPackets(__instance, gameTick);
+            return false;
         }
+        return true;
     }
 
     [HarmonyPrefix]
@@ -245,11 +235,7 @@ internal class EnemyDFHiveSystem_Patch
         if (!Multiplayer.IsActive) return true;
         if (Multiplayer.Session.IsClient) return Multiplayer.Session.Enemies.IsIncomingRequest;
 
-        // Broadcast launch assault events to all players
-        var packet = new DFSLaunchLancerAssaultPacket(in __instance, aggressiveLevel,
-            in tarPos, in maxHatredPos, targetAstroId, unitCount0, unitThreat);
-        Multiplayer.Session.Server.SendPacket(packet);
-        Multiplayer.Session.Enemies.SendAstroMessage("Space hive is attacking".Translate(), packet.TargetAstroId);
+        Multiplayer.Session.Enemies.SendAstroMessage("Space hive is attacking".Translate(), targetAstroId);
         return true;
     }
 
@@ -280,10 +266,6 @@ internal class EnemyDFHiveSystem_Patch
         if (!Multiplayer.IsActive) return true;
         if (Multiplayer.Session.IsClient) return Multiplayer.Session.Enemies.IsIncomingRequest;
 
-        if (!__instance.realized)
-        {
-            Multiplayer.Session.Network.SendPacket(new DFHiveRealizePacket(__instance.hiveAstroId));
-        }
         return true;
     }
 
@@ -297,12 +279,11 @@ internal class EnemyDFHiveSystem_Patch
         {
             if (Multiplayer.Session.IsServer)
             {
-                Multiplayer.Session.Server.SendPacket(new DFHiveOpenPreviewPacket(__instance, true));
                 __instance.InstantiateEnemies();
             }
             else if (!Multiplayer.Session.Enemies.IsIncomingRequest)
             {
-                Multiplayer.Session.Client.SendPacket(new DFHiveOpenPreviewPacket(__instance, false));
+                // Client waits for the host's world state.
             }
             else
             {
@@ -323,12 +304,11 @@ internal class EnemyDFHiveSystem_Patch
         {
             if (Multiplayer.Session.IsServer)
             {
-                Multiplayer.Session.Server.SendPacket(new DFHiveClosePreviewPacket(__instance));
                 __instance.UninstantiateEnemies();
             }
             else if (!Multiplayer.Session.Enemies.IsIncomingRequest)
             {
-                Multiplayer.Session.Client.SendPacket(new DFHiveClosePreviewPacket(__instance));
+                // Client waits for the host's world state.
             }
             else
             {

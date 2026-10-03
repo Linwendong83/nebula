@@ -32,9 +32,6 @@ internal class DispenserSettingProcessor : PacketProcessor<DispenserSettingPacke
                         var newCourierCount = packet.Parameter1;
                         if (dispenserComponent.workCourierCount > newCourierCount)
                         {
-                            var warnText =
-                                $"{GameMain.galaxy.PlanetById(packet.PlanetId).displayName} [{packet.DispenserId}] Working courier decrease from {dispenserComponent.workCourierCount} to {newCourierCount}";
-                            Log.Debug(warnText);
                             dispenserComponent.workCourierCount = newCourierCount;
                         }
                         dispenserComponent.idleCourierCount = newCourierCount - dispenserComponent.workCourierCount;

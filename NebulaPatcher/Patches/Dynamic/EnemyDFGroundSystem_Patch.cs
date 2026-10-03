@@ -2,8 +2,8 @@
 
 using System;
 using HarmonyLib;
+using NebulaModel.Authority;
 using NebulaModel.Logger;
-using NebulaModel.Packets.Combat.GroundEnemy;
 using NebulaWorld;
 
 #endregion
@@ -27,15 +27,11 @@ internal class EnemyDFGroundSystem_Patch
             return false;
         }
 
-        var planetId = __instance.planet.id;
-        var starId = __instance.planet.star.id;
         if (__instance._rmv_id_list?.Count > 0)
         {
             foreach (var enemyId in __instance._rmv_id_list)
             {
                 __instance.factory.RemoveEnemyFinal(enemyId);
-                var packet = new DFGDeferredRemoveEnemyPacket(planetId, enemyId);
-                Multiplayer.Session.Network.SendPacketToStar(packet, starId);
             }
             __instance._rmv_id_list.Clear();
         }
@@ -43,9 +39,7 @@ internal class EnemyDFGroundSystem_Patch
         {
             foreach (var (baseId, builderIndex) in __instance._add_bidx_list)
             {
-                var enemyId = __instance.factory.CreateEnemyFinal(baseId, builderIndex);
-                var packet = new DFGDeferredCreateEnemyPacket(planetId, baseId, builderIndex, enemyId);
-                Multiplayer.Session.Network.SendPacketToStar(packet, starId);
+                __instance.factory.CreateEnemyFinal(baseId, builderIndex);
             }
             __instance._add_bidx_list.Clear();
         }
@@ -78,8 +72,6 @@ internal class EnemyDFGroundSystem_Patch
         __instance._initiate_unit_list?.Clear();
         if (__instance._activate_unit_list?.Count > 0)
         {
-            var planetId = __instance.planet.id;
-            var starId = __instance.planet.star.id;
             foreach (var item in __instance._activate_unit_list)
             {
                 int unitId = __instance.ActivateUnit(item.baseId, item.formId, item.port, item.gameTick);
@@ -90,10 +82,6 @@ internal class EnemyDFGroundSystem_Patch
                     {
                         ptr.stateTick = item.stateTick;
                         ptr.behavior = item.behavior;
-
-                        var packet = new DFGActivateUnitPacket(planetId, item.baseId, item.formId, item.port,
-                            item.behavior, item.stateTick, ptr.enemyId);
-                        Multiplayer.Session.Network.SendPacketToStar(packet, starId);
                     }
                 }
             }
@@ -150,16 +138,13 @@ internal class EnemyDFGroundSystem_Patch
             var dfgbaseComponent = buffer[baseId];
             if (dfgbaseComponent?.id == baseId && dfgbaseComponent.ruinId == pitRuinId)
             {
-                var packet = new DFGRemoveBasePitPacket(__instance.factory.planetId, baseId);
                 if (Multiplayer.Session.IsServer)
                 {
-                    Multiplayer.Session.Network.SendPacketToStar(packet, __instance.factory.planet.star.id);
                     return true;
                 }
                 else
                 {
-                    // Request server to remove base pit
-                    Multiplayer.Session.Network.SendPacket(packet);
+                    // Client waits for the host's world state.
                     return false;
                 }
             }
@@ -177,37 +162,11 @@ internal class EnemyDFGroundSystem_Patch
 
         if (Multiplayer.Session.IsServer)
         {
-            var packet = new DFGRemoveBasePacket(__instance.factory.planetId, id);
-            Multiplayer.Session.Network.SendPacketToStar(packet, __instance.factory.planet.star.id);
             return true;
         }
 
         // Client should wait for server to approve the removal of base from the base buffer
         return Multiplayer.Session.Combat.IsIncomingRequest;
-    }
-
-    [HarmonyPrefix]
-    [HarmonyPatch(nameof(EnemyDFGroundSystem.GameTickLogic_Prepare))]
-    public static void GameTickLogic_Prepare_Prefix(EnemyDFGroundSystem __instance)
-    {
-        if (!Multiplayer.IsActive) return;
-
-        var planetId = __instance.planet.id;
-        var targets = Multiplayer.Session.Enemies.GroundTargets;
-        if (!targets.TryGetValue(planetId, out var array) || array.Length < __instance.factory.enemyCapacity)
-        {
-            targets[planetId] = new int[__instance.factory.enemyCapacity];
-            if (array != null)
-            {
-                Array.Copy(array, targets[planetId], array.Length);
-            }
-        }
-
-        if (Multiplayer.Session.IsServer)
-        {
-            // Broadcast base level changes before adding units
-            Multiplayer.Session.Enemies.BroadcastBaseStatusPackets(__instance, GameMain.gameTick);
-        }
     }
 
     [HarmonyPrefix]
@@ -236,6 +195,18 @@ internal class EnemyDFGroundSystem_Patch
                 }
             }
         }
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(EnemyDFGroundSystem.GameTickLogic_Unit))]
+    public static bool GameTickLogic_Unit_Prefix()
+    {
+        // I01: migrated ground-unit AI (serial). Host runs the real AI; a client outside a replica
+        // apply must not run it at all. Pose/state arrive via the replica instead. Legacy rooms and
+        // single-player run vanilla (the guard allows when not in authority mode).
+        return AuthorityRuleGuard.AllowHostRule(
+            AuthorityHookLabels.EnemyDFGroundSystemGameTickLogicUnit,
+            detail: "ground-unit-ai");
     }
 
 }

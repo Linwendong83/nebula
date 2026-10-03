@@ -229,7 +229,6 @@ public class BuildToolManager : IDisposable
                 {
                     continue;
                 }
-                Log.Info($"CheckAndFixConnections: {entity.pos} {tmpVector}");
                 preview.coverObjId = entity.id;
                 break;
             }

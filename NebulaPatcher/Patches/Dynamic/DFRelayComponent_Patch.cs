@@ -2,7 +2,6 @@
 
 using HarmonyLib;
 using NebulaWorld;
-using NebulaModel.Packets.Combat.DFRelay;
 
 #endregion
 
@@ -29,7 +28,6 @@ internal class DFRelayComponent_Patch
         if (!Multiplayer.IsActive) return true;
         if (Multiplayer.Session.IsClient) return Multiplayer.Session.Enemies.IsIncomingRelayRequest;
 
-        Multiplayer.Session.Network.SendPacket(new DFRelayRealizePlanetBasePacket(__instance));
         return true;
     }
 
@@ -40,7 +38,6 @@ internal class DFRelayComponent_Patch
         if (!Multiplayer.IsActive) return true;
         if (Multiplayer.Session.IsClient) return Multiplayer.Session.Enemies.IsIncomingRelayRequest;
 
-        Multiplayer.Session.Network.SendPacket(new DFRelayArriveBasePacket(__instance));
         return true;
     }
 
@@ -65,7 +62,6 @@ internal class DFRelayComponent_Patch
         if (!Multiplayer.IsActive) return true;
         if (Multiplayer.Session.IsClient) return Multiplayer.Session.Enemies.IsIncomingRelayRequest;
 
-        Multiplayer.Session.Network.SendPacket(new DFRelayArriveDockPacket(__instance));
         return true;
     }
 
@@ -86,7 +82,6 @@ internal class DFRelayComponent_Patch
 
         if (Multiplayer.Session.IsClient) return Multiplayer.Session.Enemies.IsIncomingRelayRequest;
 
-        Multiplayer.Session.Network.SendPacket(new DFRelayLeaveBasePacket(__instance));
         return true;
     }
 
@@ -97,7 +92,6 @@ internal class DFRelayComponent_Patch
         if (!Multiplayer.IsActive) return true;
         if (Multiplayer.Session.IsClient) return Multiplayer.Session.Enemies.IsIncomingRelayRequest;
 
-        Multiplayer.Session.Network.SendPacket(new DFRelayLeaveDockPacket(__instance));
         return true;
     }
 

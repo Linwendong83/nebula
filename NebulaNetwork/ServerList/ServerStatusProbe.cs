@@ -186,9 +186,8 @@ public static class ServerStatusProbe
             {
                 socket.Connect();
             }
-            catch (Exception e)
+            catch (Exception)
             {
-                Log.Debug($"Probe {address} failed to connect: {e.Message}");
             }
 
             var remaining = TimeoutMs - (int)stopwatch.ElapsedMilliseconds;

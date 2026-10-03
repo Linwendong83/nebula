@@ -49,7 +49,6 @@ public class PlanetDetailRequestProcessor : PacketProcessor<PlanetDetailRequest>
                     planetData.NotifyScanEnded();
                     conn.SendPacket(new PlanetDetailResponse(planetData.id,
                         planetData.runtimeVeinGroups ?? Array.Empty<VeinGroup>(), planetData.landPercent));
-                    Log.Info($"PlanetCalculateThread:{planetData.displayName} time:{highStopwatch.duration:F4}s");
                 }
                 catch (Exception e)
                 {

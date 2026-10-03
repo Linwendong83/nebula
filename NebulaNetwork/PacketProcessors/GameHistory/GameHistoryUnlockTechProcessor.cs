@@ -1,7 +1,6 @@
 ﻿#region
 
 using NebulaAPI.Packets;
-using NebulaModel.Logger;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.GameHistory;
@@ -26,7 +25,6 @@ internal class GameHistoryUnlockTechProcessor : PacketProcessor<GameHistoryUnloc
 
             // Update techState
             var techState = GameMain.history.techStates[packet.TechId];
-            Log.Info($"Unlocking tech={packet.TechId} local:{techState.curLevel} remote:{packet.Level}");
             techState.curLevel = packet.Level;
             GameMain.history.techStates[packet.TechId] = techState;
 

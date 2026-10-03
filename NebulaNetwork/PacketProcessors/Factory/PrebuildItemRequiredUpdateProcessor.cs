@@ -16,6 +16,17 @@ public class PrebuildItemRequiredUpdateProcessor : PacketProcessor<PrebuildItemR
 {
     protected override void ProcessPacket(PrebuildItemRequiredUpdate packet, NebulaConnection conn)
     {
+        // A18: in host authority mode a client-asserted material placement never rewrites the host
+        // prebuild. Materials travel as host ledger spends attached to the finishing build task;
+        // applying the old claim here would let any client green any site. Legacy rooms run the
+        // path below unchanged.
+        if (NebulaModel.Authority.AuthorityLocalOptions.Mode == NebulaModel.Authority.AuthorityMode.HostAuthority &&
+            NebulaWorld.Authority.HostConstructionPolicy.ShouldRefuseClientMaterialClaim(isHostAuthority: true))
+        {
+            NebulaModel.Logger.Log.Warn("[authority] refusing client material claim in host authority mode: " +
+                NebulaWorld.Authority.HostConstructionPolicy.BuildSuppressionReason("PrebuildItemRequired"));
+            return;
+        }
         var planet = GameMain.galaxy.PlanetById(packet.PlanetId);
         if (planet.factory == null || packet.PrebuildId >= planet.factory.prebuildCursor)
         {

@@ -26,7 +26,6 @@ internal class StatisticsRequestEventProcessor : PacketProcessor<StatisticsReque
         {
             return;
         }
-        NebulaModel.Logger.Log.Debug($"{packet.Event} {packet.AstroFilter} player={player.Id}");
         switch (packet.Event)
         {
             case StatisticEvent.WindowOpened:

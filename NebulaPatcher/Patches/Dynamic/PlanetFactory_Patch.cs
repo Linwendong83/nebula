@@ -2,9 +2,8 @@
 
 using HarmonyLib;
 using NebulaAPI;
-using NebulaModel.Logger;
+using NebulaModel.Authority;
 using NebulaModel.Networking;
-using NebulaModel.Packets.Combat.GroundEnemy;
 using NebulaModel.Packets.Factory;
 using NebulaModel.Packets.Factory.Assembler;
 using NebulaModel.Packets.Factory.Ejector;
@@ -84,8 +83,6 @@ internal class PlanetFactory_patch
             if (!Multiplayer.Session.Factories.ContainsPrebuildRequest(__instance.planetId, prebuildId))
             {
                 // This prevents duplicating the entity when multiple players trigger the BuildFinally for the same entity at the same time.
-                Log.Debug(
-                    $"BuildFinally was called without having a corresponding PrebuildRequest for the prebuild {prebuildId} on the planet {__instance.planetId}");
                 return false;
             }
 
@@ -774,9 +771,7 @@ internal class PlanetFactory_patch
         }
         if (Multiplayer.Session.IsServer)
         {
-            var starId = __instance.planet.star.id;
-            Multiplayer.Session.Network.SendPacketToStar(new DFGKillEnemyPacket(__instance.planetId, enemyId)
-            { Generation = Multiplayer.Session.Generations.Get(__instance.planetId, enemyId) }, starId);
+            // Host runs the death rule once; the replica lifecycle carries the removal.
             return true;
         }
         if (Multiplayer.Session.Combat.IsIncomingRequest.Value)
@@ -813,6 +808,15 @@ internal class PlanetFactory_patch
         if (Multiplayer.Session.IsClient) // Let server decide when to kill entity
         {
             return Multiplayer.Session.Factories.IsIncomingRequest.Value;
+        }
+
+        // A19: in host authority mode the entity-death rule runs once on the host and the replica
+        // lifecycle carries the removal; the legacy KillEntityRequest replay would ask every client
+        // to run a second KillEntityFinally. Legacy rooms keep the relay.
+        if (AuthorityLocalOptions.Mode == AuthorityMode.HostAuthority &&
+            NebulaWorld.Authority.HostDeathPolicy.MustSuppressLegacyDeathBroadcast(isHostAuthority: true))
+        {
+            return true;
         }
 
         var packet = new KillEntityRequest(__instance.planetId, objId, spawnPrebuild);

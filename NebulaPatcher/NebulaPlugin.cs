@@ -10,6 +10,7 @@ using NebulaModel.Logger;
 using NebulaNetwork;
 using NebulaPatcher.Logger;
 using NebulaPatcher.MonoBehaviours;
+using NebulaPatcher.Patches.Authority;
 using NebulaPatcher.Patches.Dynamic;
 using NebulaPatcher.Patches.Misc;
 using NebulaWorld;
@@ -209,6 +210,12 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
                 harmony.PatchAll(typeof(Headless_Steam_Patches));
                 Headless_Steam_Patches.Apply(harmony);
             }
+
+            // A05: the authority mode is only entered when every transformation it depends on really
+            // applied. Registering the check here means the mode refuses to load instead of running a
+            // half-patched rule; legacy rooms never consult it.
+            NebulaModel.Authority.AuthorityRuleGuard.RegisterVerifier(
+                AuthorityTranspilerGuard.VerifyRequired);
             if (Log.PatchDiagnosticCount != 0)
                 throw new InvalidOperationException($"{Log.PatchDiagnosticCount} patch compatibility diagnostics were emitted; multiplayer startup is disabled.");
 #if DEBUG
@@ -217,6 +224,10 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
 
             Log.Info("Patching completed successfully. Time cost: " + timer.duration);
             Multiplayer.ProtocolReady = false; // GlobalObject.ReadVersionList loads the exact build later.
+
+            // The authority mode is the only multiplayer mode; entering it is fail-closed on
+            // hook verification here and again at the session gate. No launch flags remain.
+            AuthorityStartup.Apply(NebulaModel.Authority.AuthorityRuleGuard.VerifyLoadOnce);
         }
         catch (Exception ex)
         {

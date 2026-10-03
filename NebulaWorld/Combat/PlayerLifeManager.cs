@@ -58,20 +58,9 @@ public sealed class PlayerLifeManager : IDisposable
 
     public static void StoreServer(PlayerData player, byte[] snapshot)
     {
-        var restored = TryReadSnapshot(snapshot);
-        if (restored == null) return;
-        if (restored.Life.Revision < player.Life.Revision) return;
-        restored.PlayerId = player.PlayerId;
-        restored.Username = player.Username;
-        var writer = new NetDataWriter();
-        restored.Serialize(writer);
-        AtomicFile.Write(ServerPath(player.PersistentId), writer.CopyData());
-        // Network identity and username remain those authenticated by the session.
-        player.Mecha = restored.Mecha;
-        player.Life = restored.Life;
-        player.LocalPlanetId = restored.LocalPlanetId;
-        player.LocalPlanetPosition = restored.LocalPlanetPosition;
-        player.UPosition = restored.UPosition;
+        // Retired: snapshots no longer overwrite host state. Player balances live in the host
+        // ledger and persistence moves through the authority sidecar (A21). Kept as a no-op so
+        // the life broadcast path still compiles; a stale or forged snapshot restores nothing.
     }
 
     public static void RestoreServer(PlayerData player)

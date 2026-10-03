@@ -1,7 +1,7 @@
 #region
 
 using HarmonyLib;
-using NebulaModel.Logger;
+using NebulaModel.Authority;
 using NebulaModel.Packets.GameHistory;
 using NebulaWorld;
 using NebulaWorld.GameStates;
@@ -22,7 +22,6 @@ internal class GameHistoryData_Patch
             return;
         }
         //Synchronize enqueueing techs by players
-        Log.Info("Sending Enqueue Tech notification");
         Multiplayer.Session.Network.SendPacket(new GameHistoryEnqueueTechPacket(techId));
     }
 
@@ -31,7 +30,6 @@ internal class GameHistoryData_Patch
     public static void RemoveTechInQueue_Prefix(int index, out int __state)
     {
         __state = GameMain.history.techQueue[index];
-        Log.Info($"RemoveTechInQueue: remove tech at index {index} with techId {__state}");
     }
 
     [HarmonyPostfix]
@@ -43,7 +41,6 @@ internal class GameHistoryData_Patch
             return;
         }
         //Synchronize dequeuing techs by players and trigger refunds for all clients
-        Log.Info($"Sending Dequeue Tech notification: remove techID{__state}");
         Multiplayer.Session.Network.SendPacket(new GameHistoryRemoveTechPacket(__state));
     }
 
@@ -56,7 +53,6 @@ internal class GameHistoryData_Patch
             return;
         }
         //Synchronize reorder queue action when the player done dragging
-        Log.Info($"Sending SortTechQueue notification: len {__instance.techQueue.Length}");
         Multiplayer.Session.Network.SendPacket(new GameHistoryTechQueueSyncPacket(__instance.techQueue));
     }
 
@@ -69,7 +65,6 @@ internal class GameHistoryData_Patch
             return;
         }
         //Synchronize pausing techs by players
-        Log.Info("Sending Pause Tech queue notification");
         Multiplayer.Session.Network.SendPacket(new GameHistoryNotificationPacket(GameHistoryEvent.PauseQueue));
     }
 
@@ -82,7 +77,6 @@ internal class GameHistoryData_Patch
             return;
         }
         //Synchronize resuming techs by players
-        Log.Info("Sending Resume Tech queue notification");
         Multiplayer.Session.Network.SendPacket(new GameHistoryNotificationPacket(GameHistoryEvent.ResumeQueue));
     }
 
@@ -98,6 +92,15 @@ internal class GameHistoryData_Patch
     [HarmonyPatch(nameof(GameHistoryData.UnlockTechFunction))]
     public static bool UnlockTechFunction_Prefix()
     {
+        // I01: hp-upgrade tech writes Mecha.hp. In authority mode the host decides and the replica
+        // carries the HP; a client must not apply it here, including via the legacy incoming-request
+        // path. The guard counts the refusal so the write surface is measurable.
+        if (AuthorityLocalOptions.Mode == AuthorityMode.HostAuthority &&
+            !AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.GameHistoryDataUnlockTechFunction,
+                detail: "tech-hp"))
+        {
+            return false;
+        }
         //Wait for the authoritative packet for unlocking tech features in multiplayer for clients
         return !Multiplayer.IsActive || Multiplayer.Session.LocalPlayer.IsHost || Multiplayer.Session.History.IsIncomingRequest;
     }
@@ -144,13 +147,11 @@ internal class GameHistoryData_Patch
     [HarmonyPatch(nameof(GameHistoryData.NotifyTechUnlock))]
     public static void NotifyTechUnlock_Postfix(int _techId, int _level)
     {
-        Log.Info($"NotifyTechUnlock techId={_techId} level={_level}");
         if (!Multiplayer.IsActive || !Multiplayer.Session.LocalPlayer.IsHost)
         {
             return;
         }
         // Synchronize unlocking techs
-        Log.Info("Sending Tech Unlocked notification");
         GameMain.mainPlayer.mecha.lab.itemPoints.Clear();
         Multiplayer.Session.Network.SendPacket(new GameHistoryUnlockTechPacket(_techId, _level));
     }

@@ -169,7 +169,6 @@ internal class GameData_Patch
         {
             // Resume packet processing when local planet is loaded
             Multiplayer.Session.Network.PacketProcessor.EnablePacketProcessing = true;
-            Log.Info("Resume PacketProcessor (OnActivePlanetFactoryLoaded)");
             return true;
         }
         if (planet != null)
@@ -187,7 +186,6 @@ internal class GameData_Patch
             // 1. First login and game is not loaded yet, but since client is still syncing, it's ok to resume
             // 2. In game arrive to another planet, after factory model is loaded we can resume
             Multiplayer.Session.Network.PacketProcessor.EnablePacketProcessing = true;
-            Log.Info("Resume PacketProcessor (OnActivePlanetFactoryLoaded)");
 
             // Get the recieved bytes from the remote server that we will import
             if (Multiplayer.Session.Planets.PendingTerrainData.TryGetValue(planet.id, out var terrainBytes))
@@ -405,7 +403,6 @@ internal class GameData_Patch
 
         if (flag)
         {
-            Log.Debug("RefreshMissingMeshes");
         }
     }
 

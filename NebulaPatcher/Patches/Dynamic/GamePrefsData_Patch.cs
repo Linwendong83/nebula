@@ -20,7 +20,6 @@ internal class GamePrefsData_Patch
             return;
         }
 
-        NebulaModel.Logger.Log.Debug("Apply save prefs");
         var uiGame = UIRoot.instance.uiGame;
         PowerSystemRenderer.powerGraphOn = Config.Options.ShowDetailPowerGrid;
         uiGame.dfVeinOn = Config.Options.ShowDetailVeinDistribution;

@@ -30,6 +30,9 @@ public class PlayerMovementProcessor : PacketProcessor<PlayerMovement>
                 player.Data.Rotation = packet.Rotation;
                 player.Data.BodyRotation = packet.BodyRotation;
                 player.Data.LocalPlanetPosition = packet.LocalPlanetPosition;
+                // A22: keep the host registry's location in step with the movement the host just
+                // accepted, so a planet switch moves the client's eligible subscription scopes.
+                NebulaWorld.Authority.HostPlayerPresence.TryUpdateLocation(player.Data, player.Id);
                 Multiplayer.Session.BuildDispatch.UpdateRemoteBuilder(player.Id, packet.BuildArea,
                     packet.ConstructionDroneCount, packet.ConstructionDronesEnabled,
                     packet.CanLaunchConstructionDrone);

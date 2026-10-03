@@ -2,7 +2,7 @@
 
 using System.IO;
 using HarmonyLib;
-using NebulaModel.Packets.Combat;
+using NebulaModel.Authority;
 using NebulaWorld;
 
 #endregion
@@ -92,44 +92,27 @@ internal class SkillSystem_Patch
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(SkillSystem.DamageObject))]
-    public static void DamageObject_Prefix(ref int damage, int slice, ref SkillTarget target, ref SkillTarget caster, out bool __state)
+    public static bool DamageObject_Prefix(ref int damage, int slice, ref SkillTarget target, ref SkillTarget caster, out bool __state)
     {
+        // A05 installs the decision once, for all three damage entries. A client may keep computing
+        // damage as a local prediction, but it may not hand that number to the shared world: the
+        // guard refuses the vanilla damage call outside a replica apply, and the old
+        // damage-packet path underneath is only reachable in a legacy room.
         __state = Multiplayer.IsActive;
+        if (!AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.SkillSystemDamageObject,
+                detail: $"target={target.type}:{target.id} caster={caster.type}:{caster.id}"))
+        {
+            return false;
+        }
+
         if (__state) damageObjectDepth++;
+        // Only player/craft casters dealing damage to enemies reach the shared rule; everything
+        // else (including replica-applied facts) runs vanilla.
         if (!(caster.type == ETargetType.Craft || caster.type == ETargetType.Player)
             || target.type != ETargetType.Enemy
-            || !Multiplayer.IsActive || Multiplayer.Session.Combat.IsIncomingRequest.Value) return;
+            || !Multiplayer.IsActive || Multiplayer.Session.Combat.IsIncomingRequest.Value) return true;
 
-        if (caster.type == ETargetType.Player && caster.id != Multiplayer.Session.LocalPlayer.Id ||
-            Multiplayer.Session.IsClient && caster.type == ETargetType.Craft && !OwnsCraft(caster.astroId, caster.id))
-        {
-            damage = 0;
-            return;
-        }
-        if (damage <= 0) return;
-
-        if (target.astroId > 1000000) // Sync for space enemy
-        {
-            var packet = new CombatStatDamagePacket(damage, slice, in target, in caster)
-            {
-                // Native targeting needs a player proxy; SourceType retains the actual attacker for statistics.
-                CasterType = (short)ETargetType.Player,
-                CasterId = Multiplayer.Session.LocalPlayer.Id,
-                TargetGeneration = Multiplayer.Session.Generations.Get(target.astroId, target.id)
-            };
-            Multiplayer.Session.Network.SendPacket(packet);
-        }
-        else if (Multiplayer.Session.IsServer || target.astroId == GameMain.localPlanet?.id)
-        {
-            var packet = new CombatStatDamagePacket(damage, slice, in target, in caster)
-            {
-                // Retain the original source type separately from the native targeting proxy.
-                CasterType = (short)ETargetType.Player,
-                CasterId = Multiplayer.Session.LocalPlayer.Id,
-                TargetGeneration = Multiplayer.Session.Generations.Get(target.astroId, target.id)
-            };
-            Multiplayer.Session.Network.SendPacket(packet);
-        }
+        return true;
     }
 
     [HarmonyFinalizer]
@@ -158,29 +141,42 @@ internal class SkillSystem_Patch
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(SkillSystem.DamageGroundObjectByLocalCaster))]
-    public static void DamageGroundObjectByLocalCaster_Prefix(PlanetFactory factory, ref int damage, int slice, ref SkillTargetLocal target, ref SkillTargetLocal caster)
+    public static bool DamageGroundObjectByLocalCaster_Prefix(PlanetFactory factory, ref int damage, int slice, ref SkillTargetLocal target, ref SkillTargetLocal caster)
     {
+        if (!AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.SkillSystemDamageGroundObjectByLocalCaster,
+                detail: $"planet={factory?.planetId} target={target.type}:{target.id}"))
+        {
+            return false;
+        }
+
         if (caster.type != ETargetType.Craft
             || target.type != ETargetType.Enemy
-            || !Multiplayer.IsActive || Multiplayer.Session.Combat.IsIncomingRequest.Value) return;
+            || !Multiplayer.IsActive || Multiplayer.Session.Combat.IsIncomingRequest.Value) return true;
         if (Multiplayer.Session.IsClient && !OwnsCraft(factory.planetId, caster.id))
         {
             damage = 0;
-            return;
+            return true;
         }
-        if (damageObjectDepth > 0 || damage <= 0) return; // DamageObject already routed this hit.
-        if (Multiplayer.Session.IsServer || factory == GameMain.localPlanet?.factory)
-        {
-            var globalTarget = new SkillTarget { id = target.id, type = target.type, astroId = factory.planetId };
-            var globalCaster = new SkillTarget { id = caster.id, type = caster.type, astroId = factory.planetId };
-            var packet = new CombatStatDamagePacket(damage, slice, in globalTarget, in globalCaster)
-            {
-                // Retain the original source type separately from the native targeting proxy.
-                CasterType = (short)ETargetType.Player,
-                CasterId = Multiplayer.Session.LocalPlayer.Id,
-                TargetGeneration = Multiplayer.Session.Generations.Get(factory.planetId, target.id)
-            };
-            Multiplayer.Session.Network.SendPacket(packet);
-        }
+        if (damageObjectDepth > 0 || damage <= 0) return true; // DamageObject already routed this hit.
+
+        return true;
+    }
+
+    /// <summary>
+    /// The remote-caster ground damage entry.
+    /// </summary>
+    /// <remarks>
+    /// A01 records this path as one of the writers of <c>EntityData.constructStatId</c>, which is
+    /// what starts the E04 damage to construct record to repair chain, and it is the entry a caster
+    /// on another astro reaches. The mod has no prefix here today, so A05 adds one whose only job is
+    /// the guard: on a client the call is refused outside a replica apply, and the prefix never
+    /// touches the damage arguments themselves.
+    /// </remarks>
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(SkillSystem.DamageGroundObjectByRemoteCaster))]
+    public static bool DamageGroundObjectByRemoteCaster_Prefix(PlanetFactory factory, ref SkillTargetLocal target)
+    {
+        return AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.SkillSystemDamageGroundObjectByRemoteCaster,
+            detail: $"planet={factory?.planetId} target={target.type}:{target.id}");
     }
 }

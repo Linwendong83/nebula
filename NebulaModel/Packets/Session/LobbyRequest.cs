@@ -47,6 +47,14 @@ public class LobbyRequest
             writer.BinaryWriter.Write(SessionProtocol.Version.ToString());
             count++;
 
+            // The authority declaration travels in the same list so a host that predates it refuses
+            // the peer as "mod missing" instead of silently accepting an unread declaration.
+            writer.BinaryWriter.Write(SessionProtocol.AuthorityHandshakeKey);
+            // Fully qualified: this file lives in NebulaModel.Packets, where the Authority segment
+            // would otherwise resolve to the sibling Packets.Authority namespace.
+            writer.BinaryWriter.Write(global::NebulaModel.Authority.AuthorityLocalOptions.Declaration);
+            count++;
+
             ModsVersion = writer.CloseAndGetBytes();
             ModsCount = count;
         }

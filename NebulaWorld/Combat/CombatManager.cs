@@ -4,8 +4,6 @@ using System;
 using System.Collections.Generic;
 using NebulaAPI.DataStructures;
 using NebulaModel.DataStructures;
-using NebulaModel.Logger;
-using NebulaModel.Packets.Combat.Mecha;
 using UnityEngine;
 #pragma warning disable IDE1006 // Naming Styles
 #pragma warning disable CA1822 // Mark members as static
@@ -41,7 +39,6 @@ public class CombatManager : IDisposable
     public HashSet<int> ActivedStarsMechaInSpace; // player in the system and not on a planet
     public Dictionary<int, int> IndexByPlayerId;
 
-    private PlayerAction_Combat actionCombat;
     private static CombatManager instance;
 
     public CombatManager()
@@ -57,7 +54,6 @@ public class CombatManager : IDisposable
     public void Dispose()
     {
         PlayerId = 1;
-        actionCombat = null;
         Players = null;
         ActivedPlanets = null;
         ActivedStars = null;
@@ -67,10 +63,48 @@ public class CombatManager : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>
+    /// Explicit caster context for one host combat execution (DESIGN 7.1, TASKS.md A11).
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Vanilla routes several combat paths through this shared <see cref="PlayerId"/> global (see the
+    /// <c>PlayerAction_Combat</c> transpilers). The host states, for exactly one execution, whose rules
+    /// are running — and restores the previous value even when the execution throws. Construct in a
+    /// <c>using</c>, run the vanilla rule for that player, and the previous id is restored on dispose.
+    /// Long-lived state stays in the host simulation keyed by persistent owner, never here.
+    /// </para>
+    /// </remarks>
+    public sealed class CombatPlayerScope : IDisposable
+    {
+        private readonly int previousPlayerId;
+        private bool disposed;
+
+        internal CombatPlayerScope(ushort actingPlayerId)
+        {
+            previousPlayerId = PlayerId;
+            ActingPlayerId = actingPlayerId;
+            PlayerId = actingPlayerId;
+        }
+
+        /// <summary>The player whose rules run inside this scope.</summary>
+        public ushort ActingPlayerId { get; }
+
+        public void Dispose()
+        {
+            if (disposed) return;
+            disposed = true;
+            PlayerId = previousPlayerId;
+            GC.SuppressFinalize(this);
+        }
+    }
+
+    /// <summary>Opens an explicit caster scope for one host combat execution.</summary>
+    public static CombatPlayerScope CombatAs(ushort playerId) => new CombatPlayerScope(playerId);
+
     public void GameTick()
     {
         if (!Multiplayer.Session.IsGameLoaded) return;
-        Multiplayer.Session.Enemies.TickAuthoritativeState();
         var gameTick = GameMain.gameTick;
         ActivedPlanets.Clear();
         ActivedStars.Clear();
@@ -135,7 +169,6 @@ public class CombatManager : IDisposable
                 ptr.skillTargetL = mecha.skillTargetLCenter;
                 ptr.skillTargetULast = ptr.skillTargetU;
                 ptr.skillTargetU = mecha.skillTargetUCenter;
-                mecha.energyShieldEnergy = mecha.energyShieldEnergyRate > 1 ? 0 : int.MaxValue;
 
                 ActivedPlanets.Add(ptr.planetId);
                 ActivedStars.Add(ptr.starId);
@@ -150,94 +183,6 @@ public class CombatManager : IDisposable
         }
     }
 
-    public bool ShieldBurst(MechaShieldBurstPacket packet)
-    {
-        if (actionCombat == null)
-        {
-            actionCombat = new PlayerAction_Combat();
-            actionCombat.Init(GameMain.mainPlayer);
-        }
-
-        using (Multiplayer.Session.World.GetRemotePlayersModels(out var remotePlayersModels))
-        {
-            if (!remotePlayersModels.TryGetValue(packet.PlayerId, out var playerModel))
-            {
-                return false;
-            }
-            PlayerId = packet.PlayerId;
-
-            // CollectStates
-            actionCombat.localPlanet = GameMain.galaxy.PlanetById(playerModel.Movement.localPlanetId);
-            actionCombat.localStar = GameMain.galaxy.StarById(playerModel.Movement.LocalStarId);
-            actionCombat.localFactory = actionCombat.localPlanet?.factory;
-            actionCombat.localAstroId = actionCombat.localPlanet?.astroId ?? 0;
-
-            actionCombat.player = playerModel.PlayerInstance;
-            actionCombat.mecha = playerModel.MechaInstance;
-            actionCombat.localPlayerPos = actionCombat.localPlanet != null ? actionCombat.player.position : actionCombat.player.uPosition;
-
-            var mecha = actionCombat.mecha;
-            mecha.energyShieldBurstProgress = packet.EnergyShieldBurstProgress;
-            mecha.energyShieldCapacity = packet.EnergyShieldCapacity;
-            mecha.energyShieldEnergy = packet.EnergyShieldEnergy;
-            mecha.energyShieldBurstDamageRate = packet.EnergyShieldBurstDamageRate;
-
-            var localPlanetOrStarAstroId = actionCombat.skillSystem.localPlanetOrStarAstroId;
-            actionCombat.skillSystem.localPlanetOrStarAstroId = actionCombat.localAstroId;
-            actionCombat.ShieldBurst();
-
-            // Restore
-            actionCombat.skillSystem.localPlanetOrStarAstroId = localPlanetOrStarAstroId;
-            PlayerId = Multiplayer.Session.LocalPlayer.Id;
-        }
-        return true;
-    }
-
-    public bool ShootTarget(ushort playerId, int ammoItemId, EAmmoType ammoType, int targetAstroId, int targetId)
-    {
-        if (actionCombat == null)
-        {
-            actionCombat = new PlayerAction_Combat();
-            actionCombat.Init(GameMain.mainPlayer);
-        }
-
-        using (Multiplayer.Session.World.GetRemotePlayersModels(out var remotePlayersModels))
-        {
-            if (!remotePlayersModels.TryGetValue(playerId, out var playerModel))
-            {
-                return false;
-            }
-            PlayerId = playerId;
-
-            // CollectStates
-            actionCombat.localPlanet = GameMain.galaxy.PlanetById(playerModel.Movement.localPlanetId);
-            actionCombat.localStar = GameMain.galaxy.StarById(playerModel.Movement.LocalStarId);
-            actionCombat.localFactory = actionCombat.localPlanet?.factory;
-            actionCombat.localAstroId = actionCombat.localPlanet?.astroId ?? 0;
-
-            actionCombat.player = playerModel.PlayerInstance;
-            actionCombat.mecha = playerModel.MechaInstance;
-            actionCombat.mecha.laserEnergy = int.MaxValue;
-            actionCombat.mecha.ammoItemId = ammoItemId;
-
-            var isLocal = targetAstroId == actionCombat.localAstroId;
-            var pool = isLocal ? actionCombat.localFactory?.enemyPool : actionCombat.spaceSector.enemyPool;
-            if (pool == null || targetId >= pool.Length)
-            {
-                return false;
-            }
-            var target = new SkillTarget
-            {
-                id = targetId,
-                astroId = targetAstroId
-            };
-
-            actionCombat.ShootTarget(ammoType, target);
-            PlayerId = Multiplayer.Session.LocalPlayer.Id;
-        }
-        return true;
-    }
-
     public void OnFactoryLoadFinished(PlanetFactory factory)
     {
         var cursor = factory.defenseSystem.turrets.cursor;
@@ -250,42 +195,6 @@ public class CombatManager : IDisposable
                 buffer[id].projectileId = 0;
             }
         }
-
-        // Clear all combatStat to avoid collision or index out of range error (mimic CombatStat.HandleFullHp)
-        for (var i = 1; i < factory.entityCursor; i++)
-        {
-            factory.entityPool[i].combatStatId = 0;
-        }
-        for (var i = 1; i < factory.craftCursor; i++)
-        {
-            factory.craftPool[i].combatStatId = 0;
-        }
-        for (var i = 1; i < factory.vegeCursor; i++)
-        {
-            factory.vegePool[i].combatStatId = 0;
-        }
-        // Do not erase enemy combatStatId to preserve HP and shields on client
-        for (var i = 1; i < factory.veinCursor; i++)
-        {
-            factory.veinPool[i].combatStatId = 0;
-        }
-
-        // Clear the combatStat pool
-        var astroId = factory.planet.id;
-        var count = 0;
-        var combatStats = GameMain.data.spaceSector.skillSystem.combatStats;
-        var combatStatCursor = combatStats.cursor;
-        var combatStatbuffer = combatStats.buffer;
-        for (var i = 1; i < combatStatCursor; i++)
-        {
-            ref var ptr = ref combatStatbuffer[i];
-            if (ptr.id == i && ptr.astroId == astroId && ptr.objectType != (int)EObjectType.Enemy)
-            {
-                combatStats.Remove(i);
-                count++;
-            }
-        }
-        Log.Info($"CombatManager: Clear {count} combatStat on {astroId}");
     }
 
     public void OnAstroFactoryUnload()

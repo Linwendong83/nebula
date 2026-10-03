@@ -2,8 +2,12 @@
 
 using System;
 using NebulaAPI.GameState;
+using NebulaAPI.Networking;
+using NebulaModel.Authority;
 using NebulaModel.Logger;
 using NebulaModel.Networking;
+using NebulaWorld.Authority;
+using NebulaWorld.Authority.Adapters;
 using NebulaWorld.Combat;
 using NebulaWorld.Factory;
 using NebulaWorld.GameDataHistory;
@@ -50,7 +54,6 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         Belts = new BeltManager();
         BuildTools = new BuildToolManager();
         BuildDispatch = new BuildDispatchManager();
-        Drones = new DroneManager();
         Gizmos = new GizmoManager();
         History = new GameDataHistoryManager();
         State = new GameStatesManager();
@@ -69,6 +72,11 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         DysonSpheres = new DysonSphereManager();
         Launch = new LaunchManager();
         Warning = new WarningManager();
+        Authority = new AuthoritySessionState();
+        AuthorityRuntime = new AuthoritySession(Authority);
+        // The A05 rule guard needs to see this session's mode and apply window; installing here keeps
+        // every caller (game patches, packet processors, world managers) on one decision point.
+        AuthorityGuardWiring.Install();
 
         StartTime = DateTime.Now;
     }
@@ -85,7 +93,6 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
     public BeltManager Belts { get; set; }
     public BuildToolManager BuildTools { get; set; }
     public BuildDispatchManager BuildDispatch { get; set; }
-    public DroneManager Drones { get; set; }
     public GizmoManager Gizmos { get; set; }
     public GameDataHistoryManager History { get; set; }
     public GameStatesManager State { get; set; }
@@ -104,6 +111,13 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
     public DysonSphereManager DysonSpheres { get; set; }
     public LaunchManager Launch { get; set; }
     public WarningManager Warning { get; set; }
+
+    /// <summary>Authority identity the packet gate validates against (A03).</summary>
+    public AuthoritySessionState Authority { get; set; }
+
+    /// <summary>Authority runtime: command inbox, replica apply window and frame boundary (A04).</summary>
+    public AuthoritySession AuthorityRuntime { get; set; }
+
     public bool IsInLobby { get; set; }
 
     public bool CanPause
@@ -165,9 +179,6 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         BuildDispatch?.Dispose();
         BuildDispatch = null;
 
-        Drones?.Dispose();
-        Drones = null;
-
         Gizmos?.Dispose();
         Gizmos = null;
 
@@ -213,6 +224,12 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         Warning?.Dispose();
         Warning = null;
 
+        AuthorityRuntime?.Dispose();
+        AuthorityRuntime = null;
+
+        Authority?.Reset();
+        Authority = null;
+
         GC.SuppressFinalize(this);
     }
 
@@ -248,6 +265,69 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         }
         IsGameLoaded = true;
         if (IsServer) Metadata.Initialize();
+
+        // A loaded host world gets its authority identity here, once, so every peer keys its
+        // commands and objects to the same world. The client adopts the epoch from the host's
+        // welcome instead; until then it has none and the gate refuses authority packets.
+        // Release: no mode flag remains; every multiplayer room is a host-authority room.
+        if (IsServer)
+        {
+            AuthorityRuntime?.BeginAuthorityWorld(AuthorityEpoch.New(), isHost: true);
+
+            // A21: the sidecar's host facts seed the new world exactly once, after the fresh epoch
+            // exists and before any player is seated. A refused sidecar never reaches this path;
+            // a legacy save takes the one-time migration rule (empty ledger, no refill) instead.
+            if (AuthorityRuntime?.IsHostAuthority == true &&
+                SaveManager.TryConsumeAuthorityRestore(out var sidecarState))
+            {
+                AuthoritySaveAdapter.ApplyRestore(AuthorityRuntime, sidecarState, out _);
+            }
+
+            // A08/A12/A13: the factory combat, ground-enemy, space-enemy and craft domains are the
+            // canonical world sources. Registering them turns the replication path on with real facts;
+            // until a client subscribes nothing is captured or sent, so the registration itself is
+            // inert. Without it the host would run authority mode with no canonical source at all,
+            // which the design forbids.
+            if (AuthorityRuntime?.IsHostAuthority == true)
+            {
+                var epoch = AuthorityRuntime.Identity.Epoch;
+                var entities = new FactoryCombatSnapshotAdapter(epoch);
+                var groundEnemies = new GroundEnemySnapshotAdapter(epoch);
+                var spaceEnemies = new SpaceEnemySnapshotAdapter(epoch);
+                var crafts = new CraftSnapshotAdapter(epoch);
+                var worldView = new CompositeHostWorldView(
+                    entities,
+                    groundEnemies,
+                    spaceEnemies,
+                    crafts);
+                var networkSink = new NetworkReplicationSink(playerId =>
+                    Server?.Players?.Get(playerId) ?? Server?.Players?.Get(playerId, EConnectionStatus.Syncing));
+                // Release: delivery always passes through the fault link so the harness can drive
+                // fault verbs without a command-line flag. Clean rules are a pass-through; the link
+                // is pumped once per frame boundary. The CLI flag was removed.
+                if (!AuthorityFaultControl.IsEnabled)
+                {
+                    AuthorityFaultControl.Configure(new NebulaModel.Authority.FaultInjectionRules());
+                }
+                var effectiveSink = (IReplicationSink)new FaultyAuthorityLink(AuthorityFaultControl.Rules, networkSink);
+                if (!AuthorityRuntime.RegisterHostReplication(worldView, effectiveSink))
+                {
+                    Log.Warn("[authority] host replication registration failed; the host stays fail-closed (no capture)");
+                }
+                else
+                {
+                    if (effectiveSink is FaultyAuthorityLink faultLink)
+                    {
+                        AuthorityRuntime.SetFaultLink(faultLink);
+                    }
+                    // A22: the vanilla death commit feeds the death ledger from the one capture
+                    // point, keyed by the same adapters the replication scan reads. No replication
+                    // registration means no key source either, so no capture — fail-closed.
+                    AuthorityRuntime.SetHostDeathCapture(new HostDeathCapture(AuthorityRuntime.HostDeaths,
+                        new VanillaDeathKeyResolver(entities, groundEnemies, spaceEnemies, crafts).TryResolveKey));
+                }
+            }
+        }
 
         if (Multiplayer.Session.LocalPlayer.IsHost)
         {

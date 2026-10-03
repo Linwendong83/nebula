@@ -2,7 +2,6 @@
 
 using HarmonyLib;
 using NebulaWorld;
-using NebulaModel.Packets.Combat.DFTinder;
 
 #endregion
 
@@ -23,7 +22,6 @@ internal class DFTinderComponent_Patch
         if (hive1 != null && hive2 != null)
         {
             __instance.targetHiveAstroId = _targetHiveAstroId;
-            Multiplayer.Session.Network.SendPacket(new DFTinderDispatchPacket(__instance));
             var hasFactory = false;
             foreach (var planet in hive2.starData.planets)
             {

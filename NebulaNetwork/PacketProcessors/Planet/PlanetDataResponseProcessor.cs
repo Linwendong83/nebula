@@ -1,7 +1,6 @@
 ﻿#region
 
 using NebulaAPI.Packets;
-using NebulaModel.Logger;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.Planet;
@@ -25,8 +24,6 @@ public class PlanetDataResponseProcessor : PacketProcessor<PlanetDataResponse>
         var planet = Multiplayer.Session.IsInLobby
             ? UIRoot.instance.galaxySelect.starmap._galaxyData.PlanetById(packet.PlanetDataID)
             : GameMain.galaxy.PlanetById(packet.PlanetDataID);
-
-        Log.Info($"Parsing {packet.PlanetDataByte.Length} bytes of data for planet {planet.name} (ID: {planet.id})");
 
         using (var reader = new BinaryUtils.Reader(packet.PlanetDataByte))
         {

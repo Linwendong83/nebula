@@ -4,6 +4,7 @@ using BepInEx.Bootstrap;
 using NebulaAPI.Interfaces;
 using NebulaAPI.Packets;
 using NebulaModel;
+using NebulaModel.Authority;
 using NebulaModel.Logger;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
@@ -36,6 +37,19 @@ public class HandshakeResponseProcessor : PacketProcessor<HandshakeResponse>
         ((LocalPlayer)Multiplayer.Session.LocalPlayer).SetPlayerData(packet.LocalPlayerData, packet.IsNewPlayer);
         Multiplayer.Session.Goals.SetExistingPlayer(!packet.IsNewPlayer);
 
+        // The host states the mode it confirmed. A client that negotiated authority mode must not
+        // continue against a host that answered with a different one, and an unstated mode is a
+        // protocol error rather than an implicit legacy room.
+        var hostMode = (AuthorityMode)packet.AuthorityMode;
+        if (hostMode != AuthorityLocalOptions.Mode)
+        {
+            Log.Warn($"[authority] host answered mode {hostMode} but this peer negotiated " +
+                     $"{AuthorityLocalOptions.Mode}; abandoning the join");
+            Multiplayer.Session.Client?.Stop();
+            return;
+        }
+        Multiplayer.Session.Authority.OnPeerNegotiated(hostMode);
+
         Multiplayer.Session.IsInLobby = false;
         Multiplayer.ShouldReturnToJoinMenu = false;
 
@@ -51,7 +65,6 @@ public class HandshakeResponseProcessor : PacketProcessor<HandshakeResponse>
             gameDesc.combatSettings.Import(p.BinaryReader);
         }
         //Request global part of GameData from host
-        Log.Info("Requesting global GameData from the server");
         Multiplayer.Session.Network.SendPacket(new GlobalGameDataRequest());
         if (DSPGame.Game != null)
         {

@@ -2,7 +2,6 @@
 
 using NebulaAPI.Networking;
 using NebulaAPI.Packets;
-using NebulaModel.Logger;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.GameStates;
@@ -33,7 +32,6 @@ public class FactoryLoadRequestProcessor : PacketProcessor<FactoryLoadRequest>
         {
             factory.Export(writer.BinaryWriter.BaseStream, writer.BinaryWriter);
             var data = writer.CloseAndGetBytes();
-            Log.Info($"Sent {data.Length} bytes of data for PlanetFactory {planet.name} (ID: {planet.id})");
             var assignments = Multiplayer.Session.BuildDispatch.ExportSnapshot(packet.PlanetID);
             conn.SendPacket(new FragmentInfo(data.Length + planet.data.modData.Length + assignments.Length));
             conn.SendPacket(new FactoryData(packet.PlanetID, data, planet.data.modData)
@@ -46,12 +44,24 @@ public class FactoryLoadRequestProcessor : PacketProcessor<FactoryLoadRequest>
         {
             player.Data.LocalPlanetId = packet.PlanetID;
             player.Data.LocalStarId = GameMain.galaxy.PlanetById(packet.PlanetID).star.id;
+            // A22: a load request is an accepted planet change; refresh the registry so the
+            // host's subscription eligibility follows the client.
+            NebulaWorld.Authority.HostPlayerPresence.TryUpdateLocation(player.Data, player.Id);
         }
     }
 
     static void OnPlanetFactoryLoad(PlanetData planet)
     {
-        //Realize planet bases before sending the factory data
+        // Realize planet bases before sending the factory data. This is the host lifecycle
+        // transaction of the load: bases must exist as objects before any snapshot or replication
+        // read of this factory, and it is kept as its own step so that reading never mixes with
+        // mutating (TASKS.md A08: "factory realize 单独作为主机事务，不混入 snapshot 读取").
+        // Damaged state ships as canonical replication state; a load request never heals.
+        RealizeDarkFogPlanetBases(planet);
+    }
+
+    static void RealizeDarkFogPlanetBases(PlanetData planet)
+    {
         var spaceSector = GameMain.data.spaceSector;
         var enemyDFHiveSystem = spaceSector.dfHives[planet.star.index];
         while (enemyDFHiveSystem != null)
@@ -65,19 +75,6 @@ public class FactoryLoadRequestProcessor : PacketProcessor<FactoryLoadRequest>
                 }
             }
             enemyDFHiveSystem = enemyDFHiveSystem.nextSibling;
-        }
-
-        // Set entities (building) on the planet to full health
-        // Note: Try to sync the current value in the future
-        var astroId = planet.astroId;
-        var combatStatCursor = spaceSector.skillSystem.combatStats.cursor;
-        var buffer = spaceSector.skillSystem.combatStats.buffer;
-        for (var id = 1; id < combatStatCursor; id++)
-        {
-            if (buffer[id].id == id && buffer[id].astroId == astroId && buffer[id].objectType == 0)
-            {
-                buffer[id].HandleFullHp(GameMain.data, spaceSector.skillSystem);
-            }
         }
     }
 

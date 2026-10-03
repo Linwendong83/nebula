@@ -5,7 +5,6 @@ using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 using NebulaModel.Logger;
-using NebulaModel.Packets.Combat.GroundEnemy;
 using NebulaWorld;
 
 #endregion
@@ -63,12 +62,6 @@ internal class DFGReplicatorComponent_Transpiler
         }
 
         var portId = enemyFormation.AddUnit();
-        if (portId > 0)
-        {
-            // Only broadcast if add unit success (vacancyCursor > 0)
-            var packet = new DFGFormationAddUnitPacket(gbase.groundSystem.planet.id, gbase.id, formId, portId);
-            Multiplayer.Session.Server.SendPacketToStar(packet, gbase.groundSystem.planet.star.id);
-        }
         return 0; // Skip the following call to InitiateUnitDeferred
     }
 }

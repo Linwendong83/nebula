@@ -17,6 +17,16 @@ public class KillEntityRequestProcessor : PacketProcessor<KillEntityRequest>
 {
     protected override void ProcessPacket(KillEntityRequest packet, NebulaConnection conn)
     {
+        // A19: in host authority mode an entity-death replay must not run vanilla KillEntityFinally
+        // on the receiving peer — the same second-side-effect problem as the enemy kill replay.
+        // The replica lifecycle carries entity removal. Legacy rooms run the path below unchanged.
+        if (NebulaModel.Authority.AuthorityLocalOptions.Mode == NebulaModel.Authority.AuthorityMode.HostAuthority &&
+            NebulaWorld.Authority.HostDeathPolicy.ShouldRefuseLegacyKillReplay(isHostAuthority: true))
+        {
+            NebulaModel.Logger.Log.Warn("[authority] refusing legacy kill replay: " +
+                NebulaWorld.Authority.HostDeathPolicy.RefusalReason("KillEntityRequest"));
+            return;
+        }
         var factory = GameMain.galaxy.PlanetById(packet.PlanetId)?.factory;
         if (factory == null) return;
 

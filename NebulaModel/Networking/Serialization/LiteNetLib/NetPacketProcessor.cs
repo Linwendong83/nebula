@@ -55,19 +55,6 @@ namespace NebulaModel.Networking.Serialization
                 Log.Warn($"Unknown packet hash: {hash}");
                 throw new ParseException("Undefined packet in NetDataReader");
             }
-#if DEBUG
-            if (_callbacksDebugInfo.TryGetValue(hash, out var packetType))
-            {
-                if (!packetType.IsDefined(typeof(HidePacketInDebugLogsAttribute), false))
-                {
-                    Log.Debug($"Packet Recv >> {packetType.Name}, Size: {reader.UserDataSize}");
-                }
-            }
-            else
-            {
-                Log.Debug($"Packet Recv >> Unregistered hash {hash}, Size: {reader.UserDataSize}");
-            }
-#endif
             return action;
         }
 

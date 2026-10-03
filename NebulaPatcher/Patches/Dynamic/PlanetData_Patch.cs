@@ -2,7 +2,6 @@
 
 using HarmonyLib;
 using NebulaModel;
-using NebulaModel.Logger;
 using NebulaWorld;
 using UnityEngine;
 
@@ -23,7 +22,6 @@ internal class PlanetData_Patch
         }
         // Stop packet processing for host until factory is loaded
         Multiplayer.Session.Network.PacketProcessor.EnablePacketProcessing = false;
-        Log.Info("Pause PacketProcessor (PlanetData.LoadFactory)");
     }
 
     [HarmonyPrefix]

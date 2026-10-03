@@ -72,7 +72,6 @@ internal class StartGameMessageProcessor : PacketProcessor<StartGameMessage>
             Multiplayer.ShouldReturnToJoinMenu = false;
 
             //Request global part of GameData from host
-            Log.Info("Requesting global GameData from the server");
             Multiplayer.Session.Network.SendPacket(new GlobalGameDataRequest());
             if (DSPGame.Game != null)
             {

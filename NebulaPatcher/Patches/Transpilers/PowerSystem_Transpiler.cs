@@ -5,6 +5,7 @@ using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
+using NebulaModel.Authority;
 using NebulaModel.Logger;
 using NebulaWorld;
 
@@ -124,6 +125,15 @@ internal class PowerSystem_Transpiler
         var player = powerSystem.factory.gameData.mainPlayer;
         if (Multiplayer.IsActive && (player.planetId != powerSystem.factory.planetId || !player.isAlive ||
             !Multiplayer.Session.PowerTowers.IsLocalCharging(powerSystem.factory.planetId, nodeId))) return;
+
+        // I01: the grid charging write is a host rule. A client outside a replica apply must not
+        // change its own coreEnergy here; the authoritative value arrives via the replica instead.
+        // The grid sim itself still runs (display preserved); only this write is refused and counted.
+        if (!AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.PowerSystemGameTick,
+                detail: $"planet={powerSystem.factory.planetId} node={nodeId}"))
+        {
+            return;
+        }
 
         ref var powerNode = ref powerSystem.nodePool[nodeId];
         var energyCharged = (int)((powerNode.requiredEnergy - powerNode.idleEnergyPerTick) * powerSystem.networkServes[powerNode.networkId]);

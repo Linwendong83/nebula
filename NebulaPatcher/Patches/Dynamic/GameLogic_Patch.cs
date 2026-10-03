@@ -2,6 +2,7 @@
 
 using System;
 using HarmonyLib;
+using NebulaModel.Authority;
 using NebulaModel.Logger;
 using NebulaPatcher.Patches.Transpilers;
 using NebulaWorld;
@@ -154,5 +155,16 @@ public class GameLogic_Patch
 
         // Update the IsHumanInput flag to indicate the ending of factory phase
         Multiplayer.Session.Storage.IsHumanInput = true;
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(GameLogic._enemy_ground_unit_parallel))]
+    public static bool EnemyGroundUnitParallel_Prefix()
+    {
+        // I01: migrated ground-unit AI (parallel). Lives on GameLogic, not on the ground system;
+        // guarding only the serial entry misses the actual path. Same ownership as the serial entry.
+        return AuthorityRuleGuard.AllowHostRule(
+            AuthorityHookLabels.GameLogicEnemyGroundUnitParallel,
+            detail: "ground-unit-ai-parallel");
     }
 }

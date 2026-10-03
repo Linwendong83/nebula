@@ -2,8 +2,6 @@
 
 using HarmonyLib;
 using NebulaWorld;
-using NebulaModel.Packets.Combat.DFHive;
-using NebulaModel.Packets.Combat.SpaceEnemy;
 using NebulaModel.Logger;
 
 #endregion
@@ -32,11 +30,9 @@ internal class SpaceSector_Patch
         {
             return true;
         }
-        ref var enemyPtr = ref __instance.enemyPool[enemyId];
         if (Multiplayer.Session.IsServer)
         {
-            Multiplayer.Session.Network.SendPacket(new DFSKillEnemyPacket(enemyPtr.originAstroId, enemyId)
-            { Generation = Multiplayer.Session.Generations.Get(0, enemyId) });
+            // Host runs the death rule once; the replica lifecycle carries the removal.
             return true;
         }
         if (Multiplayer.Session.Enemies.IsIncomingRequest.Value)
@@ -71,10 +67,6 @@ internal class SpaceSector_Patch
         if (!Multiplayer.IsActive) return true;
         if (Multiplayer.Session.IsClient) return Multiplayer.Session.Enemies.IsIncomingRequest;
 
-        if (star != null)
-        {
-            Multiplayer.Session.Network.SendPacket(new DFHiveCreateNewHivePacket(star.id));
-        }
         return true;
     }
 

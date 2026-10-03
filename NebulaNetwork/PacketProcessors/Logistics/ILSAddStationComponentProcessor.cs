@@ -18,9 +18,6 @@ public class ILSAddStationComponentProcessor : PacketProcessor<ILSAddStationComp
 {
     protected override void ProcessPacket(ILSAddStationComponent packet, NebulaConnection conn)
     {
-        Log.Info(
-            $"ILSAddStationComponentProcessor processing packet for planet {packet.PlanetId}, station {packet.StationId} with gId of {packet.StationGId}");
-
         using (Multiplayer.Session.Ships.PatchLockILS.On())
         {
             var galacticTransport = GameMain.data.galacticTransport;

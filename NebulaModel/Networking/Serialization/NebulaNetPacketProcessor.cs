@@ -44,13 +44,6 @@ public class NebulaNetPacketProcessor : NetPacketProcessor, INetPacketProcessor
         writer.Reset();
         Write(writer, packet);
 
-#if DEBUG
-        if (!typeof(T).IsDefined(typeof(HidePacketInDebugLogsAttribute), false))
-        {
-            Log.Debug($"Packet Sent << {packet.GetType().Name}, Size: {writer.Length}");
-        }
-#endif
-
         return writer.CopyData();
     }
 

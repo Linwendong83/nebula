@@ -78,7 +78,6 @@ internal class DFGBaseComponent_Transpiler
             if (players[i].isAlive && players[i].planetId == planetId)
             {
                 @this.groundSystem.local_player_pos = players[i].position;
-                Log.Info($"Base attack LaunchCondition: player[{i}] planeId{planetId}");
                 return true;
             }
         }

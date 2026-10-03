@@ -20,18 +20,8 @@ public static class PacketUtils
     public static void RegisterAllPacketNestedTypesInAssembly(Assembly assembly, NetPacketProcessor packetProcessor)
     {
         var nestedTypes = AssembliesUtils.GetTypesWithAttributeInAssembly<RegisterNestedTypeAttribute>(assembly);
-        var isAPIAssemblies = NebulaModAPI.TargetAssemblies.Contains(assembly);
         foreach (var type in nestedTypes)
         {
-            if (isAPIAssemblies)
-            {
-                Log.Info($"Registering Nested Type: {type.Name}");
-            }
-            else
-            {
-                Log.Debug($"Registering Nested Type: {type.Name}");
-            }
-
             if (type.IsClass)
             {
                 var registerMethod = packetProcessor.GetType().GetMethods()
@@ -94,21 +84,11 @@ public static class PacketUtils
             .Where(m => m.Name == nameof(NetPacketProcessor.SubscribeReusable))
             .FirstOrDefault(m => m.IsGenericMethod && m.GetGenericArguments().Length == 2);
 
-        var isAPIAssemblies = NebulaModAPI.TargetAssemblies.Contains(assembly);
         foreach (var type in processors)
         {
             if (IsSubclassOfRawGeneric(typeof(BasePacketProcessor<>), type))
             {
                 var packetType = type.BaseType.GetGenericArguments().FirstOrDefault();
-                if (isAPIAssemblies)
-                {
-                    Log.Info($"Registering {type.Name} to process packet of type: {packetType.Name}");
-                }
-                else
-                {
-                    Log.Debug($"Registering {type.Name} to process packet of type: {packetType.Name}");
-                }
-
                 // Create instance of the processor
                 var delegateType = typeof(Action<,>).MakeGenericType(packetType, typeof(INebulaConnection));
                 var processor = Activator.CreateInstance(type);

@@ -230,6 +230,12 @@ public class SimulatedWorld : IDisposable
     {
         Multiplayer.Session.World.SpawnRemotePlayerModel(player.Data, true);
 
+        // A22: seat the joining client in the host player registry. Until this existed in
+        // production, the registry stayed empty, so the A20 subscription policy refused every
+        // planet-scope subscribe and no client ever received a mirror (identity came later, but
+        // nothing registered presence). Host-only; a no-op in a legacy room.
+        NebulaWorld.Authority.HostPlayerPresence.TryRegister(player.Data, player.Id);
+
         // Sync overrideName of planets and stars
         player.SendPacket(new NameInputPacket(GameMain.galaxy));
 

@@ -25,7 +25,6 @@ public static class Resources_Patch
             if (asset != null)
             {
                 __result = asset;
-                Log.Debug("Successfully loaded TMP Settings");
                 return false;
             }
 
@@ -37,7 +36,6 @@ public static class Resources_Patch
             if (asset != null)
             {
                 __result = asset;
-                Log.Debug("Successfully loaded TMP asset");
                 return false;
             }
 

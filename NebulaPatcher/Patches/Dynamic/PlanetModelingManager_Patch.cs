@@ -60,7 +60,6 @@ public class PlanetModelingManager_Patch
         }
 
         // Request factory
-        Log.Info($"Requested factory for planet {planet.name} (ID: {planet.id}) from host");
         Multiplayer.Session.Network.SendPacket(new FactoryLoadRequest(planet.id));
 
         // Skip running the actual method
@@ -132,7 +131,6 @@ public class PlanetModelingManager_Patch
 
                 planet.loading = true;
 
-                Log.Info($"Requesting planet model for {planet.name} (ID: {planet.id}) from host");
                 planetsToRequest.Add(planet.id);
             }
 

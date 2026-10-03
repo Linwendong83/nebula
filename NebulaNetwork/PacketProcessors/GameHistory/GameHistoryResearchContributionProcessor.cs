@@ -1,7 +1,6 @@
 ﻿#region
 
 using NebulaAPI.Packets;
-using NebulaModel.Logger;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.GameHistory;
@@ -24,10 +23,6 @@ internal class GameHistoryResearchContributionProcessor : PacketProcessor<GameHi
         if (packet.TechId == GameMain.history.currentTech)
         {
             GameMain.history.AddTechHash(packet.Hashes);
-        }
-        else
-        {
-            Log.Info($"ProcessPacket researchContribution: got package for different tech ({packet.TechId})");
         }
     }
 }
