@@ -774,26 +774,9 @@ public sealed class AuthoritySession : IDisposable
             if (hostExecutor is IHostTickAware tickAware) tickAware.HostTick = hostTick;
             commands?.Drain(hostExecutor, null);
             HostCombatExecutor?.TickContinuous();
-            // A17: repair execution over the task ledger. Without an installed damage/owner
-            // world view there is nothing to dispatch, so the tick below is a no-op
-            // fail-closed probe that the frame still drains without inventing facts. The
-            // production view (real pools, real energies, vanilla Repair writer) lands with
-            // the game harness (A22); unit coverage drives the executor directly with fakes.
-            HostConstructionExecutor?.Tick(hostTick,
-                System.Array.Empty<RepairDamageSnapshot>(),
-                System.Array.Empty<RepairOwnerSnapshot>(),
-                (_, _) => 0f, (_, _) => 0f, _ => 1f, _ => 0.0, 0f, 0f,
-                NullRepairWriter.Instance);
-            // A18: build execution over the same ledger. Without an installed prebuild/owner
-            // world view there is nothing to dispatch, so this tick is likewise a no-op
-            // fail-closed probe: no prebuild view means no build task, no material spend, no
-            // counter movement. The production view lands with the game harness (A22).
-            HostConstructionExecutor?.TickBuild(hostTick,
-                System.Array.Empty<BuildTargetSnapshot>(),
-                System.Array.Empty<BuildOwnerSnapshot>(),
-                (_, _) => 0f, _ => (ConstructionOwnerKey?)null,
-                (_, _) => new BuildMaterialRequirement(0, 0), _ => 0.0,
-                NullBuildWriter.Instance);
+            // Construction currently uses server claims and the native drone loops. Empty-input
+            // task ticks do no construction and cancel restored tasks; leave the model dormant
+            // until a real world/energy/presentation adapter is installed.
             // A14: one visual event per decided skill, published in the same frame work that
             // spent the cost. Delivery to clients belongs to A20; until then events queue in
             // the emitter instead of being invented anywhere else.
@@ -1088,7 +1071,8 @@ public sealed class AuthoritySession : IDisposable
     /// other's (L02).
     /// </para>
     /// </remarks>
-    public void UpdateStandingSubscriptions(int currentPlanetId, bool isInSector)
+    public void UpdateStandingSubscriptions(int currentPlanetId, bool isInSector,
+        Func<PoolKind, bool> supportsPool = null)
     {
         // Only a client holds a replica; a host session has nothing to subscribe.
         if (WorldReplica == null) return;
@@ -1102,6 +1086,8 @@ public sealed class AuthoritySession : IDisposable
             IsInSector = isInSector
         };
         ScopeSubscriptionPolicy.DesiredScopes(context, desiredScratch);
+        if (supportsPool != null)
+            desiredScratch.RemoveAll(scope => !supportsPool(scope.Kind));
 
         // Leave first: scopes no longer desired are released, so a planet switch never holds two
         // planets' pools at once.

@@ -20,6 +20,16 @@ public class BuildEntityRequestProcessor : PacketProcessor<BuildEntityRequest>
 {
     protected override void ProcessPacket(BuildEntityRequest packet, NebulaConnection conn)
     {
+        if (IsHost)
+        {
+            var sender = Players.Get(conn);
+            if (sender == null || sender.Id != packet.AuthorId ||
+                sender.Data.LocalPlanetId != packet.PlanetId) return;
+            if (!GameMain.sandboxToolsEnabled &&
+                (!Multiplayer.Session.BuildDispatch.TryGet(packet.PlanetId, packet.PrebuildId, out var claim) ||
+                 !claim.Launched || claim.OwnerKind == NebulaModel.DataStructures.BuildOwnerKind.Player &&
+                 claim.OwnerId != sender.Id)) return;
+        }
         if (IsHost && !Multiplayer.Session.Factories.ContainsPrebuildRequest(packet.PlanetId, packet.PrebuildId))
         {
             // Prebuild has already been removed, so skip it.
@@ -30,7 +40,7 @@ public class BuildEntityRequestProcessor : PacketProcessor<BuildEntityRequest>
 
         // We only execute the code if the client has loaded the factory at least once.
         // Else it will get it once it goes to the planet for the first time. 
-        if (planet.factory == null)
+        if (planet?.factory == null || packet.PrebuildId <= 0 || packet.PrebuildId >= planet.factory.prebuildCursor)
         {
             return;
         }

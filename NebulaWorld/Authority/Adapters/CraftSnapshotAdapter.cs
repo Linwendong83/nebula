@@ -66,7 +66,8 @@ public sealed class CraftSnapshotAdapter : IHostWorldView
         var factory = GameMain.galaxy?.PlanetById(planetId)?.factory;
         if (factory == null || craftId <= 0 || craftId >= factory.craftCursor ||
             craftId >= factory.craftPool.Length ||
-            factory.craftPool[craftId].id != craftId)
+            factory.craftPool[craftId].id != craftId ||
+            factory.craftPool[craftId].prototype == ECraftProto.ConstructionDrone)
         {
             return false;
         }
@@ -117,7 +118,10 @@ public sealed class CraftSnapshotAdapter : IHostWorldView
         var pool = factory.craftPool;
         for (var id = 1; id < factory.craftCursor; id++)
         {
-            if (id >= pool.Length || pool[id].id != id) continue;
+            // Native construction owns these crafts, including client-local drone logic ids.
+            // Replacing them with display-only authority shells would disconnect active drones.
+            if (id >= pool.Length || pool[id].id != id ||
+                pool[id].prototype == ECraftProto.ConstructionDrone) continue;
             var generation = tracker.ObserveOccupied(id);
             members.Add(ObjectKey.Create(epoch, PoolKind.GroundCraft, planetId, id, generation));
         }

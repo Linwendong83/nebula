@@ -667,29 +667,30 @@ public sealed class AuthorityPayloadWriter
     public void WriteUShort(ushort value)
     {
         Ensure(2);
-        Buffer.BlockCopy(BitConverter.GetBytes(value), 0, buffer, length, 2);
-        length += 2;
+        buffer[length++] = (byte)value;
+        buffer[length++] = (byte)(value >> 8);
     }
 
     public void WriteInt(int value)
     {
-        Ensure(4);
-        Buffer.BlockCopy(BitConverter.GetBytes(value), 0, buffer, length, 4);
-        length += 4;
+        WriteUInt(unchecked((uint)value));
     }
 
     public void WriteUInt(uint value)
     {
         Ensure(4);
-        Buffer.BlockCopy(BitConverter.GetBytes(value), 0, buffer, length, 4);
-        length += 4;
+        buffer[length++] = (byte)value;
+        buffer[length++] = (byte)(value >> 8);
+        buffer[length++] = (byte)(value >> 16);
+        buffer[length++] = (byte)(value >> 24);
     }
 
     public void WriteLong(long value)
     {
         Ensure(8);
-        Buffer.BlockCopy(BitConverter.GetBytes(value), 0, buffer, length, 8);
-        length += 8;
+        var bits = unchecked((ulong)value);
+        for (var shift = 0; shift < 64; shift += 8)
+            buffer[length++] = (byte)(bits >> shift);
     }
 
     /// <summary>

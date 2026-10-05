@@ -42,7 +42,10 @@ public enum AuthorityPatchMode : byte
     LegacyRemove = 4,
 
     /// <summary>Lifecycle bookkeeping that changes no shared fact.</summary>
-    LifecycleObserve = 5
+    LifecycleObserve = 5,
+
+    /// <summary>Native drone execution with server-assigned claims and host-only building commits.</summary>
+    NativeConstruction = 6
 }
 
 /// <summary>
@@ -265,8 +268,9 @@ public readonly struct AuthorityHookPolicy
 public static class AuthorityRuleGuard
 {
     private static readonly object gate = new();
-    private static readonly Dictionary<string, long> outcomes = [];
+    private static readonly Dictionary<(string Hook, AuthorityGuardOutcome Outcome), long> outcomes = [];
     private static readonly Dictionary<string, long> refusalsByHook = [];
+    private static readonly HashSet<(string Hook, AuthorityGuardOutcome Outcome)> reportedRefusals = [];
     private static readonly Dictionary<string, AuthorityPatchMode> modes = [];
     private static readonly Dictionary<string, bool> required = [];
     private static readonly List<AuthorityGuardRefusal> recentRefusals = [];
@@ -293,7 +297,7 @@ public static class AuthorityRuleGuard
     }
 
     /// <summary>
-    /// Receives a human-readable line for every refusal, so the runtime can log it.
+    /// Receives the first diagnostic for each hook/outcome in a session. Counters include repeats.
     /// </summary>
     /// <remarks>
     /// A sink rather than a direct logger call, because the model has no logger dependency and a
@@ -393,7 +397,10 @@ public static class AuthorityRuleGuard
         {
             lock (gate)
             {
-                return new Dictionary<string, long>(outcomes);
+                var result = new Dictionary<string, long>();
+                foreach (var entry in outcomes)
+                    result[entry.Key.Hook + ":" + entry.Key.Outcome] = entry.Value;
+                return result;
             }
         }
     }
@@ -490,7 +497,7 @@ public static class AuthorityRuleGuard
     {
         lock (gate)
         {
-            return outcomes.TryGetValue(OutcomeKey(label, outcome), out var count) ? count : 0;
+            return outcomes.TryGetValue((HookKey(label), outcome), out var count) ? count : 0;
         }
     }
 
@@ -501,6 +508,7 @@ public static class AuthorityRuleGuard
         {
             outcomes.Clear();
             refusalsByHook.Clear();
+            reportedRefusals.Clear();
             recentRefusals.Clear();
         }
     }
@@ -755,12 +763,11 @@ public static class AuthorityRuleGuard
                outcome != AuthorityGuardOutcome.LegacyPathRefused;
     }
 
-    private static string OutcomeKey(string label, AuthorityGuardOutcome outcome) =>
-        (string.IsNullOrEmpty(label) ? "(unlabelled)" : label) + ":" + outcome;
+    private static string HookKey(string label) => string.IsNullOrEmpty(label) ? "(unlabelled)" : label;
 
     private static void Record(string label, AuthorityGuardOutcome outcome, string detail)
     {
-        var key = string.IsNullOrEmpty(label) ? "(unlabelled)" : label;
+        var key = HookKey(label);
         var refused = outcome == AuthorityGuardOutcome.ClientRuleRefused ||
                       outcome == AuthorityGuardOutcome.LegacyPathRefused;
         string stack = null;
@@ -768,7 +775,7 @@ public static class AuthorityRuleGuard
 
         lock (gate)
         {
-            var outcomeKey = OutcomeKey(label, outcome);
+            var outcomeKey = (key, outcome);
             outcomes.TryGetValue(outcomeKey, out var count);
             outcomes[outcomeKey] = count + 1;
 
@@ -776,6 +783,10 @@ public static class AuthorityRuleGuard
 
             refusalsByHook.TryGetValue(key, out var refusals);
             refusalsByHook[key] = refusals + 1;
+            // Normal client ticks hit the guards for every entity. Sampling once per hook avoids
+            // allocating and formatting thousands of identical stacks while keeping exact counts.
+            if (!reportedRefusals.Add(outcomeKey)) return;
+            shouldReport = true;
             if (outcome == AuthorityGuardOutcome.ClientRuleRefused)
             {
                 stack = new System.Diagnostics.StackTrace(1, false).ToString();
@@ -784,7 +795,6 @@ public static class AuthorityRuleGuard
             {
                 recentRefusals.Add(new AuthorityGuardRefusal(key, outcome, detail, stack));
             }
-            shouldReport = true;
         }
 
         if (!shouldReport) return;
@@ -837,18 +847,16 @@ public static class AuthorityRuleGuard
         new(AuthorityHookLabels.ConstructionSystemRepair, "ConstructionSystem", "Repair",
             AuthorityPatchMode.HostRule, true, "A17"),
         new(AuthorityHookLabels.ConstructionSystemDetermineLaunch, "ConstructionSystem", "DetermineLaunch",
-            AuthorityPatchMode.HostRule, true, "A17/A18"),
+            AuthorityPatchMode.NativeConstruction, true, "BuildDispatch"),
         new(AuthorityHookLabels.ConstructionSystemUpdateModules, "ConstructionSystem", "UpdateModules",
-            AuthorityPatchMode.HostRule, true, "A17"),
+            AuthorityPatchMode.NativeConstruction, true, "BuildDispatch"),
         new(AuthorityHookLabels.ConstructionSystemUpdateDrones, "ConstructionSystem", "UpdateDrones",
-            AuthorityPatchMode.HostRule, true, "A17"),
+            AuthorityPatchMode.NativeConstruction, true, "BuildDispatch"),
         new(AuthorityHookLabels.ConstructStatGameTick, "ConstructStat", "GameTick",
             AuthorityPatchMode.HostRule, true, "A15"),
-        // Energy is charged through ref parameters rather than a field store, so the A01 read-only
-        // scan records no writer for this method. It is still guarded; it is only exempt from the
-        // "a required host rule has a recorded write" assertion, which is why Required is false.
+        // Personal drone energy and motion follow native execution. Shared HP is guarded at Repair.
         new(AuthorityHookLabels.DroneComponentInternalUpdate, "DroneComponent", "InternalUpdate",
-            AuthorityPatchMode.HostRule, false, "A17"),
+            AuthorityPatchMode.NativeConstruction, false, "BuildDispatch"),
         // Scheduler and lifecycle entries. They are classified so "every A01 target has a role" holds,
         // but none of them is a rule writer, so none is required to resolve.
         new(AuthorityHookLabels.SimulatedWorldOnPlayerJoinedGame, "NebulaWorld.SimulatedWorld",
@@ -863,17 +871,12 @@ public static class AuthorityRuleGuard
             AuthorityPatchMode.None, true, "A04"),
         new(AuthorityHookLabels.NebulaNetworkServerUpdate, "NebulaNetwork.Server", "Update",
             AuthorityPatchMode.None, false, "A04"),
-        // The mod already intercepts this entry to claim build targets, so the policy has to say which
-        // mode owns it. It writes no A01-protected field, which is why it is not a required hook:
-        // A18 replaces the ownership decision, not the write.
+        // Native construction intake forwards ready sites to the server-owned claim table.
         new(AuthorityHookLabels.ConstructionSystemAddBuildTargetToModules, "ConstructionSystem",
-            "AddBuildTargetToModules", AuthorityPatchMode.HostRule, false, "A18"),
-        // A24: the mod's postfix keeps the legacy dispatch claim in step with the vanilla drone
-        // reset. The claim is no longer a rule input (A18) and the conversation no longer carries
-        // traffic (A24), so the postfix is retired on every peer in the new mode. Not required: the
-        // vanilla body still resets the host's own pool, so a missing target must not stop the mode.
+            "AddBuildTargetToModules", AuthorityPatchMode.NativeConstruction, false, "BuildDispatch"),
+        // Claim release remains part of the live server-owned construction protocol.
         new(AuthorityHookLabels.ConstructionSystemResetDroneTargets, "ConstructionSystem",
-            "ResetDroneTargets", AuthorityPatchMode.LegacyRemove, false, "A24"),
+            "ResetDroneTargets", AuthorityPatchMode.NativeConstruction, false, "BuildDispatch"),
         // I01: the client-side write surface. Host runs, client refused outside a replica apply.
         // Required=false so the frozen contract (15 required hooks) is untouched: the vanilla bodies
         // must still run on the host and in single-player, so a missing target must not stop the

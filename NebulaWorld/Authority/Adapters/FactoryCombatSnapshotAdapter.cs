@@ -38,6 +38,7 @@ public sealed class FactoryCombatSnapshotAdapter : IHostWorldView
 {
     private readonly AuthorityEpoch epoch;
     private readonly Dictionary<int, SlotGenerationTracker> trackers = [];
+    private static readonly byte[] undamagedState = EncodeUndamagedState();
 
     /// <summary>Scopes skipped because their factory was not readable. Persistent growth means a subscriber is watching a planet the host never loads.</summary>
     public long UnreadableScopes { get; private set; }
@@ -92,12 +93,26 @@ public sealed class FactoryCombatSnapshotAdapter : IHostWorldView
         {
             return false;
         }
-        if (!FactoryCombatStateCodec.TryEncode(ReadEntityState(factory, key.NativeId), out state))
+        var entityState = ReadEntityState(factory, key.NativeId);
+        if (!entityState.HasCombatStat && !entityState.HasConstructStat)
+        {
+            // Most buildings have no damage records. Their immutable wire state is identical;
+            // reuse it instead of allocating a writer and primitive buffers per building per tick.
+            state = undamagedState;
+            return true;
+        }
+        if (!FactoryCombatStateCodec.TryEncode(entityState, out state))
         {
             // The codec's fixed layout cannot exceed its own ceiling; refusal here is a defect.
             throw new System.InvalidOperationException("A factory combat state exceeded its own codec.");
         }
         return true;
+    }
+
+    private static byte[] EncodeUndamagedState()
+    {
+        FactoryCombatStateCodec.TryEncode(default, out var data);
+        return data;
     }
 
     /// <summary>

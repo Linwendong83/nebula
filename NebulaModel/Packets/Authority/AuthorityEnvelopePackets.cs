@@ -624,6 +624,12 @@ public class AuthorityScopeDigestPacket : AuthorityEnvelopePacket
     /// <summary>Content hash over member identity, revisions and canonical state.</summary>
     public ulong Digest { get; set; }
 
+    /// <summary>Digest-only observations use epoch/baseline/sequence zero; live streams have an epoch and baseline.</summary>
+    public bool HasValidBookkeeping() => DeclaredStreamSequence >= 0 && MemberCount >= 0 &&
+        BaselineId >= 0 && (BaselineId == 0
+            ? SubscriptionEpoch == 0 && DeclaredStreamSequence == 0
+            : SubscriptionEpoch > 0);
+
     /// <summary>Reassembles the scope key, or false when the scope is not legal for its kind.</summary>
     public bool TryGetScopeKey(out ScopeKey scopeKey)
     {

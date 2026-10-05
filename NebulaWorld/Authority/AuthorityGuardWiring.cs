@@ -64,7 +64,8 @@ public static class AuthorityGuardWiring
             return AuthorityGuardSession.Legacy;
         }
 
-        var applyActive = session.AuthorityRuntime?.ApplyContext?.IsActive ?? false;
+        var applyActive = !identity.IsHost &&
+                          (session.AuthorityRuntime?.ApplyContext?.IsActiveOnCurrentThread ?? false);
         return new AuthorityGuardSession(identity.Mode, identity.IsActive, identity.IsHost, applyActive);
     }
 }

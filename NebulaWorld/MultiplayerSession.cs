@@ -54,6 +54,7 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         Belts = new BeltManager();
         BuildTools = new BuildToolManager();
         BuildDispatch = new BuildDispatchManager();
+        Drones = new DroneManager();
         Gizmos = new GizmoManager();
         History = new GameDataHistoryManager();
         State = new GameStatesManager();
@@ -93,6 +94,7 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
     public BeltManager Belts { get; set; }
     public BuildToolManager BuildTools { get; set; }
     public BuildDispatchManager BuildDispatch { get; set; }
+    public DroneManager Drones { get; set; }
     public GizmoManager Gizmos { get; set; }
     public GameDataHistoryManager History { get; set; }
     public GameStatesManager State { get; set; }
@@ -179,6 +181,9 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
         BuildDispatch?.Dispose();
         BuildDispatch = null;
 
+        Drones?.Dispose();
+        Drones = null;
+
         Gizmos?.Dispose();
         Gizmos = null;
 
@@ -229,6 +234,7 @@ public class MultiplayerSession : IDisposable, IMultiplayerSession
 
         Authority?.Reset();
         Authority = null;
+        AuthorityRuleGuard.ResetCounters();
 
         GC.SuppressFinalize(this);
     }

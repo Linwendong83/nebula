@@ -22,13 +22,14 @@ public class PlayerLifeProcessor : PacketProcessor<PlayerLifePacket>
             if (player == null || packet.Acknowledgement || packet.PlayerSnapshot == null) return;
             var data = (PlayerData)player.Data;
             // A10: in host authority mode a client life snapshot is never adopted nor rebroadcast.
-            // The host acks with its own truth (unchanged) so the client stops retrying, but no
+            // A terminal receipt names the received revision so the client stops retrying, but no
             // world, ledger or remote-model state moves. Death/respawn moves via commands in A11.
             if (AuthorityLocalOptions.Mode == AuthorityMode.HostAuthority &&
                 HostResourcePolicy.ShouldRefuseLegacyOverwrite(HostResourcePacketKind.LifeSnapshot, isHostAuthority: true))
             {
-                Log.Warn("[authority] refusing client life snapshot in host authority mode; acking host truth");
-                conn.SendPacket(new PlayerLifePacket { PlayerId = player.Id, Life = data.Life, Acknowledgement = true });
+                if (Multiplayer.Session.Life.RecordSnapshotRefusal(player.Id))
+                    Log.Warn("[authority] client life snapshot refused; acknowledging receipt without adopting its state");
+                conn.SendPacket(PlayerLifePacket.CreateReceipt(player.Id, packet.Life.Revision));
                 return;
             }
             packet.PlayerId = player.Id;

@@ -8,4 +8,12 @@ public class PlayerLifePacket
     public PlayerLifeData Life { get; set; }
     public byte[] PlayerSnapshot { get; set; }
     public bool Acknowledgement { get; set; }
+
+    /// <summary>A terminal receipt for a snapshot, without adopting its life or inventory facts.</summary>
+    public static PlayerLifePacket CreateReceipt(ushort playerId, long receivedRevision) => new()
+    {
+        PlayerId = playerId,
+        Life = new PlayerLifeData { Revision = receivedRevision },
+        Acknowledgement = true
+    };
 }

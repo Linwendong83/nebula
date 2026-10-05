@@ -16,25 +16,18 @@ public class PrebuildItemRequiredUpdateProcessor : PacketProcessor<PrebuildItemR
 {
     protected override void ProcessPacket(PrebuildItemRequiredUpdate packet, NebulaConnection conn)
     {
-        // A18: in host authority mode a client-asserted material placement never rewrites the host
-        // prebuild. Materials travel as host ledger spends attached to the finishing build task;
-        // applying the old claim here would let any client green any site. Legacy rooms run the
-        // path below unchanged.
-        if (NebulaModel.Authority.AuthorityLocalOptions.Mode == NebulaModel.Authority.AuthorityMode.HostAuthority &&
-            NebulaWorld.Authority.HostConstructionPolicy.ShouldRefuseClientMaterialClaim(isHostAuthority: true))
-        {
-            NebulaModel.Logger.Log.Warn("[authority] refusing client material claim in host authority mode: " +
-                NebulaWorld.Authority.HostConstructionPolicy.BuildSuppressionReason("PrebuildItemRequired"));
-            return;
-        }
+        if (packet.PrebuildId <= 0 || packet.ItemCount <= 0) return;
+        if (IsHost && Players.Get(conn)?.Data.LocalPlanetId != packet.PlanetId) return;
         var planet = GameMain.galaxy.PlanetById(packet.PlanetId);
-        if (planet.factory == null || packet.PrebuildId >= planet.factory.prebuildCursor)
+        if (planet?.factory == null || packet.PrebuildId >= planet.factory.prebuildCursor)
         {
             return;
         }
         var factory = planet.factory;
 
         ref var ptr = ref factory.prebuildPool[packet.PrebuildId];
+        if (ptr.id == packet.PrebuildId && ptr.itemRequired > 0 && ptr.itemRequired != packet.ItemCount)
+            return;
         if (ptr.id != packet.PrebuildId || ptr.itemRequired == 0)
         {
             //Prebuild not exist or the prebuild has satisfied the item requirement (green)

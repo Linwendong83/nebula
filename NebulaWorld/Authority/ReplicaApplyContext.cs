@@ -105,6 +105,16 @@ public sealed class ReplicaApplyContext
         }
     }
 
+    /// <summary>True only for the thread that owns the active apply lease.</summary>
+    public bool IsActiveOnCurrentThread
+    {
+        get
+        {
+            lock (gate)
+                return depth > 0 && ownerThreadId == Environment.CurrentManagedThreadId;
+        }
+    }
+
     /// <summary>Number of applies entered. Diagnostics only; a growing count is expected.</summary>
     public long AppliedTotal => Interlocked.Read(ref appliedTotal);
 
@@ -132,7 +142,7 @@ public sealed class ReplicaApplyContext
     {
         lock (gate)
         {
-            if (depth == 0) return false;
+            if (depth == 0 || ownerThreadId != Environment.CurrentManagedThreadId) return false;
             var active = scopeStack[depth - 1];
             if (!active.Scope.IsValid || !scope.Scope.IsValid) return false;
             return active.Scope.Equals(scope.Scope);

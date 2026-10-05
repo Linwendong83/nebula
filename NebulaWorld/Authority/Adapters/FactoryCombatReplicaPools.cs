@@ -33,7 +33,7 @@ public sealed class FactoryCombatReplicaPools : IFactoryCombatPools
 
     public FactoryCombatReplicaPools(int planetId)
     {
-        planetId = planetId;
+        this.planetId = planetId;
     }
 
     public bool EntityExists(int entityId)

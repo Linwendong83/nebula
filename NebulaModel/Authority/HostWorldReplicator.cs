@@ -89,6 +89,7 @@ public sealed class HostWorldReplicator
     private readonly Dictionary<(ushort Subscriber, ScopeKey Scope), PendingSnapshotSend> pendingSnapshots = [];
     private readonly List<(ushort Subscriber, ScopeKey Scope)> finishedSnapshots = [];
     private readonly List<ObjectKey> memberScratch = [];
+    private readonly HashSet<ObjectKey> memberSetScratch = [];
     private readonly List<ScopeEvent> pendingScratch = [];
     private readonly List<ObjectKey> despawnScratch = [];
     private readonly List<ScopeDigestMember> digestScratch = [];
@@ -334,7 +335,7 @@ public sealed class HostWorldReplicator
             var hasListener = false;
             foreach (var pair in state.Subscribers)
             {
-                if (pair.Value.Active && pair.Value.PendingBaselineId == 0)
+                if (pair.Value.Active && pair.Value.PendingBaselineId == 0 && !pair.Value.NeedsResync)
                 {
                     hasListener = true;
                     break;
@@ -353,7 +354,7 @@ public sealed class HostWorldReplicator
             foreach (var pair in state.Subscribers)
             {
                 var cursor = pair.Value;
-                if (!cursor.Active || cursor.PendingBaselineId != 0) continue;
+                if (!cursor.Active || cursor.PendingBaselineId != 0 || cursor.NeedsResync) continue;
                 Send(pair.Key, AuthorityScopeDigestPacket.Create(
                     ControlHeader(AuthorityFamily.ScopeDigest, hostTick), state.Scope,
                     cursor.SubscriptionEpoch, cursor.BaselineId, cursor.NextStreamSequence - 1,
@@ -370,6 +371,11 @@ public sealed class HostWorldReplicator
             state.TryGetSubscriber(subscriberId, out var cursor))
         {
             cursor.Active = false;
+            // The old baseline may never have been ACKed. Leaving the scope abandons that
+            // conversation; a later subscription must snapshot the world as it is then.
+            cursor.PendingBaselineId = 0;
+            cursor.NeedsResync = true;
+            pendingSnapshots.Remove((subscriberId, scope));
         }
     }
 
@@ -479,6 +485,8 @@ public sealed class HostWorldReplicator
 
         foreach (var pair in scopes)
         {
+            // Keep inactive cursors for reconnect continuity, but do not scan worlds nobody reads.
+            if (!HasActiveSubscriber(pair.Value)) continue;
             CaptureScope(pair.Value, hostTick);
             DeliverScope(pair.Value);
             TrimCoveredLog(pair.Value);
@@ -784,6 +792,8 @@ public sealed class HostWorldReplicator
     private void CaptureScope(ScopeReplicationState scope, long hostTick)
     {
         if (!ReadMembers(scope, out var current)) return;
+        memberSetScratch.Clear();
+        foreach (var key in current) memberSetScratch.Add(key);
 
         // 1. Spawns first: identity precedes every HP this frame will publish.
         foreach (var key in current)
@@ -822,7 +832,7 @@ public sealed class HostWorldReplicator
         despawnScratch.Clear();
         foreach (var key in scope.Members.Keys)
         {
-            if (!current.Contains(key)) despawnScratch.Add(key);
+            if (!memberSetScratch.Contains(key)) despawnScratch.Add(key);
         }
         foreach (var key in despawnScratch)
         {
@@ -834,6 +844,13 @@ public sealed class HostWorldReplicator
             // packet for this key from here on.
             Revisions.Forget(key);
         }
+    }
+
+    private static bool HasActiveSubscriber(ScopeReplicationState scope)
+    {
+        foreach (var subscriber in scope.Subscribers)
+            if (subscriber.Value.Active) return true;
+        return false;
     }
 
     private void DeliverScope(ScopeReplicationState scope)

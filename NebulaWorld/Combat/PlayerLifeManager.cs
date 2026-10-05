@@ -16,6 +16,9 @@ public sealed class PlayerLifeManager : IDisposable
     private long lastSend;
     private int lastStage = -1;
     private readonly Dictionary<ushort, long> received = new();
+    private readonly HashSet<ushort> refusedSnapshotPlayers = new();
+
+    public bool RecordSnapshotRefusal(ushort playerId) => refusedSnapshotPlayers.Add(playerId);
 
     public void Publish()
     {
@@ -186,6 +189,7 @@ public sealed class PlayerLifeManager : IDisposable
     public void Dispose()
     {
         pending = null; received.Clear();
+        refusedSnapshotPlayers.Clear();
         PlayerLifeData.CurrentTransactionId = "";
         PlayerLifeData.CurrentRedeployItemsDropped = false;
     }

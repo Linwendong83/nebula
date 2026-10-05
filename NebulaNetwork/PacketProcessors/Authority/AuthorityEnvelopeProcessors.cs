@@ -480,7 +480,7 @@ internal class AuthorityScopeDigestProcessor : PacketProcessor<AuthorityScopeDig
             Log.Warn($"[authority] scope digest has an illegal scope {packet.ScopeKind}:{packet.Scope}");
             return;
         }
-        if (packet.DeclaredStreamSequence < 0 || packet.MemberCount < 0 || packet.SubscriptionEpoch <= 0)
+        if (!packet.HasValidBookkeeping())
         {
             Log.Warn($"[authority] scope digest has invalid bookkeeping sequence={packet.DeclaredStreamSequence} " +
                      $"members={packet.MemberCount} epoch={packet.SubscriptionEpoch}");

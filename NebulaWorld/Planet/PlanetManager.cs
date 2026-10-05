@@ -32,6 +32,7 @@ public class PlanetManager : IDisposable
     public static void UnloadAllFactories()
     {
         var gameData = GameMain.data;
+        Multiplayer.Session.Drones.ClearAllRemoteDrones();
         Multiplayer.Session.BuildDispatch.OnFactoriesUnloaded();
         using (Multiplayer.Session.Ships.PatchLockILS.On())
         {

@@ -27,6 +27,7 @@ namespace NebulaWorld.Authority.Adapters;
 public sealed class GroundCraftReplicaPools : ICraftPools
 {
     private readonly int planetId;
+    private readonly System.Collections.Generic.Dictionary<int, int> localSlots = [];
 
     public GroundCraftReplicaPools(int planetId)
     {
@@ -36,6 +37,7 @@ public sealed class GroundCraftReplicaPools : ICraftPools
     public bool CraftExists(int craftId)
     {
         var factory = Factory;
+        if (!localSlots.TryGetValue(craftId, out craftId)) return false;
         return factory != null && craftId > 0 && craftId < factory.craftCursor &&
             craftId < factory.craftPool.Length && factory.craftPool[craftId].id == craftId;
     }
@@ -44,10 +46,22 @@ public sealed class GroundCraftReplicaPools : ICraftPools
     {
         var factory = Factory;
         if (factory == null || craftId <= 0) return;
+        var hostId = craftId;
+        if (localSlots.ContainsKey(hostId)) RemoveCraftShell(hostId);
         EnsureCapacity(factory, craftId);
+        if (factory.craftPool[craftId].id == craftId &&
+            (factory.craftPool[craftId].prototype == ECraftProto.ConstructionDrone ||
+             localSlots.ContainsValue(craftId)))
+        {
+            // Client drone allocations may occupy a host combat craft's slot. Allocate a local
+            // shell instead of removing the drone; the model still addresses it by host identity.
+            var empty = default(CraftData);
+            craftId = factory.AddCraftData(ref empty);
+        }
+        localSlots[hostId] = craftId;
         if (factory.craftPool[craftId].id == craftId)
         {
-            RemoveCraftShell(craftId);
+            factory.RemoveCraftWithComponents(craftId);
         }
         RemoveFromRecycle(factory, craftId);
         if (craftId >= factory.craftCursor)
@@ -130,6 +144,7 @@ public sealed class GroundCraftReplicaPools : ICraftPools
     public void WriteCraftState(int craftId, in CraftState state)
     {
         var factory = Factory;
+        if (!localSlots.TryGetValue(craftId, out craftId)) return;
         if (factory == null || craftId <= 0 || craftId >= factory.craftPool.Length) return;
         ref var craft = ref factory.craftPool[craftId];
         if (craft.id != craftId) return;
@@ -159,6 +174,9 @@ public sealed class GroundCraftReplicaPools : ICraftPools
     public void RemoveCraftShell(int craftId)
     {
         var factory = Factory;
+        if (!localSlots.TryGetValue(craftId, out var localId)) return;
+        localSlots.Remove(craftId);
+        craftId = localId;
         if (factory == null || craftId <= 0 || craftId >= factory.craftPool.Length) return;
         if (factory.craftPool[craftId].id != craftId) return;
         factory.RemoveCraftWithComponents(craftId);

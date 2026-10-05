@@ -2,7 +2,6 @@
 
 using HarmonyLib;
 using NebulaModel.Authority;
-using UnityEngine;
 
 #endregion
 
@@ -38,49 +37,6 @@ public class AuthorityWriteGuard_Patch
     /// </remarks>
     [HarmonyPrefix]
     [HarmonyPatch(typeof(ConstructStat), nameof(ConstructStat.GameTick))]
-    public static bool ConstructStatGameTick_Prefix(ref ConstructStat __instance)
-    {
-        return AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.ConstructStatGameTick,
-            detail: $"stat={__instance.id} entity={__instance.entityId}");
-    }
-
-    /// <summary>
-    /// <c>DroneComponent.InternalUpdate</c> moves a drone and charges flight and repair energy.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A01's read-only field scan records no writer for this method because the energy never goes
-    /// through a field store; it is charged through the reference the caller passed. That is exactly
-    /// why it needs a guard: the write is real but invisible to the inventory, and the caller-supplied
-    /// reference is what the mod currently fills with a dummy value for remote drones (E05).
-    /// </para>
-    /// <para>
-    /// The method has two overloads — one charges the mecha's <c>double</c> core energy and one
-    /// charges a battle base's <c>long</c> energy — and both are writers of a shared resource, so both
-    /// are guarded. The argument types are spelled out because a name-only patch would be ambiguous.
-    /// </para>
-    /// </remarks>
-    [HarmonyPrefix]
-    [HarmonyPatch(typeof(DroneComponent), nameof(DroneComponent.InternalUpdate),
-        [typeof(CraftData), typeof(PlanetFactory), typeof(Vector3), typeof(float), typeof(float),
-            typeof(double), typeof(double), typeof(double), typeof(double), typeof(float)],
-        [ArgumentType.Ref, ArgumentType.Normal, ArgumentType.Ref, ArgumentType.Normal, ArgumentType.Normal,
-            ArgumentType.Ref, ArgumentType.Ref, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Out])]
-    public static bool DroneComponentInternalUpdateMecha_Prefix(ref DroneComponent __instance)
-    {
-        return AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.DroneComponentInternalUpdate,
-            detail: $"drone={__instance.id} owner={__instance.owner} stage={__instance.stage} energy=mecha");
-    }
-
-    [HarmonyPrefix]
-    [HarmonyPatch(typeof(DroneComponent), nameof(DroneComponent.InternalUpdate),
-        [typeof(CraftData), typeof(PlanetFactory), typeof(Vector3), typeof(float), typeof(float),
-            typeof(long), typeof(double), typeof(double), typeof(float)],
-        [ArgumentType.Ref, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Normal,
-            ArgumentType.Ref, ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Out])]
-    public static bool DroneComponentInternalUpdateBase_Prefix(ref DroneComponent __instance)
-    {
-        return AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.DroneComponentInternalUpdate,
-            detail: $"drone={__instance.id} owner={__instance.owner} stage={__instance.stage} energy=base");
-    }
+    public static bool ConstructStatGameTick_Prefix() =>
+        AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.ConstructStatGameTick);
 }

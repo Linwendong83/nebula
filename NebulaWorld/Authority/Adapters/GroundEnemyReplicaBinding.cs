@@ -136,6 +136,6 @@ public sealed class GroundEnemyReplicaBinding : IReplicaMirrorObserver
     private static bool DefaultApplyWindowOpen()
     {
         var session = Multiplayer.Session;
-        return session?.AuthorityRuntime?.ApplyContext?.IsActive ?? false;
+        return session?.AuthorityRuntime?.ApplyContext?.IsActiveOnCurrentThread ?? false;
     }
 }

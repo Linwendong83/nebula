@@ -5,9 +5,12 @@
 namespace NebulaWorld.Authority;
 
 /// <summary>
-/// Authority-mode policy for the legacy construction dispatch paths (TASKS.md A17/A18, pure decision).
+/// Policy for a fully integrated task-ledger construction executor (pure model).
 /// </summary>
 /// <remarks>
+/// The production session currently uses server-owned BuildDispatch claims and native drones.
+/// These suppression decisions apply only when a real world, energy and presentation adapter is
+/// installed for the task executor; authority combat mode alone is insufficient to enable them.
 /// <para>
 /// The old room dispatches repairs from every peer: vanilla <c>DetermineLaunch</c> serves its
 /// single <c>player</c>, module <c>PreLaunchDrone</c> (inside <c>UpdateModules</c>) competes for

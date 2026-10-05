@@ -59,7 +59,10 @@ public enum AuthorityExitDisposition : byte
     NeedsReview = 8,
 
     /// <summary>No disposition was declared. The audit fails on this; it is never a passing state.</summary>
-    Unclassified = 9
+    Unclassified = 9,
+
+    /// <summary>Native construction with server-owned claims and validated host commits.</summary>
+    NativeConstructionPath = 10
 }
 
 /// <summary>One row of TASKS.md's exit table, with the code the claim rests on.</summary>
@@ -197,9 +200,9 @@ public static class AuthorityLegacyExitAudit
     /// EnemyManager.State/Snapshot, the DFG/DFS/DFHive/DFRelay/DFTinder packet families and their
     /// processors, CombatEnemyStateRequest/Response, EnemyDFGroundSystem_Transpiler,
     /// MechaShoot/MechaBomb/MechaShieldBurst packets and processors, BattleVisualProcessor,
-    /// PlayerEjectMechaDronePacket/Processor, DroneManager remote pool,
-    /// BuildTargetAssignment/Reply/Ready/BaseReleaseAck/BuildDroneLaunch packets and processors,
     /// PlayerMechaData packet and processor, AuthorityRoutedPacketGuard.
+    /// Construction packets, launch postfixes and the remote drone presentation pool were restored
+    /// after dev.6 disabled native execution without supplying live task-executor adapters.
     /// </remarks>
     public static readonly IReadOnlyList<AuthorityExitRow> ExitTable = new[]
     {
@@ -212,12 +215,12 @@ public static class AuthorityLegacyExitAudit
             "A11", AuthorityExitDisposition.GuardedHostRule,
             "NebulaPatcher/Patches/Dynamic/SkillSystem_Patch.cs"),
         Row("ConstructionModuleComponent_Patch launch postfix",
-            "host task execution; the client shows the task batch",
-            "A17/A18", AuthorityExitDisposition.RetiredPath,
+            "native drone execution; the server validates launch ownership and generations",
+            "BuildDispatch", AuthorityExitDisposition.NativeConstructionPath,
             "NebulaPatcher/Patches/Dynamic/ConstructionModuleComponent_Patch.cs"),
         Row("BuildDispatch client launch/revoke ACK rule dependency",
-            "host task/budget; the verified selection policy is kept for legacy rooms only",
-            "A18/A24", AuthorityExitDisposition.RetiredPath,
+            "live server-owned claims; clients acknowledge assignments and host commits buildings",
+            "BuildDispatch", AuthorityExitDisposition.NativeConstructionPath,
             "NebulaWorld/Factory/BuildDispatchManager.cs"),
         Row("Factory load forced full heal and combat-stat clearing",
             "consistent snapshot plus local reference mapping",
@@ -301,9 +304,8 @@ public static class AuthorityLegacyExitAudit
     {
         "BattleBaseComponent.InternalUpdate", "BattleBaseComponent.energy",
         "ConstructionModuleComponent.ChangeDronesPriority", "ConstructionModuleComponent.PreLaunchDrone",
-        // The mod's launch-reporting postfixes are deleted; the vanilla eject entries remain and run
-        // under the guarded dispatch (DetermineLaunch/UpdateDrones), so they are vanilla internals
-        // of the migrated chain like the entries around them.
+        // Construction now runs through the server claim protocol and native drone execution.
+        // These internal writers are accounted for by that protocol, rather than a task adapter.
         "ConstructionModuleComponent.EjectMechaDrone", "ConstructionModuleComponent.EjectBaseDrone",
         "ConstructionModuleComponent.set_droneAliveCount", "ConstructionModuleComponent.set_droneCount",
         "ConstructionModuleComponent.set_droneIdleCount", "ConstructionSystem.ExecuteBuildTasks",
@@ -372,6 +374,9 @@ public static class AuthorityLegacyExitAudit
                 case AuthorityPatchMode.LegacyRemove:
                     return (AuthorityExitDisposition.RetiredPath,
                         "policy table retires it in the new mode; the guard refuses it and counts the refusal");
+                case AuthorityPatchMode.NativeConstruction:
+                    return (AuthorityExitDisposition.NativeConstructionPath,
+                        "native drone execution uses server-assigned claims; building commits and shared HP stay on the host");
                 default:
                     return (AuthorityExitDisposition.NotARuleWriter,
                         "policy table classifies it without a rule role (mode " + mode + ")");
