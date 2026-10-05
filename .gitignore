@@ -12,6 +12,9 @@ dist/
 # Local helper scripts
 /scripts/
 
+# Local tests (run directly from NebulaTests/NebulaTests.csproj)
+/NebulaTests/
+
 # Local decompiled-game reference sources (game code must not be committed)
 /reference/
 

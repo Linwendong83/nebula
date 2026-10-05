@@ -171,7 +171,8 @@ assign to game fields, so a broken probe degrades the evidence, not the game.
   protected field. It self-tests against three hand-verified writer anchors and prints the
   resolved opcode values, so a misconfigured scan fails loudly instead of reporting "no writers".
 - `build-hooks-json.py` turns those runtime outputs into `docs/host-authority/authority-hooks.json`.
-- `NebulaTests/Authority/AuthorityHookInventoryTest.cs` re-derives the inventory from IL in both
+- The local-only `NebulaTests/Authority/AuthorityHookInventoryTest.cs` (excluded from Git and
+  the solution) re-derives the inventory from IL in both
   directions and fails if the JSON is stale, missing, or padded with writers that do not exist.
 
 ### A01 caveats worth remembering
