@@ -10,8 +10,8 @@ jobs:
       contents: write
 
     env:
-      NEBULA_FOLDER : dist\\release\\nebula\\
-      DIST_RELEASE_FOLDER : dist\\release\\
+      NEBULA_FOLDER : artifacts\\release\\nebula-NebulaMultiplayerMod\\
+      DIST_RELEASE_FOLDER : artifacts\\release\\
 
     steps:
       - name: Checkout
@@ -44,10 +44,6 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Clear output directory in DSP files
-        # We use SilentlyContinue here because it errors out if the folder does not exist otherwise
-        run :  rm -R -ErrorAction SilentlyContinue "dist"
-    
       - name: Add remote build identifier
         run: New-Item -Name .remoteBuild -ItemType File -force
 
@@ -59,7 +55,9 @@ jobs:
 
       # Build it
       - name: Build the application
-        run: dotnet build -c Release /p:PublicRelease=true
+        run: |
+          New-Item -ItemType Directory -Force artifacts/logs | Out-Null
+          dotnet build -c Release -p:PublicRelease=true -p:IsolatedBuild=true -bl:artifacts/logs/build.binlog
 
       # Bundle
       - name: Bundle build for thunderstore and github

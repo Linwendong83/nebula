@@ -12,7 +12,18 @@ namespace NebulaPatcher.Patches.Dynamic;
 [HarmonyPatch(typeof(UIStatisticsWindow))]
 internal class UIStatisticsWindow_Patch
 {
+    [HarmonyPostfix]
+    [HarmonyPatch(nameof(UIStatisticsWindow.OnFavoriteButtonClick))]
+    [HarmonyPatch(nameof(UIStatisticsWindow.OnKillFavoriteButtonClick))]
+    public static void SaveFavorites_Postfix(UIStatisticsWindow __instance) =>
+        NebulaWorld.Statistics.StatisticsPreferences.Save(__instance);
+
     [HarmonyPrefix]
+    [HarmonyPatch(nameof(UIStatisticsWindow._OnClose))]
+    public static void SaveOnClose_Prefix(UIStatisticsWindow __instance) =>
+        NebulaWorld.Statistics.StatisticsPreferences.Save(__instance);
+
+    [HarmonyPostfix]
     [HarmonyPatch(nameof(UIStatisticsWindow._OnOpen))]
     [SuppressMessage("Style", "IDE1006:Naming Styles", Justification = "Original Function Name")]
     public static void _OnOpen_Postfix(UIStatisticsWindow __instance)
@@ -22,11 +33,9 @@ internal class UIStatisticsWindow_Patch
             return;
         }
         Multiplayer.Session.Statistics.IsStatisticsNeeded = true;
-        var astroFilter = __instance.astroFilter;
-        if (astroFilter == 0)
-        {
-            astroFilter = GameMain.localPlanet?.astroId ?? (GameMain.localStar?.id ?? 0);
-        }
+        Multiplayer.Session.Statistics.BeginStatisticsRequest();
+        var astroFilter = NebulaModel.DataStructures.StatisticsAstroFilter.Resolve(
+            __instance.astroFilter, GameMain.localPlanet?.astroId ?? 0, GameMain.localStar?.astroId ?? 0);
         Multiplayer.Session.Network.SendPacket(new StatisticsRequestEvent(StatisticEvent.WindowOpened, astroFilter));
     }
 
@@ -50,7 +59,8 @@ internal class UIStatisticsWindow_Patch
     public static bool AddProductStatGroup_Prefix(int _factoryIndex, ProductionStatistics ___productionStat)
     {
         //Skip when StatisticsDataPacket hasn't arrived yet
-        return _factoryIndex >= 0 && ___productionStat.factoryStatPool[_factoryIndex] != null;
+        return _factoryIndex >= 0 && _factoryIndex < ___productionStat.factoryStatPool.Length &&
+               ___productionStat.factoryStatPool[_factoryIndex] != null;
     }
 
     [HarmonyPostfix]
@@ -61,14 +71,9 @@ internal class UIStatisticsWindow_Patch
 
         if (__instance.isStatisticsTab && __instance.lastAstroFilter != __instance.astroFilter)
         {
-            if (__instance.astroFilter != 0)
-            {
-                Multiplayer.Session.Network.SendPacket(new StatisticsRequestEvent(StatisticEvent.AstroFilterChanged, __instance.astroFilter));
-            }
-            else if (GameMain.localPlanet == null && GameMain.localStar != null) // local star
-            {
-                Multiplayer.Session.Network.SendPacket(new StatisticsRequestEvent(StatisticEvent.AstroFilterChanged, GameMain.localStar.astroId));
-            }
+            var filter = NebulaModel.DataStructures.StatisticsAstroFilter.Resolve(
+                __instance.astroFilter, GameMain.localPlanet?.astroId ?? 0, GameMain.localStar?.astroId ?? 0);
+            Multiplayer.Session.Network.SendPacket(new StatisticsRequestEvent(StatisticEvent.AstroFilterChanged, filter));
         }
     }
 
@@ -79,6 +84,22 @@ internal class UIStatisticsWindow_Patch
         if (!Multiplayer.IsActive || Multiplayer.Session.LocalPlayer.IsHost) return true;
 
         // Client: Only allow refresh on local planet. Otherwise use request to get data from server
-        return GameMain.localPlanet != null && (__instance.astroFilter == 0 || __instance.astroFilter == GameMain.data.localPlanet.id);
+        return false;
     }
+}
+
+[HarmonyPatch(typeof(UIProductEntry), nameof(UIProductEntry.OnFavoriteButtonClick))]
+internal class UIProductFavorite_Patch
+{
+    [HarmonyPostfix]
+    public static void Postfix() =>
+        NebulaWorld.Statistics.StatisticsPreferences.Save(UIRoot.instance.uiGame.statWindow);
+}
+
+[HarmonyPatch(typeof(UIKillEntry), nameof(UIKillEntry.OnFavoriteButtonClick))]
+internal class UIKillFavorite_Patch
+{
+    [HarmonyPostfix]
+    public static void Postfix() =>
+        NebulaWorld.Statistics.StatisticsPreferences.Save(UIRoot.instance.uiGame.statWindow);
 }

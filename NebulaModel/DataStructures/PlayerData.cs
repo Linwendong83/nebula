@@ -58,6 +58,35 @@ public class PlayerData : IPlayerData
     public int[] DIYItemValue { get; set; }
     public byte[] DashboardData { get; set; }
     public PlayerLifeData Life { get; set; } = new();
+
+    /// <summary>Updates the locally simulated personal state of this authenticated seat.</summary>
+    public bool TryApplyPersonalSnapshot(PlayerData snapshot)
+    {
+        if (snapshot?.Life == null || snapshot.Mecha?.ReactorStorage == null ||
+            snapshot.Mecha.Inventory == null || snapshot.Life.Revision <= Life.Revision ||
+            snapshot.Life.DeathCount < Life.DeathCount) return false;
+        // Keep connection identity, accepted movement and server-owned statistics/preferences.
+        // These checkpoints never seed or overwrite the authority resource ledger.
+        var fight = CombatAuthoritative ? Mecha.FightData : null;
+        var life = CombatAuthoritative ? Life : null;
+        Mecha = snapshot.Mecha;
+        if (fight != null) Mecha.FightData = fight;
+        Life = snapshot.Life;
+        if (life != null)
+        {
+            Life.IsAlive = life.IsAlive;
+            Life.DeathCount = life.DeathCount;
+            Life.InvincibleTicks = life.InvincibleTicks;
+        }
+        return true;
+    }
+    // Session-only ownership; persisted fight values remain in the existing save layout.
+    public bool CombatAuthoritative { get; set; }
+    public EMovementState AcceptedMovementState { get; set; }
+    public bool AcceptedWarping { get; set; }
+    public Double3 AcceptedVelocityU { get; set; }
+    public Float3 AcceptedVelocityL { get; set; }
+    public long AcceptedMovementTick { get; set; }
     public byte[] PersonalKillData { get; set; } = Array.Empty<byte>();
     public byte[] VegetableCollectionData { get; set; } = Array.Empty<byte>();
     public string PersistentId { get; set; } = "";

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Net;
 using System.Text;
+using System.Threading;
 using NebulaAPI.Networking;
 using NebulaModel.Logger;
 using NebulaModel.Networking.Serialization;
@@ -25,6 +26,7 @@ public class NebulaConnection : INebulaConnection
     private readonly Queue<byte[]> pendingPackets = new();
     private bool enable = true;
     private EConnectionStatus connectionStatus = EConnectionStatus.Undefined;
+    private static int nextConnectionId;
 
     public bool IsAlive => peerSocket?.IsAlive ?? false;
 
@@ -47,7 +49,8 @@ public class NebulaConnection : INebulaConnection
         this.peerEndpoint = peerEndpoint;
         this.peerSocket = peerSocket;
         this.packetProcessor = packetProcessor;
-        this.Id = peerEndpoint.GetHashCode();
+        // Endpoint reuse must not make a reconnect equal to a socket awaiting cleanup.
+        Id = Interlocked.Increment(ref nextConnectionId);
     }
 
 
@@ -75,7 +78,7 @@ public class NebulaConnection : INebulaConnection
 
     public bool Equals(INebulaConnection connection)
     {
-        return connection != null && ((NebulaConnection)connection).peerEndpoint.Equals(peerEndpoint);
+        return ReferenceEquals(this, connection);
     }
 
     private void ProcessPacketQueue()
@@ -103,6 +106,22 @@ public class NebulaConnection : INebulaConnection
         {
             enable = true;
             ProcessPacketQueue();
+            Monitor.PulseAll(pendingPackets);
+        }
+    }
+
+    /// <summary>Waits briefly for the final personal checkpoint before a graceful close.</summary>
+    public bool FlushSendQueue(int timeoutMilliseconds = 1000)
+    {
+        var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
+        lock (pendingPackets)
+        {
+            while (!enable || pendingPackets.Count > 0)
+            {
+                var remaining = (int)(deadline - DateTime.UtcNow).TotalMilliseconds;
+                if (remaining <= 0 || !Monitor.Wait(pendingPackets, remaining)) return false;
+            }
+            return true;
         }
     }
 
@@ -118,21 +137,11 @@ public class NebulaConnection : INebulaConnection
 
     public override bool Equals(object obj)
     {
-        if (obj is null)
-        {
-            return false;
-        }
-
-        if (ReferenceEquals(this, obj))
-        {
-            return true;
-        }
-
-        return obj.GetType() == GetType() && ((NebulaConnection)obj).peerEndpoint.Equals(peerEndpoint);
+        return ReferenceEquals(this, obj);
     }
 
     public override int GetHashCode()
     {
-        return peerEndpoint?.GetHashCode() ?? 0;
+        return Id;
     }
 }

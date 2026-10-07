@@ -125,13 +125,13 @@ public sealed class GroundEnemyBinding
         if (!bindings.TryGetValue(key, out var binding))
         {
             binding = new LocalBinding { Kind = decoded.Kind, BaseId = decoded.BaseId };
-            bindings[key] = binding;
             // A recycled slot arrives as a new key while the old key's despawn may still be in
             // flight (the host publishes Spawn → State → Despawn within one frame). Taking
             // ownership here is what keeps the old generation's trailing despawn from deleting the
             // new generation's shell.
-            slotOwner[key.NativeId] = key;
             pools.CreateEnemyShell(key.NativeId, in decoded);
+            bindings[key] = binding;
+            slotOwner[key.NativeId] = key;
             shellsCreated++;
             componentBindingRecorded?.Invoke(key, key.NativeId);
         }
@@ -226,7 +226,7 @@ public sealed class GroundEnemyBinding
     }
 
     private static bool NeedsBaseCore(in GroundEnemyState state) =>
-        state.Kind != GroundEnemyKind.GroundBase && state.BaseId != 0;
+        state.Kind != GroundEnemyKind.GroundBase && state.Kind != GroundEnemyKind.GroundUnit && state.BaseId != 0;
 
     private void RecomputeKnownBases()
     {

@@ -90,7 +90,9 @@ public readonly struct GroundEnemyState
         float posX, float posY, float posZ,
         float rotX, float rotY, float rotZ, float rotW,
         float velX, float velY, float velZ,
-        int hp, int hpMax, int hpRecover, int hpIncoming)
+        int hp, int hpMax, int hpRecover, int hpIncoming,
+        float animationTime = 0, float prepareLength = 0, float workingLength = 0, uint animationState = 0, float animationPower = 0,
+        float unitAnimation = 0, float unitDisturb = 0, float unitSteering = 0, float unitSpeed = 0)
     {
         Kind = kind;
         HasCombatStat = hasCombatStat;
@@ -119,6 +121,9 @@ public readonly struct GroundEnemyState
         HpMax = hpMax;
         HpRecover = hpRecover;
         HpIncoming = hpIncoming;
+        AnimationTime = animationTime; PrepareLength = prepareLength; WorkingLength = workingLength;
+        AnimationState = animationState; AnimationPower = animationPower;
+        UnitAnimation = unitAnimation; UnitDisturb = unitDisturb; UnitSteering = unitSteering; UnitSpeed = unitSpeed;
     }
 
     public GroundEnemyKind Kind { get; }
@@ -148,18 +153,27 @@ public readonly struct GroundEnemyState
     public int HpMax { get; }
     public int HpRecover { get; }
     public int HpIncoming { get; }
+    public float AnimationTime { get; }
+    public float PrepareLength { get; }
+    public float WorkingLength { get; }
+    public uint AnimationState { get; }
+    public float AnimationPower { get; }
+    public float UnitAnimation { get; }
+    public float UnitDisturb { get; }
+    public float UnitSteering { get; }
+    public float UnitSpeed { get; }
 }
 
 /// <summary>Encoding of <see cref="GroundEnemyState"/> into one bounded state blob.</summary>
 public static class GroundEnemyStateCodec
 {
-    public const byte Version = 1;
+    public const byte Version = 3;
 
     private const byte HasCombatFlag = 1;
     private const byte IsDynamicFlag = 2;
 
     /// <summary>Fixed wire size: version + kind + flags + stateFlags + discriminants + linkage + pose + HP.</summary>
-    public const int FixedSize = 1 + 1 + 1 + 1 + 8 + 20 + 40 + 16;
+    public const int FixedSize = 1 + 1 + 1 + 1 + 8 + 20 + 40 + 16 + 20 + 16;
 
     public static bool TryEncode(in GroundEnemyState state, out byte[] data)
     {
@@ -194,6 +208,15 @@ public static class GroundEnemyStateCodec
         writer.WriteInt(state.HpMax);
         writer.WriteInt(state.HpRecover);
         writer.WriteInt(state.HpIncoming);
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.AnimationTime), 0));
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.PrepareLength), 0));
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.WorkingLength), 0));
+        writer.WriteInt(unchecked((int)state.AnimationState));
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.AnimationPower), 0));
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.UnitAnimation), 0));
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.UnitDisturb), 0));
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.UnitSteering), 0));
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.UnitSpeed), 0));
         data = writer.ToArray();
         return data.Length == FixedSize && data.Length <= AuthorityLimits.StateRecordMaxBytes;
     }
@@ -257,6 +280,14 @@ public static class GroundEnemyStateCodec
             reject = new AuthorityReject(AuthorityRejectCode.MalformedEnvelope, "truncated hp");
             return false;
         }
+        if (!reader.TryReadInt(out var animationTime) || !reader.TryReadInt(out var prepareLength) ||
+            !reader.TryReadInt(out var workingLength) || !reader.TryReadInt(out var animationState) || !reader.TryReadInt(out var animationPower))
+        {
+            reject = new AuthorityReject(AuthorityRejectCode.MalformedEnvelope, "truncated animation"); return false;
+        }
+        if (!reader.TryReadInt(out var unitAnimation) || !reader.TryReadInt(out var unitDisturb) ||
+            !reader.TryReadInt(out var unitSteering) || !reader.TryReadInt(out var unitSpeed))
+        { reject = new AuthorityReject(AuthorityRejectCode.MalformedEnvelope, "truncated unit visual"); return false; }
         if (!reader.EndOfPayload)
         {
             reject = new AuthorityReject(AuthorityRejectCode.MalformedEnvelope, "trailing bytes");
@@ -277,7 +308,13 @@ public static class GroundEnemyStateCodec
             BitConverter.ToSingle(BitConverter.GetBytes(velXBits), 0),
             BitConverter.ToSingle(BitConverter.GetBytes(velYBits), 0),
             BitConverter.ToSingle(BitConverter.GetBytes(velZBits), 0),
-            hp, hpMax, hpRecover, hpIncoming);
+            hp, hpMax, hpRecover, hpIncoming,
+            BitConverter.ToSingle(BitConverter.GetBytes(animationTime), 0),
+            BitConverter.ToSingle(BitConverter.GetBytes(prepareLength), 0),
+            BitConverter.ToSingle(BitConverter.GetBytes(workingLength), 0),
+            unchecked((uint)animationState), BitConverter.ToSingle(BitConverter.GetBytes(animationPower), 0),
+            BitConverter.ToSingle(BitConverter.GetBytes(unitAnimation), 0), BitConverter.ToSingle(BitConverter.GetBytes(unitDisturb), 0),
+            BitConverter.ToSingle(BitConverter.GetBytes(unitSteering), 0), BitConverter.ToSingle(BitConverter.GetBytes(unitSpeed), 0));
         return true;
     }
 }

@@ -100,7 +100,9 @@ public readonly struct SpaceEnemyState
         double posX, double posY, double posZ,
         float rotX, float rotY, float rotZ, float rotW,
         float velX, float velY, float velZ,
-        int hp, int hpMax, int hpRecover, int hpIncoming)
+        int hp, int hpMax, int hpRecover, int hpIncoming,
+        float animationTime = 0, float prepareLength = 0, float workingLength = 0,
+        uint animationState = 0, float animationPower = 0)
     {
         Kind = kind;
         HasCombatStat = hasCombatStat;
@@ -129,6 +131,11 @@ public readonly struct SpaceEnemyState
         HpMax = hpMax;
         HpRecover = hpRecover;
         HpIncoming = hpIncoming;
+        AnimationTime = animationTime;
+        PrepareLength = prepareLength;
+        WorkingLength = workingLength;
+        AnimationState = animationState;
+        AnimationPower = animationPower;
     }
 
     public SpaceEnemyKind Kind { get; }
@@ -158,18 +165,23 @@ public readonly struct SpaceEnemyState
     public int HpMax { get; }
     public int HpRecover { get; }
     public int HpIncoming { get; }
+    public float AnimationTime { get; }
+    public float PrepareLength { get; }
+    public float WorkingLength { get; }
+    public uint AnimationState { get; }
+    public float AnimationPower { get; }
 }
 
 /// <summary>Encoding of <see cref="SpaceEnemyState"/> into one bounded state blob.</summary>
 public static class SpaceEnemyStateCodec
 {
-    public const byte Version = 1;
+    public const byte Version = 2;
 
     private const byte HasCombatFlag = 1;
     private const byte IsDynamicFlag = 2;
 
-    /// <summary>Fixed wire size: version + kind + flags + stateFlags + discriminants + linkage + pose + HP.</summary>
-    public const int FixedSize = 1 + 1 + 1 + 1 + 8 + 20 + 52 + 16;
+    /// <summary>Fixed wire size: header, discriminants, linkage, pose, HP and display animation.</summary>
+    public const int FixedSize = 1 + 1 + 1 + 1 + 8 + 20 + 52 + 16 + 20;
 
     public static bool TryEncode(in SpaceEnemyState state, out byte[] data)
     {
@@ -204,6 +216,11 @@ public static class SpaceEnemyStateCodec
         writer.WriteInt(state.HpMax);
         writer.WriteInt(state.HpRecover);
         writer.WriteInt(state.HpIncoming);
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.AnimationTime), 0));
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.PrepareLength), 0));
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.WorkingLength), 0));
+        writer.WriteInt(unchecked((int)state.AnimationState));
+        writer.WriteInt(BitConverter.ToInt32(BitConverter.GetBytes(state.AnimationPower), 0));
         data = writer.ToArray();
         return data.Length == FixedSize && data.Length <= AuthorityLimits.StateRecordMaxBytes;
     }
@@ -214,7 +231,7 @@ public static class SpaceEnemyStateCodec
         state = default;
         reject = AuthorityReject.Accepted;
         if (!AuthorityPayloadReader.TryCreate(source, offset, length, out var reader, out reject)) return false;
-        if (!reader.TryReadByte(out var version) || version != Version)
+        if (!reader.TryReadByte(out var version) || (version != 1 && version != Version))
         {
             reject = new AuthorityReject(AuthorityRejectCode.MalformedEnvelope, "space enemy version=" + version);
             return false;
@@ -272,6 +289,14 @@ public static class SpaceEnemyStateCodec
             reject = new AuthorityReject(AuthorityRejectCode.MalformedEnvelope, "truncated hp");
             return false;
         }
+        int animationTime = 0, prepareLength = 0, workingLength = 0, animationState = 0, animationPower = 0;
+        if (version == Version && (!reader.TryReadInt(out animationTime) || !reader.TryReadInt(out prepareLength) ||
+            !reader.TryReadInt(out workingLength) || !reader.TryReadInt(out animationState) ||
+            !reader.TryReadInt(out animationPower)))
+        {
+            reject = new AuthorityReject(AuthorityRejectCode.MalformedEnvelope, "truncated animation");
+            return false;
+        }
         if (!reader.EndOfPayload)
         {
             reject = new AuthorityReject(AuthorityRejectCode.MalformedEnvelope, "trailing bytes");
@@ -292,7 +317,12 @@ public static class SpaceEnemyStateCodec
             BitConverter.ToSingle(BitConverter.GetBytes(velXBits), 0),
             BitConverter.ToSingle(BitConverter.GetBytes(velYBits), 0),
             BitConverter.ToSingle(BitConverter.GetBytes(velZBits), 0),
-            hp, hpMax, hpRecover, hpIncoming);
+            hp, hpMax, hpRecover, hpIncoming,
+            BitConverter.ToSingle(BitConverter.GetBytes(animationTime), 0),
+            BitConverter.ToSingle(BitConverter.GetBytes(prepareLength), 0),
+            BitConverter.ToSingle(BitConverter.GetBytes(workingLength), 0),
+            unchecked((uint)animationState),
+            BitConverter.ToSingle(BitConverter.GetBytes(animationPower), 0));
         return true;
     }
 }

@@ -62,8 +62,8 @@ internal static class AuthorityPacketAdmission
         var state = session?.Authority;
         if (state is null)
         {
-            context = AuthoritySessionContext.Legacy;
-            reject = Record(new AuthorityReject(AuthorityRejectCode.NotAuthorityMode, "no authority session"));
+            context = AuthoritySessionContext.Uninitialized;
+            reject = Record(new AuthorityReject(AuthorityRejectCode.SessionNotReady, "no authority session"));
             return false;
         }
 

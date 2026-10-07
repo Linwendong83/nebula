@@ -97,6 +97,18 @@ public sealed class BattleVisualRenderer : IDisposable
 
     private int AllocateEffect(BattleEffectData effect) => effect.Kind switch
     {
+        BattleEffectKind.MechaGroundLaser => visuals.mechaLocalLaserOneShots.Add().id,
+        BattleEffectKind.MechaGroundGauss => visuals.mechaLocalGaussProjectiles.Add().id,
+        BattleEffectKind.MechaSpaceLaser => visuals.mechaSpaceLaserOneShots.Add().id,
+        BattleEffectKind.MechaSpaceGauss => visuals.mechaSpaceGaussProjectiles.Add().id,
+        BattleEffectKind.MechaPlasma => visuals.mechaPlasmas.Add().id,
+        BattleEffectKind.MechaMissile => visuals.mechaMissiles.Add().id,
+        BattleEffectKind.MechaLocalCannon => visuals.mechaLocalCannonades.Add().id,
+        BattleEffectKind.MechaSpaceCannon => visuals.mechaSpaceCannonades.Add().id,
+        BattleEffectKind.MechaShieldBurst => visuals.mechaShieldBursts.Add().id,
+        BattleEffectKind.ExplosiveBomb => visuals.explosiveUnitBombs.Add().id,
+        BattleEffectKind.LiquidBomb => visuals.liquidBombs.Add().id,
+        BattleEffectKind.EMBomb => visuals.emCapsuleBombs.Add().id,
         BattleEffectKind.GroundLaser => visuals.fighterLasers.Add().id,
         BattleEffectKind.GroundPlasma => visuals.fighterPlasmas.Add().id,
         BattleEffectKind.GroundShieldPlasma => visuals.fighterShieldPlasmas.Add().id,
@@ -137,11 +149,85 @@ public sealed class BattleVisualRenderer : IDisposable
                 var bomb = new GeneralExpImpProjectile(); bomb.Import(reader); bomb.damage = 0; bomb.mask = 0; return bomb;
             case BattleEffectKind.Impact:
                 var particle = new ParticleData(); particle.Import(reader); return particle;
+            case BattleEffectKind.MechaGroundLaser:
+                var sample0 = new LocalLaserOneShot(); sample0.Import(reader); return NeutralizeNative(sample0);
+            case BattleEffectKind.MechaGroundGauss:
+                var sample1 = new LocalGeneralProjectile(); sample1.Import(reader); return NeutralizeNative(sample1);
+            case BattleEffectKind.MechaSpaceLaser:
+                var sample2 = new SpaceLaserOneShot(); sample2.Import(reader); return NeutralizeNative(sample2);
+            case BattleEffectKind.MechaSpaceGauss:
+                var sample3 = new GeneralProjectile(); sample3.Import(reader); return NeutralizeNative(sample3);
+            case BattleEffectKind.MechaPlasma:
+                var sample4 = new GeneralProjectile(); sample4.Import(reader); return NeutralizeNative(sample4);
+            case BattleEffectKind.MechaMissile:
+                var sample5 = new GeneralMissile(); sample5.Import(reader); return NeutralizeNative(sample5);
+            case BattleEffectKind.MechaLocalCannon:
+                var sample6 = new LocalCannonade(); sample6.Import(reader); return NeutralizeNative(sample6);
+            case BattleEffectKind.MechaSpaceCannon:
+                var sample7 = new GeneralCannonade(); sample7.Import(reader); return NeutralizeNative(sample7);
+            case BattleEffectKind.MechaShieldBurst:
+                var sample8 = new GeneralShieldBurst(); sample8.Import(reader); return NeutralizeNative(sample8);
+            case BattleEffectKind.ExplosiveBomb:
+                var sample9 = new Bomb_Explosive(); sample9.Import(reader); return NeutralizeNative(sample9);
+            case BattleEffectKind.LiquidBomb:
+                var sample10 = new Bomb_Liquid(); sample10.Import(reader); return NeutralizeNative(sample10);
+            case BattleEffectKind.EMBomb:
+                var sample11 = new Bomb_EMCapsule(); sample11.Import(reader); return NeutralizeNative(sample11);
             default: throw new InvalidDataException("Unknown combat visual effect");
         }
     }
 
     public void Draw()
+    {
+        DrawVisuals();
+    }
+
+    private static object NeutralizeNative<T>(T sample) where T : struct
+    {
+        object value = sample;
+        foreach (var name in new[] { "damage", "damageIncoming", "damageTotal", "damagePerObject", "abilityValue", "mask" })
+        {
+            var field = typeof(T).GetField(name);
+            if (field != null) field.SetValue(value, Activator.CreateInstance(field.FieldType));
+        }
+        return value;
+    }
+
+    private void UpdateNative(EffectProxy proxy, float seconds, int remaining)
+    {
+        var sample = System.Runtime.CompilerServices.RuntimeHelpers.GetObjectValue(proxy.Sample);
+        var type = sample.GetType();
+        type.GetField("id")?.SetValue(sample, proxy.PoolId);
+        var life = type.GetField("life");
+        if (life != null) life.SetValue(sample, remaining);
+        var position = type.GetField("uPos");
+        var velocity = type.GetField("uVel");
+        if (position != null && velocity != null)
+        {
+            var p = (VectorLF3)position.GetValue(sample);
+            var v = velocity.GetValue(sample);
+            p += (v is VectorLF3 vf ? vf : (VectorLF3)(Vector3)v) * seconds;
+            position.SetValue(sample, p);
+            type.GetField("rPos")?.SetValue(sample, Quaternion.Inverse(GameMain.data.relativeRot) * (Vector3)(p - GameMain.data.relativePos));
+        }
+        switch (proxy.Kind)
+        {
+            case BattleEffectKind.MechaGroundLaser: visuals.mechaLocalLaserOneShots.buffer[proxy.PoolId] = (LocalLaserOneShot)sample; break;
+            case BattleEffectKind.MechaGroundGauss: visuals.mechaLocalGaussProjectiles.buffer[proxy.PoolId] = (LocalGeneralProjectile)sample; break;
+            case BattleEffectKind.MechaSpaceLaser: visuals.mechaSpaceLaserOneShots.buffer[proxy.PoolId] = (SpaceLaserOneShot)sample; break;
+            case BattleEffectKind.MechaSpaceGauss: visuals.mechaSpaceGaussProjectiles.buffer[proxy.PoolId] = (GeneralProjectile)sample; break;
+            case BattleEffectKind.MechaPlasma: visuals.mechaPlasmas.buffer[proxy.PoolId] = (GeneralProjectile)sample; break;
+            case BattleEffectKind.MechaMissile: visuals.mechaMissiles.buffer[proxy.PoolId] = (GeneralMissile)sample; break;
+            case BattleEffectKind.MechaLocalCannon: visuals.mechaLocalCannonades.buffer[proxy.PoolId] = (LocalCannonade)sample; break;
+            case BattleEffectKind.MechaSpaceCannon: visuals.mechaSpaceCannonades.buffer[proxy.PoolId] = (GeneralCannonade)sample; break;
+            case BattleEffectKind.MechaShieldBurst: visuals.mechaShieldBursts.buffer[proxy.PoolId] = (GeneralShieldBurst)sample; break;
+            case BattleEffectKind.ExplosiveBomb: visuals.explosiveUnitBombs.buffer[proxy.PoolId] = (Bomb_Explosive)sample; break;
+            case BattleEffectKind.LiquidBomb: visuals.liquidBombs.buffer[proxy.PoolId] = (Bomb_Liquid)sample; break;
+            case BattleEffectKind.EMBomb: visuals.emCapsuleBombs.buffer[proxy.PoolId] = (Bomb_EMCapsule)sample; break;
+        }
+    }
+
+    private void DrawVisuals()
     {
         if (GameMain.inOtherScene || GameCamera.main == null) return;
         foreach (var key in sources.Keys.ToArray())
@@ -200,30 +286,43 @@ public sealed class BattleVisualRenderer : IDisposable
         var origin = GameMain.data.relativePos;
         switch (proxy.Kind)
         {
+            case BattleEffectKind.MechaGroundLaser:
+            case BattleEffectKind.MechaLocalCannon:
+            case BattleEffectKind.MechaSpaceCannon:
+            case BattleEffectKind.MechaShieldBurst:
+            case BattleEffectKind.ExplosiveBomb:
+            case BattleEffectKind.LiquidBomb:
+            case BattleEffectKind.EMBomb:
+                UpdateNative(proxy, seconds, remaining); break;
             case BattleEffectKind.GroundLaser:
                 var laser = (LocalLaserOneShot)proxy.Sample;
                 laser.id = proxy.PoolId; laser.life = remaining;
                 visuals.fighterLasers.buffer[proxy.PoolId] = laser;
                 break;
+            case BattleEffectKind.MechaGroundGauss:
             case BattleEffectKind.GroundPlasma:
             case BattleEffectKind.GroundShieldPlasma:
                 var local = (LocalGeneralProjectile)proxy.Sample;
                 local.id = proxy.PoolId; local.life = remaining; local.pos += local.dir * (local.speed * seconds);
-                (proxy.Kind == BattleEffectKind.GroundPlasma ? visuals.fighterPlasmas : visuals.fighterShieldPlasmas).buffer[proxy.PoolId] = local;
+                (proxy.Kind == BattleEffectKind.MechaGroundGauss ? visuals.mechaLocalGaussProjectiles :
+                    proxy.Kind == BattleEffectKind.GroundPlasma ? visuals.fighterPlasmas : visuals.fighterShieldPlasmas).buffer[proxy.PoolId] = local;
                 break;
+            case BattleEffectKind.MechaSpaceLaser:
             case BattleEffectKind.SpaceLaser:
                 var spaceLaser = (SpaceLaserOneShot)proxy.Sample;
                 spaceLaser.id = proxy.PoolId; spaceLaser.life = remaining; spaceLaser.deltaPos = spaceLaser.endVelU * seconds;
-                visuals.warshipTypeFLasers.buffer[proxy.PoolId] = spaceLaser;
+                (proxy.Kind == BattleEffectKind.MechaSpaceLaser ? visuals.mechaSpaceLaserOneShots : visuals.warshipTypeFLasers).buffer[proxy.PoolId] = spaceLaser;
                 break;
+            case BattleEffectKind.MechaMissile:
             case BattleEffectKind.TurretMissile:
                 var missile = (GeneralMissile)proxy.Sample;
                 missile.id = proxy.PoolId; missile.life += age;
                 missile.uPos += (VectorLF3)(missile.uVel * seconds); missile.vel = rotation * missile.uVel / 60f;
-                visuals.turretMissiles.buffer[proxy.PoolId] = missile;
-                var trails = visuals.turretMissileTrails;
-                trails.SetTrailCapacity(visuals.turretMissiles.capacity);
-                trails.trailCursor = visuals.turretMissiles.cursor;
+                var missilePool = proxy.Kind == BattleEffectKind.MechaMissile ? visuals.mechaMissiles : visuals.turretMissiles;
+                missilePool.buffer[proxy.PoolId] = missile;
+                var trails = proxy.Kind == BattleEffectKind.MechaMissile ? visuals.mechaMissileTrails : visuals.turretMissileTrails;
+                trails.SetTrailCapacity(missilePool.capacity);
+                trails.trailCursor = missilePool.cursor;
                 if (missile.life > 0 && missile.nearAstroId > 0)
                 {
                     var starAstro = missile.nearAstroId / 100 * 100;
@@ -238,6 +337,8 @@ public sealed class BattleVisualRenderer : IDisposable
                     };
                 }
                 break;
+            case BattleEffectKind.MechaSpaceGauss:
+            case BattleEffectKind.MechaPlasma:
             case BattleEffectKind.SpacePlasmaF:
             case BattleEffectKind.SpacePlasmaA:
             case BattleEffectKind.TurretPlasma:
@@ -246,7 +347,8 @@ public sealed class BattleVisualRenderer : IDisposable
                 projectile.uPos += (VectorLF3)(projectile.uVel * seconds);
                 projectile.rPos = rotation * (Vector3)(projectile.uPos - origin);
                 projectile.rVelObj = rotation * projectile.uVelObj;
-                var pool = proxy.Kind == BattleEffectKind.SpacePlasmaF ? visuals.warshipTypeFPlasmas :
+                var pool = proxy.Kind == BattleEffectKind.MechaSpaceGauss ? visuals.mechaSpaceGaussProjectiles :
+                    proxy.Kind == BattleEffectKind.MechaPlasma ? visuals.mechaPlasmas : proxy.Kind == BattleEffectKind.SpacePlasmaF ? visuals.warshipTypeFPlasmas :
                     proxy.Kind == BattleEffectKind.SpacePlasmaA ? visuals.warshipTypeAPlasmas : visuals.turretPlasmas;
                 pool.buffer[proxy.PoolId] = projectile;
                 break;
@@ -298,6 +400,18 @@ public sealed class BattleVisualRenderer : IDisposable
         var effect = source.Effects[id];
         switch (effect.Kind)
         {
+            case BattleEffectKind.MechaGroundLaser: visuals.mechaLocalLaserOneShots.Remove(effect.PoolId); break;
+            case BattleEffectKind.MechaGroundGauss: visuals.mechaLocalGaussProjectiles.Remove(effect.PoolId); break;
+            case BattleEffectKind.MechaSpaceLaser: visuals.mechaSpaceLaserOneShots.Remove(effect.PoolId); break;
+            case BattleEffectKind.MechaSpaceGauss: visuals.mechaSpaceGaussProjectiles.Remove(effect.PoolId); break;
+            case BattleEffectKind.MechaPlasma: visuals.mechaPlasmas.Remove(effect.PoolId); break;
+            case BattleEffectKind.MechaMissile: visuals.mechaMissiles.Remove(effect.PoolId); break;
+            case BattleEffectKind.MechaLocalCannon: visuals.mechaLocalCannonades.Remove(effect.PoolId); break;
+            case BattleEffectKind.MechaSpaceCannon: visuals.mechaSpaceCannonades.Remove(effect.PoolId); break;
+            case BattleEffectKind.MechaShieldBurst: visuals.mechaShieldBursts.Remove(effect.PoolId); break;
+            case BattleEffectKind.ExplosiveBomb: visuals.explosiveUnitBombs.Remove(effect.PoolId); break;
+            case BattleEffectKind.LiquidBomb: visuals.liquidBombs.Remove(effect.PoolId); break;
+            case BattleEffectKind.EMBomb: visuals.emCapsuleBombs.Remove(effect.PoolId); break;
             case BattleEffectKind.GroundLaser: visuals.fighterLasers.Remove(effect.PoolId); break;
             case BattleEffectKind.GroundPlasma: visuals.fighterPlasmas.Remove(effect.PoolId); break;
             case BattleEffectKind.GroundShieldPlasma: visuals.fighterShieldPlasmas.Remove(effect.PoolId); break;

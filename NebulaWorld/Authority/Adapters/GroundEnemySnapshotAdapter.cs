@@ -146,13 +146,18 @@ public sealed class GroundEnemySnapshotAdapter : IHostWorldView
         var baseId = ResolveBaseId(factory, in enemy);
         var builderIndex = ResolveBuilderIndex(factory, in enemy);
         var level = ResolveLevel(factory, in enemy, kind);
+        var animation = factory.enemyAnimPool[enemyId];
+        var unit = enemy.unitId > 0 && enemy.unitId < factory.enemySystem.units.cursor &&
+            factory.enemySystem.units.buffer[enemy.unitId].id == enemy.unitId ? factory.enemySystem.units.buffer[enemy.unitId] : default;
         state = new GroundEnemyState(kind, hasCombatStat, enemy.dynamic,
             enemy.protoId, enemy.modelIndex, enemy.owner, enemy.port, enemy.stateFlags,
             enemy.astroId, enemy.originAstroId, baseId, builderIndex, level,
             (float)enemy.pos.x, (float)enemy.pos.y, (float)enemy.pos.z,
             enemy.rot.x, enemy.rot.y, enemy.rot.z, enemy.rot.w,
             enemy.dynamic ? enemy.vel.x : 0f, enemy.dynamic ? enemy.vel.y : 0f, enemy.dynamic ? enemy.vel.z : 0f,
-            hp, hpMax, hpRecover, hpIncoming);
+            hp, hpMax, hpRecover, hpIncoming,
+            animation.time, animation.prepare_length, animation.working_length, animation.state, animation.power,
+            unit.anim, unit.disturbValue, unit.steering, unit.speed);
         return true;
     }
 

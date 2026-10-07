@@ -44,14 +44,4 @@ public class HandshakeResponse
     public int ModsSettingsCount { get; set; }
     public ushort NumPlayers { get; set; }
 
-    /// <summary>
-    /// Authority mode the host confirmed, so the client asserts the agreement instead of assuming it.
-    /// </summary>
-    /// <remarks>
-    /// The host already refuses an incompatible declaration, so this field exists to catch the other
-    /// direction: a client that negotiated one mode must not silently proceed as if the host had
-    /// agreed to another. Zero means the host did not state a mode, which a client treats as a
-    /// protocol error rather than as legacy.
-    /// </remarks>
-    public byte AuthorityMode { get; set; }
 }

@@ -159,11 +159,10 @@ public static class AuthorityEnvelopeGate
     public static AuthorityReject Validate(in AuthoritySessionContext context,
         AuthorityDirection direction, in AuthorityEnvelopeHeader header)
     {
-        // 1. A session that has not negotiated authority must not act on authority packets at all.
-        //    This is what keeps every existing build behaviourally unchanged.
-        if (context.Mode != AuthorityMode.HostAuthority)
+        // 1. World packets require a confirmed session protocol.
+        if (!context.IsNegotiated)
         {
-            return new AuthorityReject(AuthorityRejectCode.NotAuthorityMode, "session mode=" + context.Mode);
+            return new AuthorityReject(AuthorityRejectCode.SessionNotReady, "session protocol is not confirmed");
         }
 
         // 2. The DTO layout must be the negotiated one; a different schema is a different protocol.
@@ -245,9 +244,9 @@ public static class AuthorityEnvelopeGate
     public static AuthorityReject ValidateBootstrapWelcome(in AuthoritySessionContext context,
         AuthorityDirection direction, in AuthorityEnvelopeHeader header)
     {
-        if (context.Mode != AuthorityMode.HostAuthority)
+        if (!context.IsNegotiated)
         {
-            return new AuthorityReject(AuthorityRejectCode.NotAuthorityMode, "session mode=" + context.Mode);
+            return new AuthorityReject(AuthorityRejectCode.SessionNotReady, "session protocol is not confirmed");
         }
         if (context.Epoch.IsValid)
         {

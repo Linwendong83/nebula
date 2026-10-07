@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.Collections.Generic;
@@ -8,6 +8,12 @@ using NebulaModel.Packets.Authority;
 #endregion
 
 namespace NebulaWorld.Authority;
+
+/// <summary>Receives the host frame clock before command execution.</summary>
+public interface IHostTickAware
+{
+    long HostTick { set; }
+}
 
 /// <summary>
 /// One admitted command waiting for the host's frame boundary.

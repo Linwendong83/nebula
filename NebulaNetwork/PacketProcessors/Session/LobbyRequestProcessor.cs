@@ -53,8 +53,15 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
             return;
         }
 
+        if (Multiplayer.Session.IsGameLoaded && !SaveManager.CanSave)
+        {
+            Server.Disconnect(conn, DisconnectionReason.InvalidData,
+                "Multiplayer save data could not be loaded. Restore the server save before joining.");
+            return;
+        }
+
         if (!ModsVersionCheck(packet, out var disconnectionReason, out var reasonMessage,
-                out var clientAuthorityMode, out _, out _))
+                out _, out _))
         {
             Log.Warn("Reject connection because mods mismatch");
 
@@ -63,9 +70,8 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
             return;
         }
 
-        // The peer declared authority mode and the host agreed to it; remember it on the session so
-        // the packet gate knows which rule set this room runs.
-        Multiplayer.Session.Authority.OnPeerNegotiated(clientAuthorityMode);
+        // The peer passed schema and capability validation before receiving any world data.
+        Multiplayer.Session.Authority.ConfirmProtocol();
 
 
         var isNewUser = false;
@@ -73,12 +79,17 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
         //TODO: some validation of client cert / generating auth challenge for the client
         // Load old data of the client
         var clientCertHash = CryptoUtils.Hash(packet.ClientCert);
-        if (Players.Connected.Values.Concat(Players.Syncing.Values).Concat(Players.Pending.Values)
-            .Any(other => !ReferenceEquals(other.Connection, conn) &&
-                          (other.Data as PlayerData)?.PersistentId == clientCertHash))
+        var previousSeats = Players.Connected.Values.Concat(Players.Syncing.Values).Concat(Players.Pending.Values)
+            .Where(other => !ReferenceEquals(other.Connection, conn) &&
+                            (other.Data as PlayerData)?.PersistentId == clientCertHash).ToArray();
+        foreach (var previous in previousSeats)
         {
-            Server.Disconnect(conn, DisconnectionReason.InvalidData, "This player identity is already connected. Disconnect it before joining again.");
-            return;
+            if (previous.Connection.IsAlive)
+            {
+                Server.Disconnect(conn, DisconnectionReason.InvalidData, "This player identity is already connected. Disconnect it before joining again.");
+                return;
+            }
+            ((NebulaNetwork.Server)Server).OnSocketDisconnection(previous.Connection);
         }
         ((PlayerData)player.Data).PersistentId = clientCertHash;
         if (SaveManager.PlayerSaves.TryGetValue(clientCertHash, out var value))
@@ -142,13 +153,8 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
                 combatSettingsData = p.CloseAndGetBytes();
             }
             var modsSettings = GetModSetting(out var modSettingCount);
-            // The mode is stated explicitly from what the check above actually accepted, so the
-            // client can assert the same agreement instead of inferring it.
             player.SendPacket(new HandshakeResponse(in gameDesc, combatSettingsData, isNewUser, (PlayerData)player.Data, modsSettings,
-                modSettingCount, Multiplayer.Session.NumPlayers)
-            {
-                AuthorityMode = (byte)clientAuthorityMode
-            });
+                modSettingCount, Multiplayer.Session.NumPlayers));
 
             SendAuthorityWelcome(player);
         }
@@ -170,20 +176,6 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
         }
     }
 
-    /// <summary>
-    /// Sends the joining client the world identity it must use on every command.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// This is where a client learns the world epoch. Each client also gets its own connection epoch
-    /// so a reconnect cannot replay a sequence number the host still remembers; the epoch is drawn
-    /// here, when the connection is accepted, and travels only in this welcome.
-    /// </para>
-    /// <para>
-    /// Nothing is sent in legacy mode. A legacy room has no world identity to state, and sending one
-    /// would invite a client to act on authority messages the handshake never agreed to.
-    /// </para>
-    /// </remarks>
     private static void SendAuthorityWelcome(INebulaPlayer player)
     {
         var runtime = Multiplayer.Session.AuthorityRuntime;
@@ -194,8 +186,7 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
         var header = new AuthorityEnvelopeHeader(AuthoritySchema.V1, AuthorityFamily.Welcome, identity.Epoch,
             connectionEpoch, sequence: 1, hostTick: GameMain.gameTick, claimedPlayerId: player.Id,
             payloadLength: 0);
-        var welcome = AuthorityWelcomePacket.Create(header, AuthorityMode.HostAuthority,
-            AuthorityLocalOptions.OfferedCapabilities);
+        var welcome = AuthorityWelcomePacket.Create(header, AuthorityLocalOptions.OfferedCapabilities);
         player.SendPacket(welcome);
     }
 
@@ -217,12 +208,11 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
     }
 
     private static bool ModsVersionCheck(in LobbyRequest packet, out DisconnectionReason reason, out string reasonString,
-        out AuthorityMode clientMode, out AuthoritySchema clientSchema,
+        out AuthoritySchema clientSchema,
         out AuthorityCapability clientRequiredCapabilities)
     {
         reason = DisconnectionReason.Normal;
         reasonString = null;
-        clientMode = AuthorityMode.None;
         clientSchema = AuthoritySchema.None;
         clientRequiredCapabilities = AuthorityCapability.None;
         var clientMods = new Dictionary<string, string>();
@@ -254,11 +244,10 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
                 if (guid == SessionProtocol.AuthorityHandshakeKey)
                 {
                     authoritySeen = true;
-                    if (!AuthorityHandshake.TryDecode(version, out clientMode, out clientSchema,
+                    if (!AuthorityHandshake.TryDecode(version, out clientSchema,
                             out clientRequiredCapabilities))
                     {
-                        // An unreadable declaration is a protocol error, never a silent fallback to
-                        // legacy: falling back would put two rule sets in one room.
+                        // An unreadable declaration cannot establish a session protocol.
                         reason = DisconnectionReason.ModVersionMismatch;
                         reasonString = $"Nebula authority;{version};{AuthorityLocalOptions.Declaration}";
                         return false;
@@ -280,7 +269,7 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
         if (!protocolSeen)
         {
             reason = DisconnectionReason.ModVersionMismatch;
-            reasonString = $"Nebula protocol;legacy;{SessionProtocol.Version}";
+            reasonString = $"Nebula protocol;missing;{SessionProtocol.Version}";
             return false;
         }
 
@@ -291,10 +280,9 @@ public class LobbyRequestProcessor : PacketProcessor<LobbyRequest>
             return false;
         }
 
-        // Modes and schemas must match exactly, and a client may only require capabilities the host
-        // already advertises. This is the check that refuses a mixed room.
-        if (!AuthorityNegotiation.IsCompatible(AuthorityLocalOptions.Mode, AuthorityLocalOptions.Schema,
-                AuthorityLocalOptions.OfferedCapabilities, clientMode, clientSchema,
+        // Schemas must match, and the host must provide every capability the client requires.
+        if (!AuthorityNegotiation.IsCompatible(AuthorityLocalOptions.Schema,
+                AuthorityLocalOptions.OfferedCapabilities, clientSchema,
                 clientRequiredCapabilities, out var authorityReject))
         {
             reason = DisconnectionReason.ModVersionMismatch;

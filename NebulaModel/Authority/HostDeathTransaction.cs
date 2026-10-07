@@ -261,37 +261,7 @@ public sealed class CompositeDeathBinding : IHostDeathBinding
 /// the same key never reach this binding again, so <c>repairerCount</c> and the drone budget move
 /// exactly once.
 /// </remarks>
-public sealed class ConstructionTaskDeathBinding : IHostDeathBinding
-{
-    private readonly ConstructionTaskLedger tasks;
 
-    public ConstructionTaskDeathBinding(ConstructionTaskLedger tasks)
-    {
-        this.tasks = tasks;
-    }
-
-    public void RecordStatistics(in HostDeathReceipt receipt)
-    {
-        // Kill statistics are a game-adapter call (A22); the model-side binding releases tasks only.
-    }
-
-    public void GrantLoot(in HostDeathReceipt receipt)
-    {
-        // Drops are a game-adapter call (A22); the model-side binding releases tasks only.
-    }
-
-    public int ReleaseTasks(in HostDeathReceipt receipt)
-    {
-        if (tasks == null) return 0;
-        if (receipt.Kind == HostDeathObjectKind.Player)
-        {
-            if (!receipt.Owner.IsValid) return 0;
-            return tasks.CancelByOwner(receipt.Owner, receipt.DeathTick, ConstructionCancelReason.OwnerDead);
-        }
-        if (!receipt.Target.IsValid) return 0;
-        return tasks.CancelByTarget(receipt.Target, receipt.DeathTick, ConstructionCancelReason.TargetDestroyed);
-    }
-}
 
 /// <summary>
 /// One tracked death: the tombstone record the guards read and the counts the binding produced.

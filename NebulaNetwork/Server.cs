@@ -103,6 +103,7 @@ public class Server : IServer
             Multiplayer.Session.Vegetation?.ForgetRemote(departing.Id);
         }
         Players.TryRemove(conn, out var player);
+        if (player == null) return; // Error and close callbacks can retire the same socket.
 
         // A connection that never completed the handshake (server list probe or a mid-handshake
         // drop) was never part of the session: recycle the id and skip the leave bookkeeping,

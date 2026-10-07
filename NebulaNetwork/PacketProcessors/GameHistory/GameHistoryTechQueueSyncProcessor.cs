@@ -18,7 +18,7 @@ internal class GameHistoryTechQueueSyncProcessor : PacketProcessor<GameHistoryTe
     {
         if (packet.IsRequest)
         {
-            if (!IsHost) return;
+            if (!IsHost || Players.Get(conn) == null) return;
             packet.IsRequest = false;
             packet.TechQueue = (int[])GameMain.history.techQueue.Clone();
             conn.SendPacket(packet);
@@ -26,6 +26,9 @@ internal class GameHistoryTechQueueSyncProcessor : PacketProcessor<GameHistoryTe
         else
         {
             if (!ValidQueue(packet.TechQueue, GameMain.history.MaxTechQueueCount())) return;
+            if (IsHost && Players.Get(conn) == null) return;
+            foreach (var tech in packet.TechQueue)
+                if (tech > 0 && LDB.techs.Select(tech) == null) return;
             using (Multiplayer.Session.History.IsIncomingRequest.On())
             {
                 var length = GameMain.history.techQueueLength;

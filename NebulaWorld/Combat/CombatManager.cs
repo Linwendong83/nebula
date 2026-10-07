@@ -124,6 +124,7 @@ public class CombatManager : IDisposable
             Players[0].position = GameMain.mainPlayer.position;
             Players[0].uPosition = GameMain.mainPlayer.uPosition;
             Players[0].isAlive = GameMain.mainPlayer.isAlive;
+            if (Multiplayer.Session.IsDedicated) Players[0].isAlive = false;
             var mecha = GameMain.mainPlayer.mecha;
             Players[0].mecha = mecha;
             Players[0].skillTargetL = mecha.skillTargetLCenter;

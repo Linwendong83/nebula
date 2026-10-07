@@ -3,20 +3,23 @@
 # Local dev environment: Steam/DSP install paths (template: DevEnv.targets.example)
 DevEnv.targets
 
-# Build / publish outputs (each project has a local dist/ for compile checks)
+# Local, versioned game decompilation (never ship game source or resources).
+/GameDecompiled/
+
+# Local dev scripts
+/tools/
+!/tools/
+/tools/*
+!/tools/decompile-game.ps1
+
+# Development toolkit
 dist/
 *.binlog
-# CI build indicator: present => build output goes to dist/
+# CI build indicator
 .remoteBuild
-
-# Local helper scripts
-/scripts/
 
 # Local tests (run directly from NebulaTests/NebulaTests.csproj)
 /NebulaTests/
-
-# Local decompiled-game reference sources (game code must not be committed)
-/reference/
 
 # ZCode workspace
 .zcode/

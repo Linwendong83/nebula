@@ -14,15 +14,15 @@
                Text="Installed Dyson Sphere Program version $(InstalledDSPVersion) does not match supported version $(SupportedDSPVersion)."/>
     </Target>
 
-    <Target Name="PrepareInstalledGameReferences" BeforeTargets="ResolveReferences"
+    <Target Name="PrepareInstalledGameReferences" BeforeTargets="ResolveAssemblyReferences"
             Condition="'$(UseInstalledGameAssemblies)' == 'true'"
             Inputs="$(DSPGameDir)DSPGAME_Data\Managed\Assembly-CSharp.dll;$(DSPGameDir)DSPGAME_Data\Managed\UnityEngine.UI.dll"
-            Outputs="$(MSBuildThisFileDirectory)dist\compat-refs\Assembly-CSharp.dll;$(MSBuildThisFileDirectory)dist\compat-refs\UnityEngine.UI.dll">
+            Outputs="$(NebulaArtifactsRoot)\cache\compat-refs\Assembly-CSharp.dll;$(NebulaArtifactsRoot)\cache\compat-refs\UnityEngine.UI.dll">
         <Error Condition="!Exists('$(DSPGameDir)DSPGAME_Data\Managed\Assembly-CSharp.dll')"
                Text="The installed Dyson Sphere Program Assembly-CSharp.dll is missing."/>
-        <MakeDir Directories="$(MSBuildThisFileDirectory)dist\compat-refs"/>
-        <Exec Command="&quot;$(MSBuildThisFileDirectory)Libs\NStrip\NStrip.exe&quot; -p -n &quot;$(DSPGameDir)DSPGAME_Data\Managed\Assembly-CSharp.dll&quot; &quot;$(MSBuildThisFileDirectory)dist\compat-refs\Assembly-CSharp.dll&quot;"/>
-        <Exec Command="&quot;$(MSBuildThisFileDirectory)Libs\NStrip\NStrip.exe&quot; -p -n &quot;$(DSPGameDir)DSPGAME_Data\Managed\UnityEngine.UI.dll&quot; &quot;$(MSBuildThisFileDirectory)dist\compat-refs\UnityEngine.UI.dll&quot;"/>
+        <MakeDir Directories="$(NebulaArtifactsRoot)\cache\compat-refs"/>
+        <Exec Command="&quot;$(MSBuildThisFileDirectory)Libs\NStrip\NStrip.exe&quot; -p -n &quot;$(DSPGameDir)DSPGAME_Data\Managed\Assembly-CSharp.dll&quot; &quot;$(NebulaArtifactsRoot)\cache\compat-refs\Assembly-CSharp.dll&quot;"/>
+        <Exec Command="&quot;$(MSBuildThisFileDirectory)Libs\NStrip\NStrip.exe&quot; -p -n &quot;$(DSPGameDir)DSPGAME_Data\Managed\UnityEngine.UI.dll&quot; &quot;$(NebulaArtifactsRoot)\cache\compat-refs\UnityEngine.UI.dll&quot;"/>
     </Target>
 
     <Target Name="MaybeCopyDevEnv"

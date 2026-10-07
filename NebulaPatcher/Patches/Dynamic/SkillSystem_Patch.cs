@@ -12,6 +12,10 @@ namespace NebulaPatcher.Patches.Dynamic;
 [HarmonyPatch(typeof(SkillSystem))]
 internal class SkillSystem_Patch
 {
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(SkillSystem.GameTick))]
+    public static bool GameTick_Prefix() => !Multiplayer.IsActive || Multiplayer.Session.IsServer;
+
     [System.ThreadStatic] private static int damageObjectDepth;
     [HarmonyPrefix]
     [HarmonyPatch(nameof(SkillSystem.Export))]
@@ -83,10 +87,10 @@ internal class SkillSystem_Patch
         [ArgumentType.Normal, ArgumentType.Normal, ArgumentType.Ref])]
     public static bool MechaEnergyShieldResist_Prefix(SkillSystem __instance, ref bool __result, ref int damage)
     {
-        if (__instance.mecha == GameMain.mainPlayer.mecha) return true;
-
-        damage = 0;
-        __result = true;
+        if (!Multiplayer.IsActive) return true;
+        if (Multiplayer.Session.IsClient) return false;
+        var target = NebulaWorld.Combat.CombatTargetContext.TargetMecha ?? __instance.mecha;
+        __result = target.EnergyShieldResist(ref damage);
         return false;
     }
 
@@ -94,10 +98,6 @@ internal class SkillSystem_Patch
     [HarmonyPatch(nameof(SkillSystem.DamageObject))]
     public static bool DamageObject_Prefix(ref int damage, int slice, ref SkillTarget target, ref SkillTarget caster, out bool __state)
     {
-        // A05 installs the decision once, for all three damage entries. A client may keep computing
-        // damage as a local prediction, but it may not hand that number to the shared world: the
-        // guard refuses the vanilla damage call outside a replica apply, and the old
-        // damage-packet path underneath is only reachable in a legacy room.
         __state = Multiplayer.IsActive;
         if (!AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.SkillSystemDamageObject,
                 detail: $"target={target.type}:{target.id} caster={caster.type}:{caster.id}"))

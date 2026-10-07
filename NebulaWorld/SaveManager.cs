@@ -1,15 +1,15 @@
-﻿#region
+#region
 
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using NebulaAPI.GameState;
 using NebulaModel.Authority;
 using NebulaModel.DataStructures;
 using NebulaModel.Logger;
 using NebulaModel.Networking.Serialization;
 using NebulaModel.Utils;
-using NebulaWorld.Authority;
 
 #endregion
 
@@ -41,7 +41,13 @@ public static class SaveManager
                 if (!values.TryGetValue(first - i, out var part)) throw new InvalidDataException("Incomplete multiplayer world identity");
                 Array.Copy(BitConverter.GetBytes(part), 0, bytes, i * 4, 4);
             }
-            WorldId = new Guid(bytes).ToString("N");
+            var worldId = new Guid(bytes).ToString("N");
+            if (loadedServerIdentity && !string.Equals(WorldId, worldId, StringComparison.Ordinal))
+            {
+                serverDataLoadFailed = true;
+                throw new InvalidDataException("The world and multiplayer save have different identities");
+            }
+            WorldId = worldId;
             return;
         }
         var identity = Guid.ParseExact(WorldId, "N").ToByteArray();
@@ -54,34 +60,15 @@ public static class SaveManager
     private static bool pendingLoadSaveFile;
     private static bool hasPendingLoad;
     private static bool serverDataLoadFailed;
-    private static bool authoritySidecarRejected;
-    private static AuthoritySaveState authorityRestoreState;
-    private static AuthoritySidecarDecision authorityDecision;
-    private static string authorityDecisionReason;
+    private static byte[] legacyAuthorityArchive;
+    private static bool loadedServerIdentity;
 
-    /// <summary>Latest sidecar decision of this process, for logging and tests.</summary>
-    public static AuthoritySidecarDecision AuthorityDecision => authorityDecision;
-
-    /// <summary>Why <see cref="AuthorityDecision"/> was reached. Always set after a load.</summary>
-    public static string AuthorityDecisionReason => authorityDecisionReason;
-
-    /// <summary>
-    /// Takes the decoded sidecar pending restore, if the last load produced one. Consuming is
-    /// one-shot: the world seeds from it exactly once, on its first load.
-    /// </summary>
-    public static bool TryConsumeAuthorityRestore(out AuthoritySaveState state)
-    {
-        state = authorityRestoreState;
-        authorityRestoreState = null;
-        return state != null && authorityDecision == AuthoritySidecarDecision.Restore;
-    }
-
-    public static bool CanSave => !serverDataLoadFailed && !authoritySidecarRejected;
+    public static bool CanSave => !serverDataLoadFailed;
     public static IReadOnlyDictionary<string, IPlayerData> PlayerSaves => playerSaves;
 
     public static void SaveServerData(string saveName)
     {
-        if (serverDataLoadFailed)
+        if (!CanSave)
             throw new InvalidOperationException("Multiplayer data could not be loaded; refusing to overwrite the save.");
         Multiplayer.Session.Kills.CapturePlayersForSave();
         Multiplayer.Session.Vegetation.CaptureRemoteForSave();
@@ -92,9 +79,12 @@ public static class SaveManager
         netDataWriter.Put(REVISION);
         netDataWriter.Put(WorldId);
 
-        netDataWriter.Put(playerSaves.Count + 1);
+        var includeHost = !Multiplayer.Session.IsDedicated;
+        var hostIdentity = includeHost ? CryptoUtils.GetCurrentUserPublicKeyHash() : null;
+        var entries = GetPlayerSaveEntries(hostIdentity);
+        netDataWriter.Put(entries.Length + (includeHost ? 1 : 0));
         //Add data about all players
-        foreach (var data in playerSaves)
+        foreach (var data in entries)
         {
             var hash = data.Key;
             netDataWriter.Put(hash);
@@ -105,20 +95,19 @@ public static class SaveManager
             $"Saving server data to {saveName + FILE_EXTENSION}, Revision:{REVISION} PlayerCount:{playerSaves.Count}");
 
         //Add host's data
-        netDataWriter.Put(CryptoUtils.GetCurrentUserPublicKeyHash());
-        var hostData = (PlayerData)Multiplayer.Session.LocalPlayer.Data;
-        hostData.Life = PlayerLifeData.Capture(GameMain.mainPlayer, hostData.Life.Revision, hostData.Life.TransactionId);
-        hostData.VegetableCollectionData = VegetableCollectionState.Capture(GameMain.mainPlayer.vegetableCollection);
-        Multiplayer.Session.LocalPlayer.Data.Serialize(netDataWriter);
+        if (includeHost)
+        {
+            netDataWriter.Put(hostIdentity);
+            // Scalars and inventory must describe this save, not the host's last life event.
+            NebulaWorld.GameStates.MetadataTransactionManager.CapturePlayer();
+            var hostData = (PlayerData)Multiplayer.Session.LocalPlayer.Data;
+            hostData.VegetableCollectionData = VegetableCollectionState.Capture(GameMain.mainPlayer.vegetableCollection);
+            hostData.Serialize(netDataWriter);
+        }
 
-        if (File.Exists(path) && !File.Exists(path + ".pre-v10")) File.Copy(path, path + ".pre-v10");
+        // Encode and validate every section before publishing one complete server file.
+        ServerSaveAuthorityArchive.Append(netDataWriter, legacyAuthorityArchive, WorldId);
         AtomicFile.Write(path, netDataWriter.CopyData());
-
-        // A21: the authority sidecar carries the host-only facts the vanilla save cannot — ledger
-        // balances, drone budget capacities, and the live task table for the load transaction's
-        // one-time reclaim audit. Written only by a host authority session, next to the .server
-        // file it belongs to.
-        WriteAuthoritySidecar(path, saveName);
 
         // If the saveName is the autoSave, we need to rotate the server autosave file.
         if (saveName == GameSave.AutoSaveTmp)
@@ -127,67 +116,15 @@ public static class SaveManager
         }
     }
 
-    private static void WriteAuthoritySidecar(string serverPath, string saveName)
-    {
-        var session = Multiplayer.Session;
-        if (session?.AuthorityRuntime == null ||
-            AuthorityLocalOptions.Mode != AuthorityMode.HostAuthority)
-        {
-            return;
-        }
-        var state = AuthoritySaveAdapter.Capture(session.AuthorityRuntime, WorldId);
-        if (state == null)
-        {
-            Log.Info($"[authority] skipping sidecar for {saveName}: session is not a host authority world");
-            return;
-        }
-        var bytes = AuthoritySaveCodec.Encode(state);
-        if (bytes == null)
-        {
-            Log.Error($"[authority] refusing to write the sidecar for {saveName}: a record exceeded " +
-                      "its sidecar ceiling; the save is left without one and the next load migrates legacy-style");
-            return;
-        }
-        AtomicFile.Write(serverPath + AuthoritySaveAdapter.FileExtension, bytes);
-        Log.Info($"[authority] sidecar written for {saveName} (players={state.Players.Count} " +
-                 $"accounts={state.Accounts.Count} budgets={state.Budgets.Count} tasks={state.Tasks.Count})");
-    }
-
     private static void HandleAutoSave()
     {
-        var str1 = GameConfig.gameSaveFolder + GameSave.AutoSaveTmp + FILE_EXTENSION;
-        var str2 = GameConfig.gameSaveFolder + GameSave.AutoSave0 + FILE_EXTENSION;
-        var str3 = GameConfig.gameSaveFolder + GameSave.AutoSave1 + FILE_EXTENSION;
-        var str4 = GameConfig.gameSaveFolder + GameSave.AutoSave2 + FILE_EXTENSION;
-        var str5 = GameConfig.gameSaveFolder + GameSave.AutoSave3 + FILE_EXTENSION;
-
-        if (!File.Exists(str1))
-        {
-            return;
-        }
-
-        if (File.Exists(str5))
-        {
-            File.Delete(str5);
-        }
-
-        if (File.Exists(str4))
-        {
-            File.Move(str4, str5);
-        }
-
-        if (File.Exists(str3))
-        {
-            File.Move(str3, str4);
-        }
-
-        if (File.Exists(str2))
-        {
-            File.Move(str2, str3);
-        }
-
-        File.Move(str1, str2);
+        ServerSaveRotation.Rotate(GameConfig.gameSaveFolder, GameSave.AutoSaveTmp,
+            new[] { GameSave.AutoSave0, GameSave.AutoSave1, GameSave.AutoSave2, GameSave.AutoSave3 },
+            new[] { FILE_EXTENSION });
     }
+
+    private static KeyValuePair<string, IPlayerData>[] GetPlayerSaveEntries(string hostIdentity) =>
+        playerSaves.Where(entry => entry.Key != hostIdentity).ToArray();
 
     public static void LoadServerData(bool loadSaveFile)
     {
@@ -222,10 +159,8 @@ public static class SaveManager
     private static void LoadServerDataNow(bool loadSaveFile, string saveName)
     {
         serverDataLoadFailed = false;
-        authoritySidecarRejected = false;
-        authorityRestoreState = null;
-        authorityDecision = AuthoritySidecarDecision.None;
-        authorityDecisionReason = null;
+        legacyAuthorityArchive = null;
+        loadedServerIdentity = false;
         playerSaves.Clear();
         WorldId = Guid.NewGuid().ToString("N");
 
@@ -234,11 +169,9 @@ public static class SaveManager
             return;
         }
         var path = GameConfig.gameSaveFolder + saveName + FILE_EXTENSION;
-        var identityPath = path + ".world-id";
-        if (File.Exists(identityPath)) SetWorldId(System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(identityPath)));
-        else AtomicFile.Write(identityPath, System.Text.Encoding.UTF8.GetBytes(WorldId));
         if (!File.Exists(path))
         {
+            TryReadLegacyIdentity(path);
             Log.Info($"No server file");
             return;
         }
@@ -266,10 +199,16 @@ public static class SaveManager
                 }
             }
 
-            if (revision >= 9) SetWorldId(netDataReader.GetString());
+            if (revision >= 9)
+            {
+                SetWorldId(netDataReader.GetString());
+                loadedServerIdentity = true;
+            }
+            else TryReadLegacyIdentity(path);
             if (revision < REVISION) BackupLegacySave(saveName);
 
             var playerNum = netDataReader.GetInt();
+            if (playerNum < 0 || playerNum > ushort.MaxValue) throw new InvalidDataException("Invalid player count");
 
 
             for (var i = 0; i < playerNum; i++)
@@ -297,6 +236,7 @@ public static class SaveManager
                     Log.Warn($"Could not load player data from unsupported save file revision {revision}");
                 }
             }
+            legacyAuthorityArchive = ServerSaveAuthorityArchive.Read(netDataReader, WorldId);
         }
         catch (Exception e)
         {
@@ -307,59 +247,40 @@ public static class SaveManager
             return;
         }
 
-        DecideAuthoritySidecar(path);
+        if (legacyAuthorityArchive == null) ReadLegacyAuthorityArchive(path);
     }
 
-    /// <summary>
-    /// Reads the sidecar next to a successfully loaded <c>.server</c> file and decides what the
-    /// host authority world will do with it (TASKS.md A21).
-    /// </summary>
-    /// <remarks>
-    /// A refused sidecar disables saving the same way a failed multiplayer load does: overwriting
-    /// a file this build cannot read — typically written by a newer schema — would destroy the
-    /// only copy, so the refusal is durable until a person intervenes. The reason is always
-    /// logged, so the refusal is explained rather than silent.
-    /// </remarks>
-    private static void DecideAuthoritySidecar(string serverPath)
+    private static void TryReadLegacyIdentity(string serverPath)
     {
-        var sidecarPath = serverPath + AuthoritySaveAdapter.FileExtension;
-        var exists = File.Exists(sidecarPath);
-        var decoded = false;
-        AuthoritySaveState state = null;
-        var decodeReason = null as string;
-        if (exists)
+        // Only old saves without an embedded identity need this migration fallback.
+        // Never create or update the retired companion file.
+        var identityPath = serverPath + ".world-id";
+        if (!File.Exists(identityPath)) return;
+        try { SetWorldId(System.Text.Encoding.UTF8.GetString(File.ReadAllBytes(identityPath))); }
+        catch (Exception error) { Log.Warn("Ignoring obsolete world identity file: " + error.Message); }
+    }
+
+    private static void ReadLegacyAuthorityArchive(string serverPath)
+    {
+        foreach (var path in ServerSaveAuthorityArchive.LegacyPaths(serverPath))
         {
+            if (!File.Exists(path)) continue;
             try
             {
-                var bytes = File.ReadAllBytes(sidecarPath);
-                decoded = AuthoritySaveCodec.TryDecode(bytes, out state, out decodeReason);
+                if (new FileInfo(path).Length > AuthoritySidecarLimits.FileMaxBytes)
+                    throw new InvalidDataException("Legacy authority file exceeds its size ceiling");
+                var bytes = File.ReadAllBytes(path);
+                ServerSaveAuthorityArchive.Validate(bytes, WorldId);
+                legacyAuthorityArchive = bytes;
+                Log.Info("Historical authority facts will be preserved inside the next .server save: " + path);
+                return;
             }
-            catch (Exception e)
+            catch (Exception error)
             {
-                decoded = false;
-                decodeReason = "sidecar file could not be read: " + e.Message;
+                // These retired simulation records must not override native player/world facts
+                // or disable saving. Leave the original file untouched for recovery.
+                Log.Warn("Legacy authority archive was not imported: " + path + ": " + error.Message);
             }
-        }
-
-        var authorityMode = AuthorityLocalOptions.Mode == AuthorityMode.HostAuthority;
-        authorityDecision = AuthoritySavePolicy.Decide(authorityMode, exists, decoded, decodeReason,
-            state?.WorldId, WorldId, out authorityDecisionReason);
-
-        switch (authorityDecision)
-        {
-            case AuthoritySidecarDecision.Restore:
-                authorityRestoreState = state;
-                Log.Info("[authority] sidecar accepted: " + authorityDecisionReason);
-                break;
-            case AuthoritySidecarDecision.LegacyMigration:
-                Log.Info("[authority] " + authorityDecisionReason);
-                break;
-            case AuthoritySidecarDecision.Refused:
-                authoritySidecarRejected = true;
-                Log.WarnInform("Authority sidecar refused; saving is disabled to preserve the original file:\n".Translate() +
-                               authorityDecisionReason);
-                Log.Warn("[authority] sidecar refused: " + authorityDecisionReason);
-                break;
         }
     }
 
@@ -370,7 +291,7 @@ public static class SaveManager
         var marker = Path.Combine(backupRoot, "complete");
         if (File.Exists(marker)) return;
         Directory.CreateDirectory(backupRoot);
-        foreach (var extension in new[] { ".dsv", FILE_EXTENSION, ".server.world-id" })
+        foreach (var extension in new[] { ".dsv", FILE_EXTENSION, ".server.world-id", ".server.server.authority", ".server.authority" })
         {
             var source = Path.Combine(GameConfig.gameSaveFolder, saveName + extension);
             if (File.Exists(source)) File.Copy(source, Path.Combine(backupRoot, Path.GetFileName(source)), true);

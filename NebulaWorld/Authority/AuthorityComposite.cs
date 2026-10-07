@@ -67,7 +67,7 @@ public sealed class CompositeHostWorldView : IHostWorldView
 /// binding must not prevent the others from converging the same atomic baseline, so failures are
 /// isolated per binding and counted rather than aborting the fan-out.
 /// </remarks>
-public sealed class CompositeMirrorObserver : IReplicaMirrorObserver
+public sealed class CompositeMirrorObserver : IReplicaMirrorObserver, IReplicaBaselineReadiness
 {
     private readonly List<IReplicaMirrorObserver> observers = [];
 
@@ -78,6 +78,15 @@ public sealed class CompositeMirrorObserver : IReplicaMirrorObserver
     }
 
     public long ObserverFailures { get; private set; }
+    public bool EnforceReadiness { get; set; } = true;
+
+    public bool IsReadyForBaseline(ScopeKey scope)
+    {
+        if (!EnforceReadiness) return true;
+        foreach (var observer in observers)
+            if (observer is IReplicaBaselineReadiness readiness && !readiness.IsReadyForBaseline(scope)) return false;
+        return true;
+    }
 
     public void OnStateApplied(ScopeKey scope, in ObjectKey key, long revision, byte[] state)
     {
@@ -105,6 +114,7 @@ public sealed class CompositeMirrorObserver : IReplicaMirrorObserver
             catch (Exception)
             {
                 ObserverFailures++;
+                throw; // A failed game-pool installation must never produce a successful snapshot ack.
             }
         }
     }

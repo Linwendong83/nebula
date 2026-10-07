@@ -149,6 +149,7 @@ public class DroneManager : IDisposable
             {
                 continue;
             }
+            if (ptr.id != droneId || ptr.stage == 0) continue;
             var craftData = crafts[ptr.craftId];
             var playerId = (ushort)craftData.owner;
             RefreshCachedPositions();
@@ -172,6 +173,9 @@ public class DroneManager : IDisposable
 
             if (sync_gpu_inst)
             {
+                // Vanilla only marks craftDirty for its own drone pool. Remote drones live
+                // here, so their updated instance positions otherwise stay on the CPU.
+                factory.planet.factoryModel.craftDirty = true;
                 UpdateGpuInstance(renderers, in craftData, ptr.stage);
             }
         }

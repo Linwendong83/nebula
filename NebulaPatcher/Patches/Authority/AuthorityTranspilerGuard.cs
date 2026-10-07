@@ -10,26 +10,6 @@ using NebulaModel.Logger;
 
 namespace NebulaPatcher.Patches.Authority;
 
-/// <summary>
-/// Verifies that a combat/construction method transformation really matched the IL it expects
-/// (TASKS.md A05).
-/// </summary>
-/// <remarks>
-/// <para>
-/// A method transformation has a failure mode that resolving a method name cannot catch: the pattern
-/// silently matches nothing, the patch reports success, and the method keeps running the vanilla
-/// rule. A01 also established that the game's IL changes between patch versions, so "it matched when
-/// we wrote it" is not evidence. The A05 acceptance therefore requires an exact match count, and the
-/// new mode must not load when a required transformation did not apply.
-/// </para>
-/// <para>
-/// The result is recorded rather than thrown. Patch installation happens once at startup, before any
-/// room exists, so throwing there would break legacy rooms for a transformation the new mode is not
-/// using yet. The record is instead checked when the mode is entered
-/// (<see cref="AuthorityRuleGuard.RegisterVerifier"/>), which is where DESIGN 1.8 wants the refusal:
-/// the new mode stops, single-player is untouched.
-/// </para>
-/// </remarks>
 public static class AuthorityTranspilerGuard
 {
     /// <summary>One required transformation and how many matches it must find.</summary>
@@ -59,15 +39,6 @@ public static class AuthorityTranspilerGuard
     private static readonly object gate = new();
     private static readonly Dictionary<string, int> observed = [];
 
-    /// <summary>
-    /// Transformations the new mode requires. A missing one means a shared rule would run unguarded,
-    /// so entering the mode is refused.
-    /// </summary>
-    /// <remarks>
-    /// Only the combat and construction transformations belong here. The DFG, hive and factory
-    /// transformations are later cards' territory (A12/A13, W00) and are deliberately not claimed by
-    /// this list, so this card cannot fail the mode for work it did not do.
-    /// </remarks>
     public static readonly IReadOnlyList<Requirement> Required =
     [
         // The vanilla damage entries test "player id == 1" once. The rewrite replaces that single
@@ -168,7 +139,7 @@ public static class AuthorityTranspilerGuard
     /// Reports every required transformation that did not apply with its expected match count.
     /// </summary>
     /// <remarks>
-    /// Registered with <see cref="AuthorityRuleGuard"/> so the mode refuses to load when a
+    /// Registered with <see cref="AuthorityRuleGuard"/> so multiplayer refuses to load when a
     /// transformation silently no-opped.
     /// </remarks>
     public static IReadOnlyList<string> VerifyRequired()

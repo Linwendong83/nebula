@@ -105,8 +105,13 @@ public sealed class GroundEnemyReplicaPools : IGroundEnemyPools
         catch (System.Exception e)
         {
             NebulaModel.Logger.Log.Warn("[authority] ground enemy display creation failed for " + enemyId + ": " + e.Message);
+            RemoveEnemyShell(enemyId);
+            throw;
         }
         WriteCombatStat(factory, enemyId, in state);
+        factory.enemyAnimPool[enemyId] = new AnimData { time = state.AnimationTime, prepare_length = state.PrepareLength,
+            working_length = state.WorkingLength, state = state.AnimationState, power = state.AnimationPower };
+        WriteDisplayState(factory, enemyId, in state);
     }
 
     public void WriteEnemyState(int enemyId, in GroundEnemyState state)
@@ -121,6 +126,7 @@ public sealed class GroundEnemyReplicaPools : IGroundEnemyPools
         enemy.port = state.Port;
         enemy.stateFlags = state.StateFlags;
         var moved = enemy.pos.x != state.PosX || enemy.pos.y != state.PosY || enemy.pos.z != state.PosZ;
+        var rotated = enemy.rot.x != state.RotX || enemy.rot.y != state.RotY || enemy.rot.z != state.RotZ || enemy.rot.w != state.RotW;
         enemy.pos.x = state.PosX;
         enemy.pos.y = state.PosY;
         enemy.pos.z = state.PosZ;
@@ -135,7 +141,39 @@ public sealed class GroundEnemyReplicaPools : IGroundEnemyPools
         {
             RefreshHash(factory, enemyId);
         }
+        factory.enemyAnimPool[enemyId] = new AnimData { time = state.AnimationTime, prepare_length = state.PrepareLength,
+            working_length = state.WorkingLength, state = state.AnimationState, power = state.AnimationPower };
         WriteCombatStat(factory, enemyId, in state);
+        WriteDisplayState(factory, enemyId, in state);
+        if ((moved || rotated) && enemy.colliderId > 0)
+        {
+            var colliders = PlanetFactory.PrefabDescByModelIndex[enemy.modelIndex]?.colliders;
+            var colliderId = enemy.colliderId;
+            if (colliders != null)
+                for (var i = colliders.Length - 1; i >= 0 && colliderId > 0; i--)
+                {
+                    var old = factory.planet.physics.GetColliderData(colliderId);
+                    if (old.objType != EObjectType.Enemy || old.objId != enemyId) break;
+                    factory.planet.physics.SetColliderData(colliderId, colliders[i].BindToObject(enemyId, old.link, EObjectType.Enemy, enemy.pos, enemy.rot));
+                    colliderId = old.link;
+                }
+        }
+    }
+
+    private static void WriteDisplayState(PlanetFactory factory, int enemyId, in GroundEnemyState state)
+    {
+        ref var enemy = ref factory.enemyPool[enemyId];
+        var model = factory.planet.factoryModel;
+        var renderers = model?.gpuiManager?.objectRenderers;
+        if (renderers == null || enemy.modelId <= 0 || enemy.modelIndex >= renderers.Length) return;
+        var renderer = renderers[enemy.modelIndex];
+        if (renderer == null || enemy.modelId >= renderer.instPool.Length) return;
+        ref var instance = ref renderer.instPool[enemy.modelId];
+        instance.posx = state.PosX; instance.posy = state.PosY; instance.posz = state.PosZ;
+        instance.rotx = state.RotX; instance.roty = state.RotY; instance.rotz = state.RotZ; instance.rotw = state.RotW;
+        if (renderer is DynamicRenderer dynamicRenderer && enemy.modelId < dynamicRenderer.extraPool.Length)
+            dynamicRenderer.extraPool[enemy.modelId] = new UnityEngine.Vector4(state.UnitAnimation, state.UnitDisturb, state.UnitSteering, state.UnitSpeed);
+        model.enemyUnitsDirty = true;
     }
 
     public void RemoveEnemyShell(int enemyId)
@@ -143,6 +181,11 @@ public sealed class GroundEnemyReplicaPools : IGroundEnemyPools
         var factory = Factory;
         if (factory == null || enemyId <= 0 || enemyId >= factory.enemyPool.Length) return;
         if (factory.enemyPool[enemyId].id != enemyId) return;
+        var statId = factory.enemyPool[enemyId].combatStatId;
+        var stats = GameMain.spaceSector.skillSystem.combatStats;
+        if (statId > 0 && (statId >= stats.cursor || stats.buffer[statId].id != statId ||
+            stats.buffer[statId].objectId != enemyId || stats.buffer[statId].astroId != planetId))
+            factory.enemyPool[enemyId].combatStatId = 0;
         factory.RemoveEnemyWithComponents(enemyId);
     }
 
@@ -153,7 +196,9 @@ public sealed class GroundEnemyReplicaPools : IGroundEnemyPools
         if (state.HasCombatStat)
         {
             int statId = enemy.combatStatId;
-            if (statId <= 0 || statId >= skill.combatStats.cursor || skill.combatStats.buffer[statId].id != statId)
+            if (statId <= 0 || statId >= skill.combatStats.cursor || skill.combatStats.buffer[statId].id != statId ||
+                skill.combatStats.buffer[statId].objectType != (int)EObjectType.Enemy ||
+                skill.combatStats.buffer[statId].objectId != enemyId || skill.combatStats.buffer[statId].astroId != planetId)
             {
                 statId = skill.combatStats.Add().id;
                 enemy.combatStatId = statId;
@@ -172,7 +217,9 @@ public sealed class GroundEnemyReplicaPools : IGroundEnemyPools
         else if (enemy.combatStatId != 0)
         {
             var statId = enemy.combatStatId;
-            if (statId > 0 && statId < skill.combatStats.cursor && skill.combatStats.buffer[statId].id == statId)
+            if (statId > 0 && statId < skill.combatStats.cursor && skill.combatStats.buffer[statId].id == statId &&
+                skill.combatStats.buffer[statId].objectType == (int)EObjectType.Enemy &&
+                skill.combatStats.buffer[statId].objectId == enemyId && skill.combatStats.buffer[statId].astroId == planetId)
             {
                 skill.OnRemovingSkillTarget(statId, skill.combatStats.buffer[statId].originAstroId, ETargetType.CombatStat);
                 skill.combatStats.Remove(statId);

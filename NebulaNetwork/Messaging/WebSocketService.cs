@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+﻿using System.Threading;
 using NebulaAPI.Networking;
 using NebulaModel.Logger;
 using NebulaModel.Networking;
@@ -14,7 +14,7 @@ public class WebSocketService : WebSocketBehavior
 {
     public static Server Server;
     public static NebulaNetPacketProcessor PacketProcessor;
-    private static readonly Dictionary<int, NebulaConnection> connections = new();
+    private NebulaConnection connection;
 
     public WebSocketService() { }
 
@@ -32,13 +32,14 @@ public class WebSocketService : WebSocketBehavior
         var conn = new NebulaConnection(Context.WebSocket, Context.UserEndPoint, PacketProcessor);
         Server.OnSocketConnection(conn);
 
-        connections[Context.UserEndPoint.GetHashCode()] = conn;
+        connection = conn;
     }
 
     protected override void OnMessage(MessageEventArgs e)
     {
         // Find created NebulaConnection
-        if (connections.TryGetValue(Context.UserEndPoint.GetHashCode(), out var conn))
+        var conn = connection;
+        if (conn != null)
         {
             PacketProcessor.EnqueuePacketForProcessing(e.RawData, conn);
         }
@@ -50,11 +51,11 @@ public class WebSocketService : WebSocketBehavior
 
     protected override void OnClose(CloseEventArgs e)
     {
-        if (!connections.TryGetValue(Context.UserEndPoint.GetHashCode(), out var connection))
+        var departing = Interlocked.Exchange(ref connection, null);
+        if (departing == null)
         {
             return;
         }
-        connections.Remove(Context.UserEndPoint.GetHashCode());
 
         // If the reason of a client disconnect is because we are still loading the game,
         // we don't need to inform the other clients since the disconnected client never
@@ -71,18 +72,18 @@ public class WebSocketService : WebSocketBehavior
             // if it is because we have stopped the server and are not in a multiplayer game anymore.
             if (Multiplayer.IsActive)
             {
-                Server.OnSocketDisconnection(connection);
+                Server.OnSocketDisconnection(departing);
             }
         });
     }
 
     protected override void OnError(ErrorEventArgs e)
     {
-        if (!connections.TryGetValue(Context.UserEndPoint.GetHashCode(), out var connection))
+        var departing = Interlocked.Exchange(ref connection, null);
+        if (departing == null)
         {
             return;
         }
-        connections.Remove(Context.UserEndPoint.GetHashCode());
 
         Log.Info($"Client disconnected because of an error: {ID}, reason: {e.Exception}");
         UnityDispatchQueue.RunOnMainThread(() =>
@@ -91,7 +92,7 @@ public class WebSocketService : WebSocketBehavior
             // if it is because we have stopped the server and are not in a multiplayer game anymore.
             if (Multiplayer.IsActive)
             {
-                Server.OnSocketDisconnection(connection);
+                Server.OnSocketDisconnection(departing);
             }
         });
     }

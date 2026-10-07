@@ -99,6 +99,8 @@ public static class AuthorityWireSize
             // + Digest(8).
             case AuthorityFamily.ScopeDigest:
                 return 33;
+            case AuthorityFamily.PlayerCombatState:
+                return 63; // Actor(2), connection(8), revisions(24), core debit(8), life(1), recovery/death(16), blob length(4).
             default:
                 return 0;
         }

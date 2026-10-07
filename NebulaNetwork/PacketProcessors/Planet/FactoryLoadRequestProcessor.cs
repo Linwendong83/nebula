@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using NebulaAPI.Networking;
 using NebulaAPI.Packets;
@@ -44,9 +44,7 @@ public class FactoryLoadRequestProcessor : PacketProcessor<FactoryLoadRequest>
         {
             player.Data.LocalPlanetId = packet.PlanetID;
             player.Data.LocalStarId = GameMain.galaxy.PlanetById(packet.PlanetID).star.id;
-            // A22: a load request is an accepted planet change; refresh the registry so the
-            // host's subscription eligibility follows the client.
-            NebulaWorld.Authority.HostPlayerPresence.TryUpdateLocation(player.Data, player.Id);
+            // Subscription eligibility reads this accepted location directly.
         }
     }
 

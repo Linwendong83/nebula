@@ -92,11 +92,7 @@ internal class GameHistoryData_Patch
     [HarmonyPatch(nameof(GameHistoryData.UnlockTechFunction))]
     public static bool UnlockTechFunction_Prefix()
     {
-        // I01: hp-upgrade tech writes Mecha.hp. In authority mode the host decides and the replica
-        // carries the HP; a client must not apply it here, including via the legacy incoming-request
-        // path. The guard counts the refusal so the write surface is measurable.
-        if (AuthorityLocalOptions.Mode == AuthorityMode.HostAuthority &&
-            !AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.GameHistoryDataUnlockTechFunction,
+        if (!AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.GameHistoryDataUnlockTechFunction,
                 detail: "tech-hp"))
         {
             return false;

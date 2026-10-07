@@ -1,7 +1,5 @@
-﻿using NebulaAPI.Packets;
-using NebulaModel.Authority;
+using NebulaAPI.Packets;
 using NebulaModel.DataStructures;
-using NebulaModel.Logger;
 using NebulaModel.Networking;
 using NebulaModel.Packets;
 using NebulaModel.Packets.Combat.Mecha;
@@ -21,27 +19,23 @@ public class PlayerLifeProcessor : PacketProcessor<PlayerLifePacket>
             var player = Players.Get(conn);
             if (player == null || packet.Acknowledgement || packet.PlayerSnapshot == null) return;
             var data = (PlayerData)player.Data;
-            // A10: in host authority mode a client life snapshot is never adopted nor rebroadcast.
-            // A terminal receipt names the received revision so the client stops retrying, but no
-            // world, ledger or remote-model state moves. Death/respawn moves via commands in A11.
-            if (AuthorityLocalOptions.Mode == AuthorityMode.HostAuthority &&
-                HostResourcePolicy.ShouldRefuseLegacyOverwrite(HostResourcePacketKind.LifeSnapshot, isHostAuthority: true))
-            {
-                if (Multiplayer.Session.Life.RecordSnapshotRefusal(player.Id))
-                    Log.Warn("[authority] client life snapshot refused; acknowledging receipt without adopting its state");
-                conn.SendPacket(PlayerLifePacket.CreateReceipt(player.Id, packet.Life.Revision));
-                return;
-            }
             packet.PlayerId = player.Id;
-            if (packet.Life.Revision > data.Life.Revision && packet.Life.DeathCount >= data.Life.DeathCount)
+            if (double.IsNaN(packet.CoreEnergyDebitAcknowledged) || double.IsInfinity(packet.CoreEnergyDebitAcknowledged) || packet.CoreEnergyDebitAcknowledged < 0) return;
+            var playerId = player.Id;
+            var requestedRevision = packet.Life.Revision;
+            var connection = Multiplayer.Session.AuthorityRuntime.ConnectionEpochFor(playerId);
+            Multiplayer.Session.CombatAuthority.QueueCheckpoint(data, packet.PlayerSnapshot, packet.LastCombatCommand,
+                packet.CoreEnergyDebitAcknowledged, packet.DebitItemsAcknowledged, packet.DebitTotalsAcknowledged, accepted =>
             {
-                PlayerLifeManager.StoreServer(data, packet.PlayerSnapshot);
-                packet.Life = data.Life;
-                packet.PlayerSnapshot = System.Array.Empty<byte>();
-                Server.SendPacketExclude(packet, conn);
-                Multiplayer.Session.Life.ApplyRemote(player.Id, data.Life);
-            }
-            conn.SendPacket(new PlayerLifePacket { PlayerId = player.Id, Life = data.Life, Acknowledgement = true });
+                if (!Multiplayer.Session.AuthorityRuntime.ConnectionEpochFor(playerId).Equals(connection)) return;
+                if (accepted)
+                {
+                    var update = new PlayerLifePacket { PlayerId = playerId, Life = data.Life, PlayerSnapshot = System.Array.Empty<byte>() };
+                    Server.SendPacketExclude(update, conn);
+                    Multiplayer.Session.Life.ApplyRemote(playerId, data.Life);
+                }
+                conn.SendPacket(PlayerLifePacket.CreateReceipt(playerId, requestedRevision));
+            }, packet.CombatRevision);
         }
         else if (packet.Acknowledgement) Multiplayer.Session.Life.Acknowledge(packet.Life.Revision);
         else Multiplayer.Session.Life.ApplyRemote(packet.PlayerId, packet.Life);

@@ -29,14 +29,19 @@ namespace NebulaWorld.Authority.Adapters;
 /// that would generate drops, statistics or experience.
 /// </para>
 /// </remarks>
-public sealed class SpaceEnemyReplicaBinding : IReplicaMirrorObserver
+public sealed class SpaceEnemyReplicaBinding : IReplicaMirrorObserver, IReplicaBaselineReadiness
 {
     private readonly Func<bool> applyWindowOpen;
     private SpaceEnemyBinding core;
+    private SpaceSector sector;
+    private EnemyData[] enemyPool;
 
     public ClientWorldReplica Replica { get; set; }
     public long RefusalsOutsideApplyWindow { get; private set; }
     public long DeferredBaselines { get; private set; }
+
+    public bool IsReadyForBaseline(ScopeKey scope) => scope.Kind != PoolKind.SpaceEnemy ||
+        GameMain.spaceSector?.skillSystem != null;
 
     public SpaceEnemyReplicaBinding(Func<bool> applyWindowOpen = null)
     {
@@ -71,6 +76,11 @@ public sealed class SpaceEnemyReplicaBinding : IReplicaMirrorObserver
         }
         var binding = CoreFor();
         if (binding == null) return;
+        var keep = new HashSet<int>();
+        foreach (var member in members) keep.Add(member.Key.NativeId);
+        var pools = new SpaceEnemyReplicaPools();
+        for (var id = 1; id < GameMain.spaceSector.enemyCursor; id++)
+            if (GameMain.spaceSector.enemyPool[id].id == id && !keep.Contains(id)) pools.RemoveEnemyShell(id);
         binding.ReconcileBaseline(members);
     }
 
@@ -94,9 +104,11 @@ public sealed class SpaceEnemyReplicaBinding : IReplicaMirrorObserver
 
     private SpaceEnemyBinding CoreFor()
     {
-        if (core == null)
+        if (core == null || !ReferenceEquals(sector, GameMain.spaceSector) || enemyPool != GameMain.spaceSector?.enemyPool)
         {
             if (GameMain.spaceSector == null) return null;
+            sector = GameMain.spaceSector;
+            enemyPool = sector.enemyPool;
             core = new SpaceEnemyBinding(new SpaceEnemyReplicaPools());
         }
         return core;

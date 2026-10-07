@@ -48,7 +48,11 @@ public enum PoolKind : byte
     Vegetable,
 
     /// <summary><c>PlanetFactory.veinPool</c>: minable veins (A19 damage target).</summary>
-    Vein
+    Vein,
+
+    /// <summary>Persistent sector-wide directory and UI facts for dark fog hives.</summary>
+    HiveSummary,
+    PlayerCombat
 }
 
 /// <summary>How a pool's ScopeId is derived from the game's astro id.</summary>
@@ -94,6 +98,8 @@ public static class AuthorityScope
         {
             case PoolKind.SpaceEnemy:
             case PoolKind.SpaceCraft:
+            case PoolKind.HiveSummary:
+            case PoolKind.PlayerCombat:
                 scopeKind = PoolScopeKind.Sector;
                 return true;
             case PoolKind.Hive:

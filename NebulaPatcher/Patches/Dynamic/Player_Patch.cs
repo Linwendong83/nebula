@@ -108,7 +108,18 @@ internal class Player_Patch
     public static bool Kill_Prefix(Player __instance)
     {
         if (!Multiplayer.IsActive) return true;
-        if (__instance != GameMain.mainPlayer) return false;
+        if (__instance != GameMain.mainPlayer)
+        {
+            if (Multiplayer.Session.IsServer && Multiplayer.Session.CombatAuthority.Owns(__instance) && __instance.isAlive)
+            {
+                __instance.isAlive = false;
+                __instance.deathCount++;
+                __instance.timeSinceKilled = 0;
+                __instance.mecha.Kill();
+            }
+            return false;
+        }
+        if (Multiplayer.Session.IsClient && !Multiplayer.Session.AuthorityRuntime.ApplyContext.IsActiveOnCurrentThread) return false;
 
         return true;
     }

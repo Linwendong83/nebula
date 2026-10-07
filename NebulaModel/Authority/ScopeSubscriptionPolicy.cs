@@ -157,10 +157,9 @@ public static class ScopeSubscriptionPolicy
             desired.Add(new ScopeKey(PoolKind.Base, context.CurrentPlanetId));
             desired.Add(new ScopeKey(PoolKind.DroneTask, context.CurrentPlanetId));
         }
-        if (context.IsInSector)
-        {
-            desired.Add(new ScopeKey(PoolKind.SpaceEnemy, AuthorityScope.Sector));
-            desired.Add(new ScopeKey(PoolKind.SpaceCraft, AuthorityScope.Sector));
-        }
+        // Orbital attacks and hive status remain observable while the player is on a planet.
+        desired.Add(new ScopeKey(PoolKind.SpaceEnemy, AuthorityScope.Sector));
+        desired.Add(new ScopeKey(PoolKind.SpaceCraft, AuthorityScope.Sector));
+        desired.Add(new ScopeKey(PoolKind.HiveSummary, AuthorityScope.Sector));
     }
 }

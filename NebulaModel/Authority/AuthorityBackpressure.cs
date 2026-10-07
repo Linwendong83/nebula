@@ -27,21 +27,6 @@ public enum AuthorityFamilyClass : byte
     Bulk = 2
 }
 
-/// <summary>
-/// The send- and apply-side budgets of the authority session (TASKS.md A23, VALIDATION §9).
-/// </summary>
-/// <remarks>
-/// <para>
-/// Every number here is a starting value from the design's initial budget, not a measured result.
-/// A23 exists to replace them with measurements; changing any of them is a deliberate act that
-/// re-runs the back-pressure validation, which is why they live in one immutable object rather than
-/// as constants at each call site.
-/// </para>
-/// <para>
-/// <see cref="Unbounded"/> disables every budget. It exists for the legacy-comparison runs and for
-/// tests that assert on exact delivery; the production new-mode path uses <see cref="Default"/>.
-/// </para>
-/// </remarks>
 public sealed class AuthorityBackpressurePolicy
 {
     /// <summary>Bulk state bytes one subscriber may receive per host frame before the rest waits.</summary>
@@ -73,7 +58,6 @@ public sealed class AuthorityBackpressurePolicy
         new(long.MaxValue, int.MaxValue, int.MaxValue, DefaultMinApplyMessagesPerFrame,
             double.PositiveInfinity, coalesceStatePerKey: false, "unbounded");
 
-    /// <summary>The initial new-mode budget (VALIDATION §9), pending A23's measurements.</summary>
     public static AuthorityBackpressurePolicy Default { get; } = new(
         DefaultBulkBytesPerSubscriberPerFrame, DefaultSnapshotChunksPerSubscriberPerFrame,
         DefaultApplyMessagesPerFrame, DefaultMinApplyMessagesPerFrame, DefaultApplyBudgetMs,

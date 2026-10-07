@@ -4,17 +4,8 @@ using System.Reflection;
 
 namespace NebulaModel.Authority;
 
-/// <summary>
-/// What the new mode is allowed to do with one vanilla entry point (TASKS.md A05).
-/// </summary>
-/// <remarks>
-/// A01 produced the inventory of every method that writes a protected field. A05 turns that
-/// inventory into a decision. Every old combat and construction entry point asks this file for that
-/// decision instead of deciding for itself, which is the point of centralizing it: a rule cannot be
-/// kept in one patch and forgotten in another, and a new patch cannot quietly introduce a second
-/// authority path.
-/// </remarks>
-public enum AuthorityPatchMode : byte
+/// <summary>The responsibility of a game or mod hook in the multiplayer runtime.</summary>
+public enum AuthorityHookRole : byte
 {
     /// <summary>
     /// Unspecified. Only ever the state of a hook the policy table did not classify, which means the
@@ -38,9 +29,6 @@ public enum AuthorityPatchMode : byte
     /// </summary>
     Presentation = 3,
 
-    /// <summary>A retired path. It must not run in the new mode.</summary>
-    LegacyRemove = 4,
-
     /// <summary>Lifecycle bookkeeping that changes no shared fact.</summary>
     LifecycleObserve = 5,
 
@@ -60,9 +48,6 @@ public enum AuthorityGuardOutcome : byte
 {
     None = 0,
 
-    /// <summary>The room is legacy, so the vanilla path is the correct path.</summary>
-    LegacySession = 1,
-
     /// <summary>An authority session exists but has no loaded world yet; the vanilla path still runs.</summary>
     NoAuthorityWorld = 2,
 
@@ -70,10 +55,7 @@ public enum AuthorityGuardOutcome : byte
     ReplicaApply = 3,
 
     /// <summary>A client tried to run a host rule outside any replica apply. This count must stay zero.</summary>
-    ClientRuleRefused = 4,
-
-    /// <summary>The method is retired; the new mode refuses it on every peer.</summary>
-    LegacyPathRefused = 5
+    ClientRuleRefused = 4
 }
 
 /// <summary>
@@ -138,13 +120,6 @@ public static class AuthorityHookLabels
     public const string ConstructStatGameTick = "ConstructStat.GameTick";
     public const string DroneComponentInternalUpdate = "DroneComponent.InternalUpdate";
 
-    /// <summary>
-    /// Scheduler and lifecycle entries from the A01 inventory.
-    /// </summary>
-    /// <remarks>
-    /// They write no protected field, so they are not host rules, but the policy must still state
-    /// what the new mode does with them or "every A01 target is classified" would be untrue.
-    /// </remarks>
     public const string SimulatedWorldOnPlayerJoinedGame = "SimulatedWorld.OnPlayerJoinedGame";
 
     public const string SimulatedWorldOnPlayerLeftGame = "SimulatedWorld.OnPlayerLeftGame";
@@ -182,27 +157,16 @@ public static class AuthorityHookLabels
     public const string EnemyDFHiveSystemGameTickLogic = "EnemyDFHiveSystem.GameTickLogic";
 }
 
-/// <summary>
-/// What the guard needs to know about the live session.
-/// </summary>
-/// <remarks>
-/// A value rather than a session reference, so the policy stays a pure function that tests can drive
-/// without a room. The default value is the legacy state, which is why an unregistered probe can
-/// only ever allow the vanilla path.
-/// </remarks>
+/// <summary>World readiness, host identity and the validated replica application window.</summary>
 public readonly struct AuthorityGuardSession
 {
-    public AuthorityGuardSession(AuthorityMode mode, bool isActive, bool isHost, bool replicaApplyActive)
+    public AuthorityGuardSession(bool isActive, bool isHost, bool replicaApplyActive)
     {
-        Mode = mode;
         IsActive = isActive;
         IsHost = isHost;
         ReplicaApplyActive = replicaApplyActive;
     }
 
-    public AuthorityMode Mode { get; }
-
-    /// <summary>True once a world epoch exists and the room is in authority mode.</summary>
     public bool IsActive { get; }
 
     public bool IsHost { get; }
@@ -211,7 +175,7 @@ public readonly struct AuthorityGuardSession
     public bool ReplicaApplyActive { get; }
 
     /// <summary>The state of a peer that is not in an authority room.</summary>
-    public static AuthorityGuardSession Legacy => new(AuthorityMode.Legacy, false, false, false);
+    public static AuthorityGuardSession Inactive => default;
 }
 
 /// <summary>
@@ -219,13 +183,13 @@ public readonly struct AuthorityGuardSession
 /// </summary>
 public readonly struct AuthorityHookPolicy
 {
-    public AuthorityHookPolicy(string label, string typeName, string methodName, AuthorityPatchMode mode,
+    public AuthorityHookPolicy(string label, string typeName, string methodName, AuthorityHookRole role,
         bool required, string owner)
     {
         Label = label;
         TypeName = typeName;
         MethodName = methodName;
-        Mode = mode;
+        Role = role;
         Required = required;
         Owner = owner;
     }
@@ -239,39 +203,23 @@ public readonly struct AuthorityHookPolicy
     /// <summary>Method name to resolve when verifying the hook exists.</summary>
     public string MethodName { get; }
 
-    public AuthorityPatchMode Mode { get; }
+    public AuthorityHookRole Role { get; }
 
-    /// <summary>True when the mode may not be entered unless this hook resolves.</summary>
+    /// <summary>True when multiplayer may not be entered unless this hook resolves.</summary>
     public bool Required { get; }
 
     /// <summary>Card that replaces the vanilla behaviour with the host-authoritative one.</summary>
     public string Owner { get; }
 }
 
-/// <summary>
-/// The single mode router for every vanilla entry point the authority mode takes over (A05).
-/// </summary>
-/// <remarks>
-/// <para>
-/// The guard is the executable form of DESIGN 1.8 and DESIGN 11: the new mode either runs its own
-/// path with every required hook present, or it does not run at all. It never catches an exception
-/// and continues as vanilla, because that shape is how two rule sets end up in one room.
-/// </para>
-/// <para>
-/// The decision is a pure function of the session state supplied by <see cref="Probe"/>, so the whole
-/// policy is exercised by plain tests. The type lives in the model rather than in a patch because the
-/// callers are spread across three assemblies: the game patches, the packet processors and the world
-/// managers. One shared entry point is what makes "客户端非法写入计数为零" measurable rather than
-/// aspirational.
-/// </para>
-/// </remarks>
+/// <summary>Permits host rule execution and validated client mirror writes.</summary>
 public static class AuthorityRuleGuard
 {
     private static readonly object gate = new();
     private static readonly Dictionary<(string Hook, AuthorityGuardOutcome Outcome), long> outcomes = [];
     private static readonly Dictionary<string, long> refusalsByHook = [];
     private static readonly HashSet<(string Hook, AuthorityGuardOutcome Outcome)> reportedRefusals = [];
-    private static readonly Dictionary<string, AuthorityPatchMode> modes = [];
+    private static readonly Dictionary<string, AuthorityHookRole> roles = [];
     private static readonly Dictionary<string, bool> required = [];
     private static readonly List<AuthorityGuardRefusal> recentRefusals = [];
 
@@ -288,7 +236,7 @@ public static class AuthorityRuleGuard
     public const int RecentRefusalCapacity = 64;
 
     /// <summary>
-    /// Supplies the live session state. Registered by the world layer; unset means legacy.
+    /// Supplies the live session state. Registered by the world layer; unset means inactive.
     /// </summary>
     public static Func<AuthorityGuardSession> Probe
     {
@@ -300,7 +248,7 @@ public static class AuthorityRuleGuard
     /// Receives the first diagnostic for each hook/outcome in a session. Counters include repeats.
     /// </summary>
     /// <remarks>
-    /// A sink rather than a direct logger call, because the model has no logger dependency and a
+    /// A sink rather than a direct logger call, because multiplayerl has no logger dependency and a
     /// silent refusal is exactly what the design forbids.
     /// </remarks>
     public static Action<string> RefusalSink
@@ -321,7 +269,7 @@ public static class AuthorityRuleGuard
         }
     }
 
-    /// <summary>Why entering the mode was refused, or null when it was not.</summary>
+    /// <summary>Why starting multiplayer was refused, or null when it was not.</summary>
     public static string LoadFailure
     {
         get
@@ -333,11 +281,8 @@ public static class AuthorityRuleGuard
         }
     }
 
-    /// <summary>True when the current probe reports the new mode negotiated.</summary>
-    public static bool IsAuthorityMode => CurrentSession().Mode == AuthorityMode.HostAuthority;
-
     /// <summary>The session state the guard is currently deciding against.</summary>
-    public static AuthorityGuardSession CurrentSession() => probe?.Invoke() ?? AuthorityGuardSession.Legacy;
+    public static AuthorityGuardSession CurrentSession() => probe?.Invoke() ?? AuthorityGuardSession.Inactive;
 
     /// <summary>The policy table, installed on first use.</summary>
     public static IReadOnlyList<AuthorityHookPolicy> Policy
@@ -370,13 +315,13 @@ public static class AuthorityRuleGuard
         }
     }
 
-    /// <summary>The role one hook was classified with, or <see cref="AuthorityPatchMode.None"/>.</summary>
-    public static AuthorityPatchMode ModeFor(string label)
+    /// <summary>The role one hook was classified with, or <see cref="AuthorityHookRole.None"/>.</summary>
+    public static AuthorityHookRole RoleFor(string label)
     {
         EnsureInstalled();
         lock (gate)
         {
-            return modes.TryGetValue(label ?? string.Empty, out var mode) ? mode : AuthorityPatchMode.None;
+            return roles.TryGetValue(label ?? string.Empty, out var role) ? role : AuthorityHookRole.None;
         }
     }
 
@@ -429,32 +374,9 @@ public static class AuthorityRuleGuard
         }
     }
 
-    /// <summary>
-    /// The decision for one host rule.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The checks are ordered the way the design orders its rules. A legacy room comes first, because
-    /// there the vanilla method is not an authority path at all and refusing it would break
-    /// single-player and every existing room. Then the authority world, then the replica apply
-    /// window, and only then the refusal.
-    /// </para>
-    /// <para>
-    /// A client inside a validated apply is presenting a host fact rather than deciding one, so it is
-    /// allowed; the scope check itself remains <c>ReplicaApplyContext.Allows</c>, which the adapter
-    /// calls before it writes anything. Every other client call is refused and counted.
-    /// </para>
-    /// </remarks>
-    /// <param name="label">Hook identity from <see cref="AuthorityHookLabels"/>.</param>
-    /// <param name="detail">Extra text for the diagnostic record.</param>
-    /// <returns>True when the caller may run the vanilla method.</returns>
     public static bool AllowHostRule(string label, string detail = null)
     {
         var session = CurrentSession();
-        if (session.Mode != AuthorityMode.HostAuthority)
-        {
-            return Decide(label, AuthorityGuardOutcome.LegacySession, detail);
-        }
         if (!session.IsActive)
         {
             return Decide(label, AuthorityGuardOutcome.NoAuthorityWorld, detail);
@@ -468,19 +390,6 @@ public static class AuthorityRuleGuard
             return Decide(label, AuthorityGuardOutcome.ClientRuleRefused, detail);
         }
         return Decide(label, AuthorityGuardOutcome.None, detail);
-    }
-
-    /// <summary>
-    /// The decision for a retired path. The new mode refuses it on every peer.
-    /// </summary>
-    public static bool AllowLegacyPath(string label, string detail = null)
-    {
-        var session = CurrentSession();
-        if (session.Mode != AuthorityMode.HostAuthority || !session.IsActive)
-        {
-            return Decide(label, AuthorityGuardOutcome.LegacySession, detail);
-        }
-        return Decide(label, AuthorityGuardOutcome.LegacyPathRefused, detail);
     }
 
     /// <summary>Number of refusals recorded for a hook.</summary>
@@ -524,12 +433,12 @@ public static class AuthorityRuleGuard
     }
 
     /// <summary>Classifies one hook. Called by the installer; also usable by tests.</summary>
-    public static void Classify(string label, AuthorityPatchMode mode, bool isRequired)
+    public static void Classify(string label, AuthorityHookRole role, bool isRequired)
     {
         if (string.IsNullOrEmpty(label)) throw new ArgumentException("A hook label is required.", nameof(label));
         lock (gate)
         {
-            modes[label] = mode;
+            roles[label] = role;
             required[label] = isRequired;
         }
     }
@@ -538,8 +447,8 @@ public static class AuthorityRuleGuard
     /// Resolves every required hook and returns the ones that do not exist.
     /// </summary>
     /// <remarks>
-    /// A required hook whose target cannot be resolved means the mode would run without its guard, so
-    /// the list must be empty before the mode is entered. Resolution is by simple type name across
+    /// A required hook whose target cannot be resolved means multiplayer would run without its guard, so
+    /// the list must be empty before multiplayer is entered. Resolution is by simple type name across
     /// the loaded assemblies, which is enough because the A01 inventory names game and mod types that
     /// are always loaded in a running game and in the test process.
     /// </remarks>
@@ -570,13 +479,13 @@ public static class AuthorityRuleGuard
     }
 
     /// <summary>
-    /// Registers an extra verification step run before the mode is entered.
+    /// Registers an extra verification step run before multiplayer is entered.
     /// </summary>
     /// <remarks>
     /// Method transformations cannot be verified by resolving a method name: a transpiler that
     /// silently matched nothing leaves a method that exists but runs the wrong rule. The patcher
     /// therefore registers a verifier that reports which of its required transformations actually
-    /// applied, and a failure there stops the mode just like a missing method does.
+    /// applied, and a failure there stops multiplayer just like a missing method does.
     /// </remarks>
     public static void RegisterVerifier(Func<IReadOnlyList<string>> verifier)
     {
@@ -626,11 +535,10 @@ public static class AuthorityRuleGuard
     /// Verifies the required hooks at most once per process.
     /// </summary>
     /// <remarks>
-    /// Called at the point the mode would become live. A failure here is reported and the mode is not
-    /// entered, which is DESIGN 1.8: a missing hook stops the mode instead of falling back to the old
-    /// dual simulation.
+    /// Called at the point multiplayer would become live. A failure here is reported and multiplayer is not
+    /// entered, which is DESIGN 1.8: a missing hook prevents multiplayer startup.
     /// </remarks>
-    /// <returns>True when the mode may be entered.</returns>
+    /// <returns>True when multiplayer may be entered.</returns>
     public static bool VerifyLoadOnce()
     {
         lock (gate)
@@ -759,8 +667,7 @@ public static class AuthorityRuleGuard
     private static bool Decide(string label, AuthorityGuardOutcome outcome, string detail)
     {
         Record(label, outcome, detail);
-        return outcome != AuthorityGuardOutcome.ClientRuleRefused &&
-               outcome != AuthorityGuardOutcome.LegacyPathRefused;
+        return outcome != AuthorityGuardOutcome.ClientRuleRefused;
     }
 
     private static string HookKey(string label) => string.IsNullOrEmpty(label) ? "(unlabelled)" : label;
@@ -768,8 +675,7 @@ public static class AuthorityRuleGuard
     private static void Record(string label, AuthorityGuardOutcome outcome, string detail)
     {
         var key = HookKey(label);
-        var refused = outcome == AuthorityGuardOutcome.ClientRuleRefused ||
-                      outcome == AuthorityGuardOutcome.LegacyPathRefused;
+        var refused = outcome == AuthorityGuardOutcome.ClientRuleRefused;
         string stack = null;
         var shouldReport = false;
 
@@ -809,7 +715,7 @@ public static class AuthorityRuleGuard
     /// <summary>Installs the policy table once.</summary>
     /// <remarks>
     /// The table is code rather than a shipped data file on purpose: a file an installer forgets to
-    /// copy would turn the mode off without a compile error. The test that keeps it equal to the A01
+    /// copy would turn multiplayer off without a compile error. The test that keeps it equal to the A01
     /// inventory reads the JSON deliverable and compares, so the classification is still checked
     /// against the evidence instead of being trusted.
     /// </remarks>
@@ -822,77 +728,77 @@ public static class AuthorityRuleGuard
         }
         foreach (var entry in policyTable)
         {
-            Classify(entry.Label, entry.Mode, entry.Required);
+            Classify(entry.Label, entry.Role, entry.Required);
         }
     }
 
     private static readonly List<AuthorityHookPolicy> policyTable =
     [
         new(AuthorityHookLabels.CombatStatTickSkillLogic, "CombatStat", "TickSkillLogic",
-            AuthorityPatchMode.HostRule, true, "A19"),
+            AuthorityHookRole.HostRule, true, "A19"),
         new(AuthorityHookLabels.CombatStatHandleFullHp, "CombatStat", "HandleFullHp",
-            AuthorityPatchMode.HostRule, true, "A08/A19"),
+            AuthorityHookRole.HostRule, true, "A08/A19"),
         new(AuthorityHookLabels.CombatStatHandleZeroHp, "CombatStat", "HandleZeroHp",
-            AuthorityPatchMode.HostRule, true, "A19"),
+            AuthorityHookRole.HostRule, true, "A19"),
         new(AuthorityHookLabels.SkillSystemDamageObject, "SkillSystem", "DamageObject",
-            AuthorityPatchMode.HostRule, true, "A19"),
+            AuthorityHookRole.HostRule, true, "A19"),
         new(AuthorityHookLabels.SkillSystemDamageGroundObjectByLocalCaster, "SkillSystem",
-            "DamageGroundObjectByLocalCaster", AuthorityPatchMode.HostRule, true, "A19"),
+            "DamageGroundObjectByLocalCaster", AuthorityHookRole.HostRule, true, "A19"),
         new(AuthorityHookLabels.SkillSystemDamageGroundObjectByRemoteCaster, "SkillSystem",
-            "DamageGroundObjectByRemoteCaster", AuthorityPatchMode.HostRule, true, "A19"),
+            "DamageGroundObjectByRemoteCaster", AuthorityHookRole.HostRule, true, "A19"),
         new(AuthorityHookLabels.ConstructionSystemAddConstructStat, "ConstructionSystem", "AddConstructStat",
-            AuthorityPatchMode.HostRule, true, "A15/A18"),
+            AuthorityHookRole.HostRule, true, "A15/A18"),
         new(AuthorityHookLabels.ConstructionSystemRemoveConstructStat, "ConstructionSystem", "RemoveConstructStat",
-            AuthorityPatchMode.HostRule, true, "A15"),
+            AuthorityHookRole.HostRule, true, "A15"),
         new(AuthorityHookLabels.ConstructionSystemRepair, "ConstructionSystem", "Repair",
-            AuthorityPatchMode.HostRule, true, "A17"),
+            AuthorityHookRole.HostRule, true, "A17"),
         new(AuthorityHookLabels.ConstructionSystemDetermineLaunch, "ConstructionSystem", "DetermineLaunch",
-            AuthorityPatchMode.NativeConstruction, true, "BuildDispatch"),
+            AuthorityHookRole.NativeConstruction, true, "BuildDispatch"),
         new(AuthorityHookLabels.ConstructionSystemUpdateModules, "ConstructionSystem", "UpdateModules",
-            AuthorityPatchMode.NativeConstruction, true, "BuildDispatch"),
+            AuthorityHookRole.NativeConstruction, true, "BuildDispatch"),
         new(AuthorityHookLabels.ConstructionSystemUpdateDrones, "ConstructionSystem", "UpdateDrones",
-            AuthorityPatchMode.NativeConstruction, true, "BuildDispatch"),
+            AuthorityHookRole.NativeConstruction, true, "BuildDispatch"),
         new(AuthorityHookLabels.ConstructStatGameTick, "ConstructStat", "GameTick",
-            AuthorityPatchMode.HostRule, true, "A15"),
+            AuthorityHookRole.HostRule, true, "A15"),
         // Personal drone energy and motion follow native execution. Shared HP is guarded at Repair.
         new(AuthorityHookLabels.DroneComponentInternalUpdate, "DroneComponent", "InternalUpdate",
-            AuthorityPatchMode.NativeConstruction, false, "BuildDispatch"),
+            AuthorityHookRole.NativeConstruction, false, "BuildDispatch"),
         // Scheduler and lifecycle entries. They are classified so "every A01 target has a role" holds,
         // but none of them is a rule writer, so none is required to resolve.
         new(AuthorityHookLabels.SimulatedWorldOnPlayerJoinedGame, "NebulaWorld.SimulatedWorld",
-            "OnPlayerJoinedGame", AuthorityPatchMode.LifecycleObserve, false, "A21"),
+            "OnPlayerJoinedGame", AuthorityHookRole.LifecycleObserve, false, "A21"),
         new(AuthorityHookLabels.SimulatedWorldOnPlayerLeftGame, "NebulaWorld.SimulatedWorld",
-            "OnPlayerLeftGame", AuthorityPatchMode.LifecycleObserve, false, "A21"),
+            "OnPlayerLeftGame", AuthorityHookRole.LifecycleObserve, false, "A21"),
         // The frame boundary is required, not merely observed: if the method A04 hangs the drain on
-        // disappears, the mode would run with no frame boundary at all, so it must fail to load.
+        // disappears, multiplayer would run with no frame boundary at all, so it must fail to load.
         new(AuthorityHookLabels.GameLogicLogicFrame, "GameLogic", "LogicFrame",
-            AuthorityPatchMode.None, true, "A04"),
+            AuthorityHookRole.None, true, "A04"),
         new(AuthorityHookLabels.ThreadManagerProcessFrame, "ThreadManager", "ProcessFrame",
-            AuthorityPatchMode.None, true, "A04"),
+            AuthorityHookRole.None, true, "A04"),
         new(AuthorityHookLabels.NebulaNetworkServerUpdate, "NebulaNetwork.Server", "Update",
-            AuthorityPatchMode.None, false, "A04"),
+            AuthorityHookRole.None, false, "A04"),
         // Native construction intake forwards ready sites to the server-owned claim table.
         new(AuthorityHookLabels.ConstructionSystemAddBuildTargetToModules, "ConstructionSystem",
-            "AddBuildTargetToModules", AuthorityPatchMode.NativeConstruction, false, "BuildDispatch"),
+            "AddBuildTargetToModules", AuthorityHookRole.NativeConstruction, false, "BuildDispatch"),
         // Claim release remains part of the live server-owned construction protocol.
         new(AuthorityHookLabels.ConstructionSystemResetDroneTargets, "ConstructionSystem",
-            "ResetDroneTargets", AuthorityPatchMode.NativeConstruction, false, "BuildDispatch"),
+            "ResetDroneTargets", AuthorityHookRole.NativeConstruction, false, "BuildDispatch"),
         // I01: the client-side write surface. Host runs, client refused outside a replica apply.
         // Required=false so the frozen contract (15 required hooks) is untouched: the vanilla bodies
         // must still run on the host and in single-player, so a missing target must not stop the
-        // mode by itself — the audit test pins the classification instead. The enforcement lives in
+        // multiplayer by itself — the audit test pins the classification instead. The enforcement lives in
         // the patches named by each label's owner card.
         new(AuthorityHookLabels.PowerSystemGameTick, "PowerSystem",
-            "GameTick", AuthorityPatchMode.HostRule, false, "I01/A10"),
+            "GameTick", AuthorityHookRole.HostRule, false, "I01/A10"),
         new(AuthorityHookLabels.UIMechaWindowOnReplaceFuelButtonClick, "UIMechaWindow",
-            "OnReplaceFuelButtonClick", AuthorityPatchMode.HostRule, false, "I01/A10"),
+            "OnReplaceFuelButtonClick", AuthorityHookRole.HostRule, false, "I01/A10"),
         new(AuthorityHookLabels.GameHistoryDataUnlockTechFunction, "GameHistoryData",
-            "UnlockTechFunction", AuthorityPatchMode.HostRule, false, "I01/A10"),
+            "UnlockTechFunction", AuthorityHookRole.HostRule, false, "I01/A10"),
         new(AuthorityHookLabels.EnemyDFGroundSystemGameTickLogicUnit, "EnemyDFGroundSystem",
-            "GameTickLogic_Unit", AuthorityPatchMode.HostRule, false, "I01/A12"),
+            "GameTickLogic_Unit", AuthorityHookRole.HostRule, false, "I01/A12"),
         new(AuthorityHookLabels.GameLogicEnemyGroundUnitParallel, "GameLogic",
-            "_enemy_ground_unit_parallel", AuthorityPatchMode.HostRule, false, "I01/A12"),
+            "_enemy_ground_unit_parallel", AuthorityHookRole.HostRule, false, "I01/A12"),
         new(AuthorityHookLabels.EnemyDFHiveSystemGameTickLogic, "EnemyDFHiveSystem",
-            "GameTickLogic", AuthorityPatchMode.HostRule, false, "I01/A13")
+            "GameTickLogic", AuthorityHookRole.HostRule, false, "I01/A13")
     ];
 }

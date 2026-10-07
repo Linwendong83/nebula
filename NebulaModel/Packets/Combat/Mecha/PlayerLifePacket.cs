@@ -4,6 +4,11 @@ namespace NebulaModel.Packets.Combat.Mecha;
 
 public class PlayerLifePacket
 {
+    public long CombatRevision { get; set; }
+    public double CoreEnergyDebitAcknowledged { get; set; }
+    public long LastCombatCommand { get; set; }
+    public int[] DebitItemsAcknowledged { get; set; } = System.Array.Empty<int>();
+    public int[] DebitTotalsAcknowledged { get; set; } = System.Array.Empty<int>();
     public ushort PlayerId { get; set; }
     public PlayerLifeData Life { get; set; }
     public byte[] PlayerSnapshot { get; set; }

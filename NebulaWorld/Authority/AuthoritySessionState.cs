@@ -7,33 +7,22 @@ using NebulaModel.Logger;
 
 namespace NebulaWorld.Authority;
 
-/// <summary>
-/// What this session believes about the room's authority identity.
-/// </summary>
+/// <summary>The confirmed protocol and world identity of a multiplayer session.</summary>
 /// <remarks>
-/// <para>
-/// A03 only needs this to be correct enough to answer the packet gate, so it holds no world state
-/// and starts in <see cref="AuthorityMode.Legacy"/>. That default is what keeps every existing
-/// build unchanged: until A04 sets a real epoch and mode, every authority packet is refused with
-/// <see cref="AuthorityRejectCode.NotAuthorityMode"/>.
-/// </para>
-/// <para>
-/// The epoch is deliberately not generated here. A world epoch must be drawn once per world load and
-/// travel in the welcome message, which is A04's responsibility; inventing one at construction would
-/// make two peers disagree about the world's identity.
-/// </para>
+/// The host generates one epoch per world load. A client confirms the protocol during the
+/// handshake, then adopts that epoch from the first welcome. Construction and reset leave the
+/// session uninitialized so neither a welcome nor world packets can bypass the handshake.
 /// </remarks>
 public sealed class AuthoritySessionState
 {
-    private AuthorityMode mode = AuthorityMode.Legacy;
     private AuthoritySchema schema = AuthoritySchema.None;
     private AuthorityEpoch epoch;
     private ConnectionEpoch connection;
     private ushort localPlayerId;
     private bool isHost;
 
-    /// <summary>Mode the room negotiated. Legacy until a handshake or A04 says otherwise.</summary>
-    public AuthorityMode Mode => mode;
+    /// <summary>True after the handshake confirms the replication protocol.</summary>
+    public bool IsNegotiated => schema == AuthoritySchema.V1;
 
     /// <summary>Schema the room negotiated.</summary>
     public AuthoritySchema Schema => schema;
@@ -50,31 +39,14 @@ public sealed class AuthoritySessionState
     /// <summary>True when this side is the host.</summary>
     public bool IsHost => isHost;
 
-    /// <summary>True once a world epoch exists and the room is in authority mode.</summary>
-    public bool IsActive => mode == AuthorityMode.HostAuthority && epoch.IsValid;
+    /// <summary>True once the protocol is confirmed and a world epoch exists.</summary>
+    public bool IsActive => IsNegotiated && epoch.IsValid;
+
+    /// <summary>Records successful protocol validation by the handshake.</summary>
+    public void ConfirmProtocol() => schema = AuthorityLocalOptions.Schema;
 
     /// <summary>
-    /// Records the mode agreed during the handshake.
-    /// </summary>
-    /// <remarks>
-    /// Only the mode is taken from the peer; schema and capabilities come from the local options
-    /// that the handshake already compared. Copying them from the packet would let a peer talk the
-    /// host into a different protocol.
-    /// </remarks>
-    public void OnPeerNegotiated(AuthorityMode negotiatedMode)
-    {
-        if (negotiatedMode != AuthorityMode.HostAuthority)
-        {
-            Reset();
-            return;
-        }
-
-        mode = AuthorityMode.HostAuthority;
-        schema = AuthorityLocalOptions.Schema;
-    }
-
-    /// <summary>
-    /// Sets the world identity for an authority room. Called by A04 when a world is loaded.
+    /// Sets the host-owned world identity when a world is loaded.
     /// </summary>
     public void BeginAuthorityWorld(AuthorityEpoch worldEpoch, bool isHost)
     {
@@ -83,7 +55,6 @@ public sealed class AuthoritySessionState
             Log.Warn("[authority] refusing to begin an authority world with an invalid epoch");
             return;
         }
-        mode = AuthorityMode.HostAuthority;
         schema = AuthorityLocalOptions.Schema;
         epoch = worldEpoch;
         this.isHost = isHost;
@@ -108,24 +79,22 @@ public sealed class AuthoritySessionState
     /// <para>
     /// It only works while this session has no epoch, so a second welcome cannot silently replace
     /// the world under a running client; after the first one, every message must match the adopted
-    /// epoch through the normal gate. The mode must already be the negotiated authority mode, which
-    /// the handshake set, so a welcome cannot create authority where none was agreed.
+    /// epoch through the normal gate. The protocol must already have been confirmed by the handshake.
     /// </para>
     /// </remarks>
     /// <returns>True when the epoch was adopted, false when this session already has one.</returns>
     public bool TryAdoptWorldEpoch(AuthorityEpoch worldEpoch)
     {
         if (!worldEpoch.IsValid) return false;
-        if (mode != AuthorityMode.HostAuthority) return false;
+        if (!IsNegotiated) return false;
         if (epoch.IsValid) return false;
         epoch = worldEpoch;
         return true;
     }
 
-    /// <summary>Returns to the legacy state. Called when leaving a room or loading a different world.</summary>
+    /// <summary>Clears protocol and world identity when leaving a room or loading a different world.</summary>
     public void Reset()
     {
-        mode = AuthorityMode.Legacy;
         schema = AuthoritySchema.None;
         epoch = default;
         connection = default;
@@ -141,7 +110,7 @@ public sealed class AuthoritySessionState
     /// and so the same gate can be driven directly from tests.
     /// </remarks>
     public AuthoritySessionContext Context =>
-        new(mode, schema, epoch, connection, localPlayerId, isHost);
+        new(schema, epoch, connection, localPlayerId, isHost);
 
     /// <summary>
     /// The context the gate must use for a message that arrived on one connection.
@@ -168,7 +137,7 @@ public sealed class AuthoritySessionState
     /// </remarks>
     public AuthoritySessionContext ContextForConnection(ushort connectionPlayerId, ConnectionEpoch connectionEpoch) =>
         isHost
-            ? new AuthoritySessionContext(mode, schema, epoch, connectionEpoch, connectionPlayerId, true)
+            ? new AuthoritySessionContext(schema, epoch, connectionEpoch, connectionPlayerId, true)
             : Context;
 
     /// <summary>

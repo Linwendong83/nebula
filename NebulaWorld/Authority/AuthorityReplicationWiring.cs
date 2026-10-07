@@ -81,6 +81,7 @@ public sealed class AuthorityReplicaApplier : IReplicaMessageApplier
             AuthoritySnapshotChunkPacket chunk => ApplySnapshotChunk(chunk, message.Scope),
             AuthoritySnapshotCommitPacket commit => ApplySnapshotCommit(commit, message.Scope),
             AuthorityScopeDigestPacket digest => ApplyScopeDigest(digest, message.Scope),
+            AuthorityPlayerCombatStatePacket combat => Multiplayer.Session.CombatAuthority.ApplyState(combat),
             _ => false
         };
         if (!applied)

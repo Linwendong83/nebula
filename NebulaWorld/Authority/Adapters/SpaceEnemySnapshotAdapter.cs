@@ -163,13 +163,15 @@ public sealed class SpaceEnemySnapshotAdapter : IHostWorldView
         var dockIndex = ResolveDockIndex(sector, in enemy);
         var builderIndex = ResolveBuilderIndex(sector, in enemy);
         var level = ResolveLevel(sector, in enemy, kind);
+        var animation = sector.enemyAnimPool[enemyId];
         state = new SpaceEnemyState(kind, hasCombatStat, enemy.dynamic,
             enemy.protoId, enemy.modelIndex, enemy.owner, enemy.port, enemy.stateFlags,
             enemy.astroId, enemy.originAstroId, dockIndex, builderIndex, level,
             enemy.pos.x, enemy.pos.y, enemy.pos.z,
             enemy.rot.x, enemy.rot.y, enemy.rot.z, enemy.rot.w,
             enemy.dynamic ? enemy.vel.x : 0f, enemy.dynamic ? enemy.vel.y : 0f, enemy.dynamic ? enemy.vel.z : 0f,
-            hp, hpMax, hpRecover, hpIncoming);
+            hp, hpMax, hpRecover, hpIncoming,
+            animation.time, animation.prepare_length, animation.working_length, animation.state, animation.power);
         return true;
     }
 

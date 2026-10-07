@@ -121,15 +121,6 @@ internal class AuthorityWelcomeProcessor : PacketProcessor<AuthorityWelcomePacke
             return;
         }
 
-        // The welcome must agree with what the handshake negotiated; a host that changed its mind
-        // mid-session is a different room, not a downgrade to accept.
-        var mode = (AuthorityMode)packet.Mode;
-        if (mode != identity.Mode)
-        {
-            Log.Warn($"[authority] welcome mode {mode} does not match negotiated {identity.Mode}");
-            return;
-        }
-
         // A05: the guard policy is verified before this client adopts the world. Adopting the epoch
         // first would leave the session half-entered — a world identity with no runtime behind it —
         // which is the state DESIGN 1.8 forbids. A failed check refuses the welcome outright, so the
@@ -169,7 +160,7 @@ internal class AuthorityWelcomeProcessor : PacketProcessor<AuthorityWelcomePacke
                 () => Multiplayer.Session.Authority.Context.Epoch,
                 control => Multiplayer.Session.Network.SendPacket(control));
         }
-        Log.Info($"[authority] welcome accepted: epoch={worldEpoch} mode={mode} " +
+        Log.Info($"[authority] welcome accepted: epoch={worldEpoch} " +
                  $"capabilities={(AuthorityCapability)packet.Capabilities} tick={packet.WelcomeHostTick}");
     }
 }

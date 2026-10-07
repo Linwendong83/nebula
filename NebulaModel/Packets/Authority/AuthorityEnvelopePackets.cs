@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using NebulaModel.Authority;
 
@@ -48,8 +48,8 @@ public abstract class AuthorityEnvelopePacket
     /// <summary>
     /// Subscription epoch a per-scope stream packet belongs to (DESIGN 4.2). The families that
     /// ride the stream set it; the replica refuses any packet whose value is not its subscription's.
-    /// Snapshot control packets and the welcome leave it at zero — their conversation is complete
-    /// per message and does not share the stream's sequence space.
+    /// Snapshot conversations and scoped streams share this one property. Unscoped packets
+    /// such as the welcome leave it at zero.
     /// </summary>
     public long SubscriptionEpoch { get; set; }
 
@@ -112,15 +112,12 @@ public abstract class AuthorityEnvelopePacket
 /// </summary>
 /// <remarks>
 /// The welcome is what turns a client from "connected" into "a peer of this authority session": it
-/// carries the mode, schema, capability list, world epoch and the connection epoch the client must
+/// carries the schema, capability list, world epoch and the connection epoch the client must
 /// use on its commands.
 /// </remarks>
 public class AuthorityWelcomePacket : AuthorityEnvelopePacket
 {
     public override AuthorityFamily Family => AuthorityFamily.Welcome;
-
-    /// <summary>Mode the room runs. Must equal what the client negotiated.</summary>
-    public byte Mode { get; set; }
 
     /// <summary>Capabilities the host advertises.</summary>
     public uint Capabilities { get; set; }
@@ -128,10 +125,9 @@ public class AuthorityWelcomePacket : AuthorityEnvelopePacket
     /// <summary>Host tick at the moment of the welcome, so a client can anchor its clock.</summary>
     public long WelcomeHostTick { get; set; }
 
-    public static AuthorityWelcomePacket Create(in AuthorityEnvelopeHeader header, AuthorityMode mode,
-        AuthorityCapability capabilities)
+    public static AuthorityWelcomePacket Create(in AuthorityEnvelopeHeader header, AuthorityCapability capabilities)
     {
-        var packet = new AuthorityWelcomePacket { Mode = (byte)mode, Capabilities = (uint)capabilities, WelcomeHostTick = header.HostTick };
+        var packet = new AuthorityWelcomePacket { Capabilities = (uint)capabilities, WelcomeHostTick = header.HostTick };
         packet.CopyHeaderFrom(header);
         return packet;
     }
@@ -142,6 +138,33 @@ public class AuthorityWelcomePacket : AuthorityEnvelopePacket
 /// The command carries its dedup key, its target, and an opaque versioned payload. It never carries
 /// a trusted final damage, balance or kill result; those are the host's to compute.
 /// </remarks>
+public class AuthorityPlayerCombatStatePacket : AuthorityEnvelopePacket
+{
+    public void SetHeader(in AuthorityEnvelopeHeader header) => CopyHeaderFrom(header);
+    public override AuthorityFamily Family => AuthorityFamily.PlayerCombatState;
+    public ushort PlayerId { get; set; }
+    public long LastCommandSequence { get; set; }
+    public long CombatRevision { get; set; }
+    public long PersonalRevision { get; set; }
+    public ulong ActorConnection { get; set; }
+    public double CoreEnergyDebitTotal { get; set; }
+    public bool IsAlive { get; set; }
+    public int DeathCount { get; set; }
+    public int InvincibleTicks { get; set; }
+    public int HpRecoverCD { get; set; }
+    public int ShieldRecoverCD { get; set; }
+    public byte[] CombatData { get; set; }
+    public int[] DebitItems { get; set; } = System.Array.Empty<int>();
+    public int[] DebitTotals { get; set; } = System.Array.Empty<int>();
+    public override int DeclaredPayloadLength => (CombatData?.Length ?? 0) + (DebitItems?.Length ?? 0) * 8;
+    protected override void CloneMutableBuffers()
+    {
+        if (CombatData != null) CombatData = (byte[])CombatData.Clone();
+        if (DebitItems != null) DebitItems = (int[])DebitItems.Clone();
+        if (DebitTotals != null) DebitTotals = (int[])DebitTotals.Clone();
+    }
+}
+
 public class AuthorityCommandPacket : AuthorityEnvelopePacket
 {
     public override AuthorityFamily Family => AuthorityFamily.Command;
@@ -237,7 +260,6 @@ public class AuthoritySnapshotBeginPacket : AuthorityEnvelopePacket
     public long BaselineId { get; set; }
 
     /// <summary>Subscription epoch the chunks belong to; a resubscribe invalidates the old one.</summary>
-    public long SubscriptionEpoch { get; set; }
 
     /// <summary>Stream sequence the baseline covers; the cutoff for tombstone reclamation.</summary>
     public long CutoffSequence { get; set; }
@@ -294,7 +316,6 @@ public class AuthoritySnapshotChunkPacket : AuthorityEnvelopePacket
     public long BaselineId { get; set; }
 
     /// <summary>Subscription epoch the baseline was produced for.</summary>
-    public long SubscriptionEpoch { get; set; }
 
     /// <summary>Zero-based chunk index.</summary>
     public int ChunkIndex { get; set; }
@@ -344,7 +365,6 @@ public class AuthoritySnapshotCommitPacket : AuthorityEnvelopePacket
     public long BaselineId { get; set; }
 
     /// <summary>Subscription epoch the baseline was produced for.</summary>
-    public long SubscriptionEpoch { get; set; }
 
     public int ChunkCount { get; set; }
 
@@ -558,7 +578,6 @@ public class AuthorityScopeControlPacket : AuthorityEnvelopePacket
     public byte Reason { get; set; }
 
     /// <summary>The client's current subscription epoch for the scope, or 0 when it has none.</summary>
-    public long SubscriptionEpoch { get; set; }
 
     /// <summary>The client's last applied stream sequence, for host diagnostics only.</summary>
     public long LastAppliedSequence { get; set; }
@@ -610,7 +629,6 @@ public class AuthorityScopeDigestPacket : AuthorityEnvelopePacket
     public int Scope { get; set; }
 
     /// <summary>Subscription epoch the digest was stamped for; a superseded subscription ignores it.</summary>
-    public long SubscriptionEpoch { get; set; }
 
     /// <summary>Baseline the digested membership belongs to; 0 for a digest-only observation.</summary>
     public long BaselineId { get; set; }

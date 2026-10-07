@@ -16,6 +16,13 @@ internal class StatisticsExtraDataProcessor : PacketProcessor<StatisticsExtraDat
 {
     protected override void ProcessPacket(StatisticsExtraDataPacket packet, NebulaConnection conn)
     {
+        if (IsHost || packet.BinaryData == null) return;
+        Multiplayer.Session.Statistics.ExtraDataImporter = ImportPacket;
+        Multiplayer.Session.Statistics.ReceiveExtraData(packet);
+    }
+
+    private static void ImportPacket(StatisticsExtraDataPacket packet)
+    {
         using var reader = new BinaryUtils.Reader(packet.BinaryData);
         ImportExtension(reader.BinaryReader, packet.FactoryCount);
     }
@@ -26,7 +33,7 @@ internal class StatisticsExtraDataProcessor : PacketProcessor<StatisticsExtraDat
         for (var i = 0; i < factoryCount; i++)
         {
             var factoryIndex = reader.ReadInt32();
-            if (factoryIndex >= factoryStatPool.Length) return; // Abort if factoryProductionStat hasn't imported yet
+            if (factoryIndex < 0 || factoryIndex >= factoryStatPool.Length) throw new InvalidDataException("Unknown extra statistics factory.");
             var factoryProductionStat = factoryStatPool[factoryIndex];
             ImportProductStatExtension(reader, factoryProductionStat);
         }
@@ -46,6 +53,7 @@ internal class StatisticsExtraDataProcessor : PacketProcessor<StatisticsExtraDat
             var exportStorageCount = reader.ReadInt64();
 
             if (factoryProductionStat == null) continue;
+            if (itemId < 0 || itemId >= factoryProductionStat.productIndices.Length) continue;
             var index = factoryProductionStat.productIndices[itemId];
             if (index == 0) continue;
 

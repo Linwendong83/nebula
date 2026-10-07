@@ -79,6 +79,12 @@ public interface IReplicaMirrorObserver
     void OnMemberRemoved(ScopeKey scope, in ObjectKey key);
 }
 
+/// <summary>Game adapters must have their backing pool before a snapshot can be acknowledged.</summary>
+public interface IReplicaBaselineReadiness
+{
+    bool IsReadyForBaseline(ScopeKey scope);
+}
+
 /// <summary>
 /// Carries the replica's scope-control requests to the host (A20): resync requests raised by the
 /// recovery rules, and the subscribe/unsubscribe the session issues when the player moves.
@@ -126,7 +132,9 @@ public interface IScopeControlSink
 /// </remarks>
 public sealed class ClientWorldReplica
 {
+    private readonly Dictionary<ScopeKey, FrozenScopeSnapshot> pendingInstalls = [];
     private readonly Dictionary<ObjectKey, ReplicaObjectMirror> mirrors = new();
+    private readonly Dictionary<(PoolKind Kind, int Scope, int Slot), ObjectKey> currentSlots = new();
     private readonly HashSet<ScopeKey> needsResync = [];
     private readonly Dictionary<ScopeKey, Queue<PendingScopeDigest>> pendingDigests = new();
     private readonly Dictionary<ScopeKey, ScopeDigestState> digestSummaries = new();
@@ -192,6 +200,15 @@ public sealed class ClientWorldReplica
 
     /// <summary>The canonical mirror, keyed by host object key.</summary>
     public IReadOnlyDictionary<ObjectKey, ReplicaObjectMirror> Mirrors => mirrors;
+
+    public bool TryFindKey(PoolKind kind, int scope, int nativeId, out ObjectKey key)
+    {
+        key = default;
+        return Versions.TryGetScope(new ScopeKey(kind, scope), out var state) &&
+            (state.Phase == SubscriptionPhase.Live || state.Phase == SubscriptionPhase.CatchingUp) &&
+            !needsResync.Contains(new ScopeKey(kind, scope)) && currentSlots.TryGetValue((kind, scope, nativeId), out key) &&
+            key.IsValid && !state.IsTombstoned(key);
+    }
 
     /// <summary>Scopes whose stream broke or lost a dependency. They receive no further trust.</summary>
     public IReadOnlyCollection<ScopeKey> ScopesNeedingResync => needsResync;
@@ -310,6 +327,9 @@ public sealed class ClientWorldReplica
     /// </summary>
     public void Unsubscribe(ScopeKey scope)
     {
+        pendingInstalls.Remove(scope);
+        foreach (var mirror in mirrors.Values)
+            if (mirror.Scope.Equals(scope)) MirrorObserver?.OnMemberRemoved(scope, mirror.Key);
         Snapshots.Abandon(scope);
         pendingDigests.Remove(scope);
         if (Versions.TryGetScope(scope, out var state)) state.EndSubscription();
@@ -571,8 +591,41 @@ public sealed class ClientWorldReplica
             RequestResync(scope, ScopeRecoveryReason.BaselineRefused);
             return false;
         }
+        if (MirrorObserver is IReplicaBaselineReadiness ready && !ready.IsReadyForBaseline(scope))
+        {
+            pendingInstalls[scope] = snapshot;
+            state.SetPhase(SubscriptionPhase.Installing);
+            return true;
+        }
         InstallBaseline(scope, state, snapshot);
         return true;
+    }
+
+    public void RetryPendingBaselines(Action<ScopeKey, Action> apply)
+    {
+        foreach (var scope in new List<ScopeKey>(pendingInstalls.Keys))
+        {
+            var snapshot = pendingInstalls[scope];
+            if (!Versions.TryGetScope(scope, out var state) ||
+                state.Phase != SubscriptionPhase.Installing || state.SubscriptionEpoch != snapshot.SubscriptionEpoch)
+            {
+                pendingInstalls.Remove(scope);
+                continue;
+            }
+            if (MirrorObserver is IReplicaBaselineReadiness ready && !ready.IsReadyForBaseline(scope)) continue;
+            apply(scope, () => InstallBaseline(scope, state, snapshot));
+            pendingInstalls.Remove(scope);
+        }
+    }
+
+    public void ReapplyScope(ScopeKey scope)
+    {
+        if (!Versions.TryGetScope(scope, out var state) ||
+            (state.Phase != SubscriptionPhase.Live && state.Phase != SubscriptionPhase.CatchingUp)) return;
+        var members = new List<SnapshotMemberRecord>();
+        foreach (var mirror in mirrors.Values)
+            if (mirror.Scope.Equals(scope)) members.Add(new SnapshotMemberRecord(mirror.Key, mirror.Revision, mirror.CanonicalState));
+        MirrorObserver?.OnBaselineInstalled(scope, members);
     }
 
     /// <summary>
@@ -617,12 +670,15 @@ public sealed class ClientWorldReplica
             foreach (var key in doomed)
             {
                 mirrors.Remove(key);
+                var slot = (key.Kind, key.Scope, key.NativeId);
+                if (currentSlots.TryGetValue(slot, out var owner) && owner.Equals(key)) currentSlots.Remove(slot);
             }
         }
 
         foreach (var member in snapshot.Members)
         {
             mirrors.TryGetValue(member.Key, out var existing);
+            currentSlots[(member.Key.Kind, member.Key.Scope, member.Key.NativeId)] = member.Key;
             var revision = state.TryGetVersion(member.Key, out var version) ? version.Revision : member.Revision;
             var mirror = new ReplicaObjectMirror(scope, member.Key, revision,
                 member.State ?? existing?.CanonicalState);
@@ -642,7 +698,13 @@ public sealed class ClientWorldReplica
         // The adapter reconciles the whole scope against the new membership in one call — the
         // atomic replacement it mirrors, including the keys the baseline dropped — before the ack
         // leaves, so the host never learns "installed" from a half-reconciled world.
-        MirrorObserver?.OnBaselineInstalled(scope, snapshot.Members);
+        try { MirrorObserver?.OnBaselineInstalled(scope, snapshot.Members); }
+        catch
+        {
+            state.SetPhase(SubscriptionPhase.Installing);
+            pendingInstalls[scope] = snapshot;
+            throw;
+        }
 
         var ack = AuthoritySnapshotAckPacket.Create(
             new AuthorityEnvelopeHeader(AuthoritySchema.V1, AuthorityFamily.SnapshotAck, Epoch,
@@ -698,10 +760,13 @@ public sealed class ClientWorldReplica
             {
                 var previousState = mirrors.TryGetValue(record.Key, out var existing) ? existing.CanonicalState : null;
                 mirrors[record.Key] = new ReplicaObjectMirror(scope, record.Key, record.Revision, previousState);
+                currentSlots[(record.Key.Kind, record.Key.Scope, record.Key.NativeId)] = record.Key;
             }
             else if (record.Op == AuthorityLifecycleOp.Despawn && result == ReplicaApplyResult.Applied)
             {
                 mirrors.Remove(record.Key);
+                var slot = (record.Key.Kind, record.Key.Scope, record.Key.NativeId);
+                if (currentSlots.TryGetValue(slot, out var owner) && owner.Equals(record.Key)) currentSlots.Remove(slot);
                 MirrorObserver?.OnMemberRemoved(scope, record.Key);
             }
         }
@@ -784,6 +849,8 @@ public sealed class ClientWorldReplica
     public void Reset()
     {
         mirrors.Clear();
+        currentSlots.Clear();
+        pendingInstalls.Clear();
         needsResync.Clear();
         pendingDigests.Clear();
         digestSummaries.Clear();

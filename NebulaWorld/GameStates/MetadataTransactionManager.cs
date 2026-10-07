@@ -38,6 +38,9 @@ public sealed class MetadataTransactionManager : IDisposable
     public bool SuppressVanillaDebit => ApplyingWorld || ApplyingPersonal;
     public bool OwnsCommittedOperation(string id, string owner) => serverTransactions.TryGetValue(id ?? "", out var transaction) &&
         transaction.Owner == owner && transaction.State is MetadataTransactionState.Committed or MetadataTransactionState.Applied;
+    public bool OwnsCommittedRespawn(string id, string owner, int deathCount) =>
+        serverTransactions.TryGetValue(id ?? "", out var tx) && tx.Owner == owner && tx.Operation == MetadataOperation.Respawn &&
+        tx.Stamp == deathCount && tx.State is MetadataTransactionState.Committed or MetadataTransactionState.Applied;
 
     public void BeginDropOperation(string id)
     {
@@ -214,8 +217,8 @@ public sealed class MetadataTransactionManager : IDisposable
                 var restored = ReadPlayer(tx.AfterPlayer);
                 if (restored.Life.Revision >= player.Life.Revision)
                 {
-                    player.Mecha = restored.Mecha;
-                    player.Life = restored.Life;
+                    if (player.CombatAuthoritative) player.TryApplyPersonalSnapshot(restored);
+                    else { player.Mecha = restored.Mecha; player.Life = restored.Life; }
                 }
             }
             tx.State = MetadataTransactionState.Applied;

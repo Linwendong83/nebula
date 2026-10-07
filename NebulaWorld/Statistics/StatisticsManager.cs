@@ -35,6 +35,16 @@ public class StatisticsManager : IDisposable
     public int FactoryCount { get; set; }
     public int TechHashedFor10Frames { get; set; }
     public bool HasActiveAutomaticResearch { get; set; }
+    public bool HasSnapshot { get; private set; }
+    public Action<StatisticsExtraDataPacket> ExtraDataImporter { get; set; }
+    private StatisticsExtraDataPacket pendingExtra;
+    public void BeginStatisticsRequest() { HasSnapshot = false; pendingExtra = null; }
+    public void ReceiveExtraData(StatisticsExtraDataPacket packet)
+    {
+        if (!HasSnapshot)
+            pendingExtra = new StatisticsExtraDataPacket(packet.FactoryCount, (byte[])packet.BinaryData.Clone());
+        else ExtraDataImporter?.Invoke(packet);
+    }
 
     public StatisticsManager()
     {
@@ -177,7 +187,7 @@ public class StatisticsManager : IDisposable
     {
         using (GetRequestors(out var requestors))
         {
-            requestors.Add(playerId, nebulaConnection);
+            requestors[playerId] = nebulaConnection;
         }
 
         if (IsStatisticsNeeded)
@@ -229,6 +239,9 @@ public class StatisticsManager : IDisposable
     {
         var Stats = GameMain.statistics;
         FactoryCount = br.ReadInt32();
+        if (FactoryCount < 0 || FactoryCount > GameMain.galaxy.starCount * 100) throw new InvalidDataException("Invalid statistics factory count.");
+        factoryIndexMap.Clear();
+        if (Stats.production.factoryStatPool.Length < FactoryCount) Array.Resize(ref Stats.production.factoryStatPool, FactoryCount);
         if (planetDataMap.Length < FactoryCount)
         {
             Array.Resize(ref planetDataMap, FactoryCount);
@@ -238,10 +251,7 @@ public class StatisticsManager : IDisposable
         for (var i = 0; i < FactoryCount; i++)
         {
             var pd = GameMain.galaxy.PlanetById(br.ReadInt32());
-            if (planetDataMap[i] != null && planetDataMap[i] == pd)
-            {
-                continue;
-            }
+            if (pd == null) throw new InvalidDataException("Unknown statistics planet.");
             planetDataMap[i] = pd;
             factoryIndexMap[pd.id] = i;
         }
@@ -269,12 +279,14 @@ public class StatisticsManager : IDisposable
         }
 
         //Refresh the view
+        HasSnapshot = true;
+        if (pendingExtra != null) { ExtraDataImporter?.Invoke(pendingExtra); pendingExtra = null; }
         UIRoot.instance.uiGame.statWindow.RefreshAll();
     }
 
     public PlanetData GetPlanetData(int factoryIndex)
     {
-        return planetDataMap[factoryIndex];
+        return factoryIndex >= 0 && factoryIndex < FactoryCount ? planetDataMap[factoryIndex] : null;
     }
 
     public int GetFactoryIndex(PlanetData planet)

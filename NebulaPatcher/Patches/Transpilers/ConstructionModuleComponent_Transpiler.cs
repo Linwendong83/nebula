@@ -52,7 +52,6 @@ internal class ConstructionModuleComponent_Transpiler
                     ".itemRequired";
         if (!AuthorityTranspilerGuard.VerifyCount(label, codes, 1, exact: false, matches))
         {
-            // The method is left untouched; the recorded miss makes the new mode refuse to load.
             return codes;
         }
 

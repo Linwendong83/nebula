@@ -1,27 +1,7 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using NebulaWorld;
 
 namespace NebulaPatcher.Patches.Dynamic;
-
-[HarmonyPatch(typeof(PlanetFactory), nameof(PlanetFactory.AddCraftData))]
-internal static class GroundCraftVisualGeneration_Patch
-{
-    [HarmonyPostfix]
-    public static void Postfix(PlanetFactory __instance, int __result)
-    {
-        if (Multiplayer.IsActive) Multiplayer.Session.BattleVisuals.CraftCreated(__instance.planetId, __result);
-    }
-}
-
-[HarmonyPatch(typeof(SpaceSector), nameof(SpaceSector.AddCraftData))]
-internal static class SpaceCraftVisualGeneration_Patch
-{
-    [HarmonyPostfix]
-    public static void Postfix(int __result)
-    {
-        if (Multiplayer.IsActive) Multiplayer.Session.BattleVisuals.CraftCreated(0, __result);
-    }
-}
 
 [HarmonyPatch(typeof(SkillSystem))]
 internal static class AuthoritativeAttackRendering_Patch

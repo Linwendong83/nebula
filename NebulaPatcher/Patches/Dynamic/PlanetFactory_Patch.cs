@@ -810,18 +810,7 @@ internal class PlanetFactory_patch
             return Multiplayer.Session.Factories.IsIncomingRequest.Value;
         }
 
-        // A19: in host authority mode the entity-death rule runs once on the host and the replica
-        // lifecycle carries the removal; the legacy KillEntityRequest replay would ask every client
-        // to run a second KillEntityFinally. Legacy rooms keep the relay.
-        if (AuthorityLocalOptions.Mode == AuthorityMode.HostAuthority &&
-            NebulaWorld.Authority.HostDeathPolicy.MustSuppressLegacyDeathBroadcast(isHostAuthority: true))
-        {
-            return true;
-        }
-
-        var packet = new KillEntityRequest(__instance.planetId, objId, spawnPrebuild);
-        var starId = __instance.planet.star.id;
-        Multiplayer.Session.Server.SendPacketToStar(packet, starId);
+        // Host death transactions publish removals through the replica lifecycle.
         return true;
     }
 

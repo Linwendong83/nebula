@@ -152,6 +152,11 @@ public class Client : IClient
 
     public void Stop()
     {
+        if (clientSocket?.IsAlive == true && Multiplayer.Session?.IsGameLoaded == true && GameMain.mainPlayer != null)
+        {
+            Multiplayer.Session.Life.Publish();
+            serverConnection?.FlushSendQueue();
+        }
         clientSocket?.Close((ushort)DisconnectionReason.ClientRequestedDisconnect, "Player left the game");
 
         try

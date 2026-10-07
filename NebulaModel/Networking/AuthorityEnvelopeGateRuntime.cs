@@ -66,6 +66,11 @@ public static class AuthorityEnvelopeGateRuntime
                 AuthoritySnapshotBeginPacket begin => ValidateSnapshotBegin(begin),
                 AuthoritySnapshotChunkPacket chunk => ValidateSnapshotChunk(chunk),
                 AuthoritySnapshotCommitPacket commit => ValidateSnapshotCommit(commit),
+                AuthorityPlayerCombatStatePacket combat => combat.PlayerId == 0 || combat.ActorConnection == 0 || combat.PersonalRevision < 0 || combat.CombatRevision <= 0 ||
+                    combat.CombatData == null || combat.CombatData.Length == 0 || double.IsNaN(combat.CoreEnergyDebitTotal) ||
+                    double.IsInfinity(combat.CoreEnergyDebitTotal) || combat.CoreEnergyDebitTotal < 0 ||
+                    combat.DebitItems == null || combat.DebitTotals == null || combat.DebitItems.Length != combat.DebitTotals.Length || combat.DebitItems.Length > 512
+                    ? new AuthorityReject(AuthorityRejectCode.MalformedEnvelope, "player combat state") : AuthorityReject.Accepted,
                 _ => AuthorityReject.Accepted
             };
         }

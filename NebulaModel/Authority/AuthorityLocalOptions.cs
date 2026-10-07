@@ -2,36 +2,22 @@
 
 using NebulaModel.Networking;
 
-/// <summary>
-/// What this installation offers and requires in a room (DESIGN 4.2).
-/// </summary>
-/// <remarks>
-/// <para>
-/// The installation always runs the host-authority mode in multiplayer rooms: there is no
-/// development flag and no legacy room. Single-player still runs vanilla through the guard's
-/// no-authority-world path, which is why the guard keeps its session-inactive allowance.
-/// </para>
-/// <para>
-/// The values are process-wide on purpose. A client may not choose per-room whether the host
-/// arbitrates damage (DESIGN 5.2), so there is no per-connection override to get wrong.
-/// </para>
-/// </remarks>
+/// <summary>Process-wide replication schema and capability requirements.</summary>
 public static class AuthorityLocalOptions
 {
     private static AuthorityCapability requiredCapabilities = AuthorityCapability.None;
-    private static AuthorityCapability offeredCapabilities = AuthorityCapability.All;
+    public const AuthorityCapability ImplementedCapabilities = AuthorityCapability.Combat |
+        AuthorityCapability.Snapshot | AuthorityCapability.Effects;
+    private static AuthorityCapability offeredCapabilities = ImplementedCapabilities;
 
-    /// <summary>Mode this installation joins or hosts with. Always host-authority; no legacy rooms.</summary>
-    public static AuthorityMode Mode => AuthorityMode.HostAuthority;
-
-    /// <summary>Authority DTO schema. Always V1 while host-authority is the only mode.</summary>
+    /// <summary>Replication DTO schema supported by this installation.</summary>
     public static AuthoritySchema Schema => AuthoritySchema.V1;
 
-    /// <summary>Capabilities the host advertises when running authority mode.</summary>
+    /// <summary>Capabilities the host advertises for world replication.</summary>
     public static AuthorityCapability OfferedCapabilities
     {
         get => offeredCapabilities;
-        set => offeredCapabilities = value & AuthorityCapability.All;
+        set => offeredCapabilities = value & ImplementedCapabilities;
     }
 
     /// <summary>Capabilities a client needs the host to provide. Must be a subset of the host's offer.</summary>
@@ -42,12 +28,12 @@ public static class AuthorityLocalOptions
     }
 
     /// <summary>The declaration string this installation sends in its handshake.</summary>
-    public static string Declaration => AuthorityHandshake.Encode(Mode, Schema, requiredCapabilities);
+    public static string Declaration => AuthorityHandshake.Encode(Schema, requiredCapabilities);
 
     /// <summary>Restores the default authority capabilities. Used by tests and by leaving a room.</summary>
     public static void ResetToDefaults()
     {
         requiredCapabilities = AuthorityCapability.None;
-        offeredCapabilities = AuthorityCapability.All;
+        offeredCapabilities = ImplementedCapabilities;
     }
 }

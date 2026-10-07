@@ -37,18 +37,7 @@ public class HandshakeResponseProcessor : PacketProcessor<HandshakeResponse>
         ((LocalPlayer)Multiplayer.Session.LocalPlayer).SetPlayerData(packet.LocalPlayerData, packet.IsNewPlayer);
         Multiplayer.Session.Goals.SetExistingPlayer(!packet.IsNewPlayer);
 
-        // The host states the mode it confirmed. A client that negotiated authority mode must not
-        // continue against a host that answered with a different one, and an unstated mode is a
-        // protocol error rather than an implicit legacy room.
-        var hostMode = (AuthorityMode)packet.AuthorityMode;
-        if (hostMode != AuthorityLocalOptions.Mode)
-        {
-            Log.Warn($"[authority] host answered mode {hostMode} but this peer negotiated " +
-                     $"{AuthorityLocalOptions.Mode}; abandoning the join");
-            Multiplayer.Session.Client?.Stop();
-            return;
-        }
-        Multiplayer.Session.Authority.OnPeerNegotiated(hostMode);
+        Multiplayer.Session.Authority.ConfirmProtocol();
 
         Multiplayer.Session.IsInLobby = false;
         Multiplayer.ShouldReturnToJoinMenu = false;

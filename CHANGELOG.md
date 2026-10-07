@@ -1,5 +1,35 @@
 ## Changelog
 
+0.9.22-dev.7:
+- Refine host-authoritative mecha combat, fleet commands, damage and combat resource consumption
+- Simplify authority replication and reduce snapshot processing and diagnostic logging overhead
+- Consolidate multiplayer persistence into `.server` saves, preserve legacy authority data and validate world identity when loading saves
+- Fix cross-planet production statistics and research updates when no technology is selected
+- Fixed [#8](https://github.com/Linwendong83/nebula/issues/8)
+- Fixed [#9](https://github.com/Linwendong83/nebula/issues/9)
+- Fixed [#10](https://github.com/Linwendong83/nebula/issues/10)
+- Fixed [#11](https://github.com/Linwendong83/nebula/issues/11)
+- Fixed [#12](https://github.com/Linwendong83/nebula/issues/12)
+- Fixed [#13](https://github.com/Linwendong83/nebula/issues/13)
+- Fixed [#14](https://github.com/Linwendong83/nebula/issues/14)
+- Fixed [#15](https://github.com/Linwendong83/nebula/issues/15)
+- Fixed [#16](https://github.com/Linwendong83/nebula/issues/16)
+<br>
+
+- 完善由主机统一结算的机甲战斗、舰队指令、伤害与战斗资源消耗同步
+- 精简权威同步架构，降低快照处理与诊断日志开销
+- 多人数据统一保存到 `.server` 存档，保留旧版权威数据，并在读档时校验世界身份
+- 修复跨星球生产统计，以及未选择研究科技时的状态同步
+- 修复了 [#8](https://github.com/Linwendong83/nebula/issues/8)
+- 修复了 [#9](https://github.com/Linwendong83/nebula/issues/9)
+- 修复了 [#10](https://github.com/Linwendong83/nebula/issues/10)
+- 修复了 [#11](https://github.com/Linwendong83/nebula/issues/11)
+- 修复了 [#12](https://github.com/Linwendong83/nebula/issues/12)
+- 修复了 [#13](https://github.com/Linwendong83/nebula/issues/13)
+- 修复了 [#14](https://github.com/Linwendong83/nebula/issues/14)
+- 修复了 [#15](https://github.com/Linwendong83/nebula/issues/15)
+- 修复了 [#16](https://github.com/Linwendong83/nebula/issues/16)
+
 0.9.22-dev.6:
 - Compatible with Dyson Sphere Program 0.10.35.29104
 - New host-authoritative world replication (Authority) architecture: Dark Fog combat, factory combat, construction dispatch, drones and resource accounting are simulated by the host alone; clients subscribe to scoped, versioned snapshots instead of stitching the world together from per-entity packets

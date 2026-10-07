@@ -16,6 +16,7 @@ internal class StatisticsDataProcessor : PacketProcessor<StatisticsDataPacket>
 {
     protected override void ProcessPacket(StatisticsDataPacket packet, NebulaConnection conn)
     {
+        if (IsHost) return;
         using var reader = new BinaryUtils.Reader(packet.StatisticsBinaryData);
         Multiplayer.Session.Statistics.ImportAllData(reader.BinaryReader);
     }

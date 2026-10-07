@@ -15,6 +15,16 @@ namespace NebulaPatcher.Patches.Dynamic;
 internal class EnemyDFHiveSystem_Patch
 {
     [HarmonyPrefix]
+    [HarmonyPatch(nameof(EnemyDFHiveSystem.isAlive), MethodType.Getter)]
+    public static bool IsAlive_Prefix(EnemyDFHiveSystem __instance, ref bool __result)
+    {
+        if (!Multiplayer.IsActive || Multiplayer.Session.IsServer) return true;
+        var facts = Multiplayer.Session.AuthorityRuntime.DarkFogReplica;
+        if (facts == null || !facts.HiveAlive.TryGetValue(__instance.hiveAstroId, out var alive)) return true;
+        __result = alive;
+        return false;
+    }
+    [HarmonyPrefix]
     [HarmonyPatch(nameof(EnemyDFHiveSystem.ActiveAllUnit))]
     public static bool ActiveAllUnit_Prefix(EnemyDFHiveSystem __instance, long gameTick)
     {
@@ -106,7 +116,7 @@ internal class EnemyDFHiveSystem_Patch
     [HarmonyPatch(nameof(EnemyDFHiveSystem.ExecuteDeferredEnemyChange))]
     public static bool ExecuteDeferredEnemyChange_Prefix(EnemyDFHiveSystem __instance)
     {
-        if (!Multiplayer.IsActive) return true;
+        if (!Multiplayer.IsActive || Multiplayer.Session.IsServer) return true;
         if (Multiplayer.Session.IsClient)
         {
             __instance._add_relay_list?.Clear();
@@ -176,7 +186,7 @@ internal class EnemyDFHiveSystem_Patch
     [HarmonyPatch(nameof(EnemyDFHiveSystem.ExecuteDeferredUnitFormation))]
     public static bool ExecuteDeferredUnitFormation_Prefix(EnemyDFHiveSystem __instance)
     {
-        if (!Multiplayer.IsActive) return true;
+        if (!Multiplayer.IsActive || Multiplayer.Session.IsServer) return true;
         if (Multiplayer.Session.IsClient)
         {
             __instance._initiate_unit_list?.Clear();
@@ -215,16 +225,44 @@ internal class EnemyDFHiveSystem_Patch
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(EnemyDFHiveSystem.GameTickLogic))]
-    public static bool GameTickLogic_Prefix(EnemyDFHiveSystem __instance, long gameTick)
+    public static bool GameTickLogic_Prefix(EnemyDFHiveSystem __instance, long gameTick, AstroData[] astros)
     {
-        // I01: migrated hive AI. Host runs the real AI; a client outside a replica apply must not
-        // run it at all. Single-player runs vanilla (the guard allows when not in authority mode).
         if (!AuthorityRuleGuard.AllowHostRule(AuthorityHookLabels.EnemyDFHiveSystemGameTickLogic,
                 detail: $"hive={__instance.hiveAstroId}"))
         {
+            // Orbital placement is presentation data, independent of manufacture and combat AI.
+            var index = __instance.hiveAstroId - 1000000;
+            if (index > 0 && index < astros.Length && __instance.hiveAstroOrbit != null)
+                __instance.hiveAstroOrbit.PredictPose(gameTick, __instance.starData.uPosition, ref astros[index]);
             return false;
         }
         return true;
+    }
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(EnemyDFHiveSystem.KeyTickLogic))]
+    public static bool KeyTickLogic_Prefix() => !Multiplayer.IsActive || Multiplayer.Session.IsServer;
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(EnemyDFHiveSystem.DecisionAI))]
+    [HarmonyPatch(nameof(EnemyDFHiveSystem.InterLearningFromLocalSystem))]
+    [HarmonyPatch(nameof(EnemyDFHiveSystem.InterLearningFromOtherSystem))]
+    public static bool DecisionAI_Prefix() => !Multiplayer.IsActive || Multiplayer.Session.IsServer;
+
+    [HarmonyPostfix]
+    [HarmonyPatch(nameof(EnemyDFHiveSystem.DecisionAI))]
+    public static void DecisionAI_Postfix(EnemyDFHiveSystem __instance, long time)
+    {
+        if (!Multiplayer.IsActive || !Multiplayer.Session.IsServer || __instance.isLocal || !__instance.realized || !__instance.isAlive) return;
+        foreach (var player in Multiplayer.Session.Combat.Players)
+            if (player.isAlive && player.starId == __instance.starData.id)
+            {
+                var skill = __instance.sector.skillSystem;
+                var aggressive = __instance.history.combatSettings.aggressiveLevel;
+                if (__instance.history.dfTruceTimer > 0) aggressive = EAggressiveLevel.Passive;
+                __instance.UpdateHatred(time, aggressive, skill.maxHatredSpaceTmp * 2, (int)(50f * skill.enemyAggressiveHatredCoefTmp));
+                break;
+            }
     }
 
     [HarmonyPrefix]
@@ -333,8 +371,7 @@ internal class EnemyDFHiveSystem_Patch
     {
         if (!Multiplayer.IsActive) return true;
 
-        // Note: Figure out hatred mechanism in the future
-        return false;
+        return Multiplayer.Session.IsServer;
     }
 
     [HarmonyPrefix]

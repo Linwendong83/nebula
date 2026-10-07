@@ -31,11 +31,12 @@ namespace NebulaWorld.Authority.Adapters;
 /// Kill path that would generate drops, statistics or experience.
 /// </para>
 /// </remarks>
-public sealed class GroundEnemyReplicaBinding : IReplicaMirrorObserver
+public sealed class GroundEnemyReplicaBinding : IReplicaMirrorObserver, IReplicaBaselineReadiness
 {
     private sealed class ScopeBinding
     {
         public PlanetFactory Factory;
+        public EnemyData[] EnemyPool;
         public GroundEnemyBinding Core;
     }
 
@@ -45,6 +46,9 @@ public sealed class GroundEnemyReplicaBinding : IReplicaMirrorObserver
     public ClientWorldReplica Replica { get; set; }
     public long RefusalsOutsideApplyWindow { get; private set; }
     public long DeferredBaselines { get; private set; }
+
+    public bool IsReadyForBaseline(ScopeKey scope) => scope.Kind != PoolKind.GroundEnemy ||
+        (FactoryFor(scope.Scope)?.planet.factoryLoaded == true && GameMain.spaceSector?.skillSystem != null);
 
     public GroundEnemyReplicaBinding(Func<bool> applyWindowOpen = null)
     {
@@ -84,6 +88,11 @@ public sealed class GroundEnemyReplicaBinding : IReplicaMirrorObserver
             binding.Factory = factory;
             binding.Core = CreateCore(scope.Scope);
         }
+        var keep = new HashSet<int>();
+        foreach (var member in members) keep.Add(member.Key.NativeId);
+        var pools = new GroundEnemyReplicaPools(scope.Scope);
+        for (var id = 1; id < factory.enemyCursor; id++)
+            if (factory.enemyPool[id].id == id && !keep.Contains(id)) pools.RemoveEnemyShell(id);
         binding.Core.ReconcileBaseline(members);
     }
 
@@ -115,6 +124,12 @@ public sealed class GroundEnemyReplicaBinding : IReplicaMirrorObserver
             var factory = FactoryFor(scope.Scope);
             binding = new ScopeBinding { Factory = factory, Core = factory != null ? CreateCore(scope.Scope) : null };
             scopes.Add(scope.Scope, binding);
+        }
+        if (binding.Factory != FactoryFor(scope.Scope) || binding.EnemyPool != FactoryFor(scope.Scope)?.enemyPool)
+        {
+            binding.Factory = FactoryFor(scope.Scope);
+            binding.EnemyPool = binding.Factory?.enemyPool;
+            binding.Core = binding.Factory != null ? CreateCore(scope.Scope) : null;
         }
         if (binding.Core == null && binding.Factory == null)
         {

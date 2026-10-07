@@ -2,6 +2,9 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
     <PropertyGroup>
         <DevEnvLoc>$(MSBuildThisFileDirectory)DevEnv.targets</DevEnvLoc>
+        <NebulaArtifactsRoot Condition="'$(NebulaArtifactsRoot)' == ''">$(MSBuildThisFileDirectory)artifacts</NebulaArtifactsRoot>
+        <BaseIntermediateOutputPath Condition="'$(NebulaToolkitBuild)' == 'true'">$(NebulaArtifactsRoot)\cache\obj\$(MSBuildProjectName)\</BaseIntermediateOutputPath>
+        <MSBuildProjectExtensionsPath Condition="'$(NebulaToolkitBuild)' == 'true'">$(BaseIntermediateOutputPath)</MSBuildProjectExtensionsPath>
     </PropertyGroup>
 
     <!-- This sets $(DSPGameDir) -->
@@ -14,7 +17,8 @@
         <PluginOutputDirectory>$(DSPGameDir)BepInEx\plugins\nebula-NebulaMultiplayerMod\</PluginOutputDirectory>
         <PropSheetPath>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))</PropSheetPath>
         <SupportedDSPVersion>0.10.35.29104</SupportedDSPVersion>
-        <PluginOutputDirectory Condition="Exists('$(PropSheetPath).remoteBuild')">$(PropSheetPath)dist\release\nebula-NebulaMultiplayerMod\</PluginOutputDirectory>
+        <PluginOutputDirectory Condition="Exists('$(PropSheetPath).remoteBuild')">$(NebulaArtifactsRoot)\release\nebula-NebulaMultiplayerMod\</PluginOutputDirectory>
+        <PluginOutputDirectory Condition="'$(NebulaToolkitBuild)' == 'true'">$(NebulaArtifactsRoot)\build\$(Configuration)\nebula-NebulaMultiplayerMod\</PluginOutputDirectory>
     </PropertyGroup>
 
     <PropertyGroup Label="Common Properties">
@@ -22,14 +26,14 @@
         <AppendRuntimeIdentifierToOutputPath>false</AppendRuntimeIdentifierToOutputPath>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
 
-        <!-- Local builds stay in bin\<Configuration>. CI creates the .remoteBuild marker to
-             route output into dist\release for packaging instead. -->
-        <OutputPath Condition="Exists('$(PropSheetPath).remoteBuild') AND '$(MSBuildProjectName)' != 'NebulaTests' ">$(PluginOutputDirectory)</OutputPath>
+        <!-- CI and toolkit builds use the artifact directory. -->
+        <OutputPath Condition="(Exists('$(PropSheetPath).remoteBuild') Or '$(NebulaToolkitBuild)' == 'true') And '$(MSBuildProjectName)' != 'NebulaTests'">$(PluginOutputDirectory)</OutputPath>
+        <OutputPath Condition="'$(NebulaToolkitBuild)' == 'true' And '$(MSBuildProjectName)' == 'NebulaTests'">$(NebulaArtifactsRoot)\tests\bin\$(Configuration)\</OutputPath>
         <TargetFramework>net472</TargetFramework>
         <LangVersion>latest</LangVersion>
         <EnableNETAnalyzers>true</EnableNETAnalyzers>
         <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-        <DefaultItemExcludes>$(DefaultItemExcludes);*.binlog;dist/**</DefaultItemExcludes>
+        <DefaultItemExcludes>$(DefaultItemExcludes);*.binlog;**/dist/**;**/bin/**;**/obj/**;**/TestResults/**;$(NebulaArtifactsRoot)/**</DefaultItemExcludes>
 
         <DebugType>portable</DebugType>
         <DebugSymbols>true</DebugSymbols>
@@ -37,13 +41,13 @@
     </PropertyGroup>
 
     <PropertyGroup Label="Fork Properties">
-        <ForkDevTag>dev.6</ForkDevTag>
-        <ForkDevRevision>6</ForkDevRevision>
+        <ForkDevTag>dev.7</ForkDevTag>
+        <ForkDevRevision>7</ForkDevRevision>
         <DefineConstants Condition="'$(ForkDevTag)' != ''">$(DefineConstants);NEBULA_FORK</DefineConstants>
     </PropertyGroup>
 
     <PropertyGroup Label="API Properties" Condition=" '$(MSBuildProjectName)' == 'NebulaAPI' ">
-        <OutputPath Condition="Exists('$(PropSheetPath).remoteBuild')">$([System.IO.Path]::GetFullPath('$(OutputPath)..\nebula-NebulaMultiplayerModApi\'))</OutputPath>
+        <OutputPath Condition="Exists('$(PropSheetPath).remoteBuild') Or '$(NebulaToolkitBuild)' == 'true'">$([System.IO.Path]::GetFullPath('$(OutputPath)..\nebula-NebulaMultiplayerModApi\'))</OutputPath>
     </PropertyGroup>
 
     <!-- Shared Items -->
@@ -67,11 +71,11 @@
 
     <ItemGroup Condition="'$(UseInstalledGameAssemblies)' == 'true'">
         <Reference Include="Assembly-CSharp">
-            <HintPath>$(MSBuildThisFileDirectory)dist\compat-refs\Assembly-CSharp.dll</HintPath>
+            <HintPath>$(NebulaArtifactsRoot)\cache\compat-refs\Assembly-CSharp.dll</HintPath>
             <Private>false</Private>
         </Reference>
         <Reference Include="UnityEngine.UI">
-            <HintPath>$(MSBuildThisFileDirectory)dist\compat-refs\UnityEngine.UI.dll</HintPath>
+            <HintPath>$(NebulaArtifactsRoot)\cache\compat-refs\UnityEngine.UI.dll</HintPath>
             <Private>false</Private>
         </Reference>
     </ItemGroup>

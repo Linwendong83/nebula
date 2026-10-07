@@ -60,6 +60,7 @@ internal class SkillSystem_Common_Patch
         skillSystem.playerSkillCastLeftU = playerData.skillTargetU;
         skillSystem.playerSkillCastRightL = playerData.skillTargetL;
         skillSystem.playerSkillCastRightU = playerData.skillTargetU;
+        SetCollisionState(skillSystem, ref playerData);
     }
 
     static void SwitchTargetPlayerWithCollider(int playerId)
@@ -73,6 +74,20 @@ internal class SkillSystem_Common_Patch
         skillSystem.playerSkillTargetL = playerData.skillTargetL;
         skillSystem.playerSkillTargetULast = playerData.skillTargetULast;
         skillSystem.playerSkillTargetU = playerData.skillTargetU;
+        SetCollisionState(skillSystem, ref playerData);
+    }
+
+    private static void SetCollisionState(SkillSystem skills, ref NebulaWorld.Combat.CombatManager.PlayerPosition player)
+    {
+        skills.playerAstroId = skills.localPlanetAstroId = System.Math.Max(0, player.planetId);
+        skills.playerIsSailing = player.mecha.player.sailing;
+        skills.playerIsWarping = player.mecha.player.warping;
+        skills.playerSkillColliderL = player.mecha.skillColliderL;
+        skills.playerSkillColliderU = player.mecha.skillColliderU;
+        skills.playerEnergyShieldRadius = player.mecha.energyShieldEnergy >= player.mecha.energyShieldEnergyRate
+            ? player.mecha.energyShieldRadius * player.mecha.energyShieldRadiusMultiplier : 0;
+        skills.playerVelocityU = player.mecha.player.uVelocity;
+        skills.playerAltL = player.mecha.player.planetData == null ? 0 : player.position.magnitude - player.mecha.player.planetData.realRadius;
     }
 
     [HarmonyPrefix]

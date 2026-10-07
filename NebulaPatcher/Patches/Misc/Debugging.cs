@@ -143,6 +143,7 @@ internal class Debug_PlanetFactory_Patch
     [HarmonyPatch(nameof(PlanetFactory.RemoveEnemyWithComponents))]
     public static void RemoveEnemyWithComponents_Postfix(int id)
     {
+        if (Multiplayer.Session?.AuthorityRuntime?.ApplyContext?.IsActiveOnCurrentThread == true) return;
         if (!Multiplayer.IsActive || Multiplayer.Session.IsServer || Multiplayer.Session.Combat.IsIncomingRequest.Value) return;
         Log.Warn($"PlanetFactory.RemoveEnemyWithComponents {id} without approve!");
         Log.Warn(System.Environment.StackTrace);
@@ -165,6 +166,7 @@ internal class Debug_SpaceSector_Patch
     [HarmonyPatch(nameof(SpaceSector.RemoveEnemyWithComponents))]
     public static void RemoveEnemyWithComponents_Postfix(int id)
     {
+        if (Multiplayer.Session?.AuthorityRuntime?.ApplyContext?.IsActiveOnCurrentThread == true) return;
         if (!Multiplayer.IsActive || Multiplayer.Session.IsServer || Multiplayer.Session.Enemies.IsIncomingRequest.Value) return;
         Log.Warn($"SpaceSector.RemoveEnemyWithComponents {id} without approve!");
         Log.Warn(System.Environment.StackTrace);

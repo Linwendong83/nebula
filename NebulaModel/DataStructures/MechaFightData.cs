@@ -6,7 +6,7 @@ using NebulaAPI.Interfaces;
 
 namespace NebulaModel.DataStructures
 {
-    internal class MechaFightData : IMechaFightData
+    public class MechaFightData : IMechaFightData
     {
         public MechaFightData()
         {
@@ -119,6 +119,8 @@ namespace NebulaModel.DataStructures
             FighterStorage = new StorageComponent(5);
             GroundCombatModule = new CombatModuleComponent();
             SpaceCombatModule = new CombatModuleComponent();
+            GroundCombatModule.Init(GameMain.data);
+            SpaceCombatModule.Init(GameMain.data);
 
             AutoReplenishFuel = reader.GetBool();
             AutoReplenishAmmo = reader.GetBool();

@@ -11,6 +11,16 @@ namespace NebulaModel.Packets.Players;
 [HidePacketInDebugLogs]
 public class PlayerMovement
 {
+    public bool HasFinitePose() => Finite(UPosition.x) && Finite(UPosition.y) && Finite(UPosition.z) &&
+        Finite(LocalPlanetPosition.x) && Finite(LocalPlanetPosition.y) && Finite(LocalPlanetPosition.z) &&
+        Finite(Rotation.x) && Finite(Rotation.y) && Finite(Rotation.z) &&
+        Finite(BodyRotation.x) && Finite(BodyRotation.y) && Finite(BodyRotation.z) &&
+        Finite(HorzSpeed) && Finite(VertSpeed) && Finite(BuildArea) && Finite(Turning) && Finite(JumpWeight) && Finite(JumpNormalizedTime) && Finite(MiningWeight) &&
+        Math.Abs(UPosition.x) <= 1e12 && Math.Abs(UPosition.y) <= 1e12 && Math.Abs(UPosition.z) <= 1e12 &&
+        Math.Abs(LocalPlanetPosition.x) <= 1e9 && Math.Abs(LocalPlanetPosition.y) <= 1e9 && Math.Abs(LocalPlanetPosition.z) <= 1e9 &&
+        MovementState >= EMovementState.Walk && MovementState <= EMovementState.Sail;
+    private static bool Finite(double value) => !double.IsNaN(value) && !double.IsInfinity(value);
+
     [Flags]
     public enum EFlags : byte
     {

@@ -2,26 +2,6 @@
 
 namespace NebulaModel.Authority;
 
-/// <summary>
-/// Which side decides the shared world (DESIGN 1 and 3).
-/// </summary>
-/// <remarks>
-/// A room runs in exactly one mode. The mode is negotiated during the handshake and never changes
-/// for the lifetime of a session, which is what makes "旧/新模式拒绝混房" enforceable: a client that
-/// declares a different mode is refused instead of being half-accepted and then diverging.
-/// </remarks>
-public enum AuthorityMode : byte
-{
-    /// <summary>Unspecified. A session must never run in this mode; it only exists so a missing field is detectable.</summary>
-    None = 0,
-
-    /// <summary>Every peer simulates the shared world and exchanges results, as before the redesign.</summary>
-    Legacy = 1,
-
-    /// <summary>The host executes the shared rules; clients send intents and display host facts.</summary>
-    HostAuthority = 2
-}
-
 /// <summary>Version of the authority DTO schema, negotiated separately from <c>SessionProtocol.Version</c>.</summary>
 /// <remarks>
 /// DESIGN 4.2 asks for the authority schema to be validated in the handshake. Keeping it a distinct
@@ -30,7 +10,7 @@ public enum AuthorityMode : byte
 /// </remarks>
 public enum AuthoritySchema : byte
 {
-    /// <summary>No authority schema. Only valid together with <see cref="AuthorityMode.Legacy"/>.</summary>
+    /// <summary>Protocol has not been confirmed yet.</summary>
     None = 0,
 
     /// <summary>First authority schema, defined by the A03 envelopes.</summary>
@@ -38,7 +18,7 @@ public enum AuthoritySchema : byte
 }
 
 /// <summary>
-/// Features the host supports in authority mode.
+/// Replication features the host supports.
 /// </summary>
 /// <remarks>
 /// Capabilities are for compatibility checking only. DESIGN 5.2 is explicit that a player cannot
@@ -78,7 +58,7 @@ public enum AuthorityFamily : byte
 {
     None = 0,
 
-    /// <summary>Host to client: mode, epoch, capabilities, host tick.</summary>
+    /// <summary>Host to client: epoch, capabilities, host tick.</summary>
     Welcome = 1,
 
     /// <summary>Client to host: one intent with a dedup key.</summary>
@@ -121,7 +101,8 @@ public enum AuthorityFamily : byte
     /// <summary>
     /// Host to client: the canonical digest of one scope at one stream position (DESIGN 9.3, A20).
     /// </summary>
-    ScopeDigest = 11
+    ScopeDigest = 11,
+    PlayerCombatState = 12
 }
 
 /// <summary>What one <see cref="AuthorityFamily.ScopeControl"/> message asks for.</summary>
@@ -151,8 +132,8 @@ public enum AuthorityRejectCode : byte
 {
     None = 0,
 
-    /// <summary>The session is not running in authority mode. New-protocol packets must not be applied.</summary>
-    NotAuthorityMode = 1,
+    /// <summary>The session protocol has not been confirmed; packets cannot be applied yet.</summary>
+    SessionNotReady = 1,
 
     /// <summary>The message declares a different authority schema than the session negotiated.</summary>
     SchemaMismatch = 2,
@@ -287,6 +268,8 @@ public static class AuthorityLimits
         {
             case AuthorityFamily.Command:
                 return CommandPayloadMaxBytes;
+            case AuthorityFamily.PlayerCombatState:
+                return 65536;
             case AuthorityFamily.SnapshotChunk:
                 return ChunkMaxBytes;
             case AuthorityFamily.CommandResult:
@@ -341,6 +324,7 @@ public static class AuthorityFamilyDirection
             case AuthorityFamily.WorldState:
             case AuthorityFamily.Lifecycle:
             case AuthorityFamily.ScopeDigest:
+            case AuthorityFamily.PlayerCombatState:
                 direction = AuthorityDirection.ServerToClient;
                 return true;
             default:
@@ -354,47 +338,13 @@ public static class AuthorityFamilyDirection
         TryGetDirection(family, out var expected) && expected == direction;
 }
 
-/// <summary>
-/// The handshake decision about whether two peers may share a room (DESIGN 4.2).
-/// </summary>
-/// <remarks>
-/// Host-authority is the only multiplayer mode: both peers must declare it with the same schema,
-/// and a client may only require capabilities the host advertises. Legacy rooms were removed, so
-/// a legacy declaration is refused even when both sides agree on it. There is no downgrade path,
-/// because a half-negotiated room is exactly the mixed-authority state the design forbids.
-/// </remarks>
+/// <summary>Checks schema and required capabilities before a peer joins the world.</summary>
 public static class AuthorityNegotiation
 {
-    /// <summary>
-    /// Decides whether a client's declaration is compatible with the host's.
-    /// </summary>
-    /// <param name="hostMode">Mode the host runs.</param>
-    /// <param name="hostSchema">Schema the host speaks.</param>
-    /// <param name="hostCapabilities">Capabilities the host advertises.</param>
-    /// <param name="clientMode">Mode the client declares.</param>
-    /// <param name="clientSchema">Schema the client speaks.</param>
-    /// <param name="clientRequiredCapabilities">Capabilities the client needs from the host.</param>
-    /// <param name="reject">Why the pair is incompatible, or <see cref="AuthorityRejectCode.None"/>.</param>
-    public static bool IsCompatible(AuthorityMode hostMode, AuthoritySchema hostSchema,
-        AuthorityCapability hostCapabilities, AuthorityMode clientMode, AuthoritySchema clientSchema,
-        AuthorityCapability clientRequiredCapabilities, out AuthorityReject reject)
+    public static bool IsCompatible(AuthoritySchema hostSchema, AuthorityCapability hostCapabilities,
+        AuthoritySchema clientSchema, AuthorityCapability clientRequiredCapabilities, out AuthorityReject reject)
     {
-        if (hostMode == AuthorityMode.None || clientMode == AuthorityMode.None)
-        {
-            reject = new AuthorityReject(AuthorityRejectCode.MalformedEnvelope, "missing authority mode");
-            return false;
-        }
-
-        if (hostMode != AuthorityMode.HostAuthority || clientMode != AuthorityMode.HostAuthority)
-        {
-            // Legacy rooms were removed: host-authority is the only multiplayer mode. A legacy
-            // declaration is refused even when both sides agree on it.
-            reject = new AuthorityReject(AuthorityRejectCode.NotAuthorityMode,
-                "host=" + hostMode + " client=" + clientMode);
-            return false;
-        }
-
-        if (hostSchema != clientSchema)
+        if (hostSchema != AuthoritySchema.V1 || clientSchema != hostSchema)
         {
             reject = new AuthorityReject(AuthorityRejectCode.SchemaMismatch,
                 "host=" + hostSchema + " client=" + clientSchema);
@@ -412,25 +362,16 @@ public static class AuthorityNegotiation
         return true;
     }
 
-    /// <summary>True when <paramref name="capabilities"/> contains nothing outside <see cref="AuthorityCapability.All"/>.</summary>
     public static bool AreCapabilitiesKnown(AuthorityCapability capabilities) =>
         (capabilities & ~AuthorityCapability.All) == AuthorityCapability.None;
 }
 
-/// <summary>
-/// What the local session believes about the world it is in.
-/// </summary>
-/// <remarks>
-/// This is the gate's only input besides the message itself, so the gate stays a pure function that
-/// tests can drive directly. A04 owns filling it from the live session; before that it stays in
-/// <see cref="Legacy"/>, which is why authority packets are refused on every current build.
-/// </remarks>
+/// <summary>The immutable session identity used to validate an incoming message.</summary>
 public readonly struct AuthoritySessionContext
 {
-    public AuthoritySessionContext(AuthorityMode mode, AuthoritySchema schema, AuthorityEpoch epoch,
+    public AuthoritySessionContext(AuthoritySchema schema, AuthorityEpoch epoch,
         ConnectionEpoch connection, ushort connectedPlayerId, bool isHost)
     {
-        Mode = mode;
         Schema = schema;
         Epoch = epoch;
         Connection = connection;
@@ -438,28 +379,18 @@ public readonly struct AuthoritySessionContext
         IsHost = isHost;
     }
 
-    /// <summary>Mode this session runs. Authority packets are refused unless this is <see cref="AuthorityMode.HostAuthority"/>.</summary>
-    public AuthorityMode Mode { get; }
+    /// <summary>True once the replication protocol has been confirmed.</summary>
+    public bool IsNegotiated => Schema == AuthoritySchema.V1;
 
-    /// <summary>Schema this session negotiated.</summary>
     public AuthoritySchema Schema { get; }
-
-    /// <summary>Epoch of the loaded world, or an invalid epoch before one is loaded.</summary>
     public AuthorityEpoch Epoch { get; }
-
-    /// <summary>Epoch of the connection a client command must name, or an invalid epoch when unset.</summary>
     public ConnectionEpoch Connection { get; }
 
-    /// <summary>
-    /// Player id the transport assigned to this connection. A packet's claimed id is only an
-    /// assertion and must equal this, because DESIGN 4.1 takes identity from the connection.
-    /// </summary>
+    /// <summary>Transport-assigned player identity; a message cannot claim a different seat.</summary>
     public ushort ConnectedPlayerId { get; }
 
-    /// <summary>True on the host side of the session.</summary>
     public bool IsHost { get; }
 
-    /// <summary>A session that has not negotiated authority: the state of every build before A04.</summary>
-    public static AuthoritySessionContext Legacy =>
-        new(AuthorityMode.Legacy, AuthoritySchema.None, default, default, 0, false);
+    /// <summary>No confirmed protocol or world identity yet.</summary>
+    public static AuthoritySessionContext Uninitialized => default;
 }

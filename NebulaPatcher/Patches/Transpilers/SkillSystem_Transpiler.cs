@@ -11,24 +11,6 @@ using NebulaWorld.Combat;
 
 namespace NebulaPatcher.Patches.Transpilers;
 
-/// <summary>
-/// Rewrites the vanilla "player id 1" test in the damage entries to the session's player id.
-/// </summary>
-/// <remarks>
-/// <para>
-/// The vanilla damage entries hard-code player id 1 for the local mecha. In a room every peer has its
-/// own id, so the test has to become the local player's id or only one player would ever be treated
-/// as the caster. A11/A19 replace this shared-player-context approach with an explicit caster/target
-/// context; until then the transformation must actually apply, which is why A05 verifies the exact
-/// match count instead of letting a silent no-op leave the vanilla constant in place.
-/// </para>
-/// <para>
-/// There is no catch-all around the transformation. A05 forbids "catch and continue as vanilla": a
-/// transformation that throws is a real defect, and the failure has to reach
-/// <see cref="AuthorityTranspilerGuard"/> so entering the new mode is refused rather than running a
-/// half-patched rule.
-/// </para>
-/// </remarks>
 [HarmonyPatch(typeof(SkillSystem))]
 internal class SkillSystem_Transpiler
 {
@@ -56,17 +38,10 @@ internal class SkillSystem_Transpiler
         var label = __originalMethod.DeclaringType?.Name + "." + __originalMethod.Name + ".playerId";
         if (!AuthorityTranspilerGuard.VerifyCount(label, codes, 1, exact: true, matches))
         {
-            // The method is left untouched; the recorded miss makes the new mode refuse to load.
             return codes;
         }
 
-        return new CodeMatcher(codes)
-            .End()
-            .MatchBack(true, matches)
-            .Advance(-1)
-            .Set(OpCodes.Call, AccessTools.DeclaredPropertyGetter(typeof(CombatManager),
-                nameof(CombatManager.PlayerId)))
-            .InstructionEnumeration();
+        return RoutePlayerDamage(codes, typeof(SkillTargetLocal));
     }
 
     [HarmonyTranspiler]
@@ -95,12 +70,36 @@ internal class SkillSystem_Transpiler
             return codes;
         }
 
-        return new CodeMatcher(codes)
-            .End()
-            .MatchBack(true, matches)
-            .Advance(-1)
-            .Set(OpCodes.Call, AccessTools.DeclaredPropertyGetter(typeof(CombatManager),
-                nameof(CombatManager.PlayerId)))
-            .InstructionEnumeration();
+        return RoutePlayerDamage(codes, typeof(SkillTarget));
+    }
+
+    private static IEnumerable<CodeInstruction> RoutePlayerDamage(List<CodeInstruction> codes, System.Type targetType)
+    {
+        var idField = AccessTools.Field(targetType, "id");
+        CodeInstruction targetLoad = null;
+        for (var i = 2; i < codes.Count - 1; i++)
+            if (codes[i].opcode == OpCodes.Ldc_I4_1 && codes[i - 1].LoadsField(idField) && codes[i + 1].opcode == OpCodes.Bne_Un)
+            {
+                targetLoad = new CodeInstruction(codes[i - 2].opcode, codes[i - 2].operand);
+                codes[i].opcode = OpCodes.Call;
+                codes[i].operand = AccessTools.Method(typeof(CombatTargetContext), nameof(CombatTargetContext.IsPlayerTarget));
+                codes[i + 1].opcode = OpCodes.Brfalse;
+                break;
+            }
+        if (targetLoad == null) return codes;
+        var mechaField = AccessTools.Field(typeof(SkillSystem), nameof(SkillSystem.mecha));
+        for (var i = 0; i < codes.Count - 2; i++)
+            if (codes[i].LoadsField(mechaField) && codes[i + 2].Calls(AccessTools.Method(typeof(Mecha), nameof(Mecha.TakeDamage))))
+            {
+                var load = new CodeInstruction(targetLoad.opcode, targetLoad.operand);
+                load.labels.AddRange(codes[i].labels);
+                load.blocks.AddRange(codes[i].blocks);
+                codes[i] = load;
+                codes.Insert(i + 1, new CodeInstruction(OpCodes.Ldfld, idField));
+                codes.Insert(i + 2, new CodeInstruction(OpCodes.Call,
+                    AccessTools.Method(typeof(CombatTargetContext), nameof(CombatTargetContext.ResolveDamageMecha))));
+                break;
+            }
+        return codes;
     }
 }

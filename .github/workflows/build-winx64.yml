@@ -24,10 +24,6 @@ jobs:
         submodules: true
         fetch-depth: 0 # can't shallowly clone due to git versioning
         
-    - name: Clear output directory in DSP files
-      # We use SilentlyContinue here because it errors out if the folder does not exist otherwise
-      run: rm -R -ErrorAction SilentlyContinue "dist"
-    
     - name: Add remote build identifier
       run: New-Item -Name .remoteBuild -ItemType File -force
 
@@ -39,7 +35,9 @@ jobs:
 
     # Build it
     - name: Build the application
-      run: dotnet build -c ${{ matrix.configuration }}
+      run: |
+        New-Item -ItemType Directory -Force artifacts/logs | Out-Null
+        dotnet build -c ${{ matrix.configuration }} -p:IsolatedBuild=true -bl:artifacts/logs/build.binlog
 
     # Upload it to the run results
     - name: Upload a Build Artifact
@@ -47,4 +45,4 @@ jobs:
       with:
         # Artifact name
         name: build-artifacts-${{ matrix.configuration }}
-        path: dist\release
+        path: artifacts\release

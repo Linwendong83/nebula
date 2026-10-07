@@ -33,12 +33,13 @@ namespace NebulaWorld.Authority.Adapters;
 /// sync path untouched.
 /// </para>
 /// </remarks>
-public sealed class FactoryCombatReplicaBinding : IReplicaMirrorObserver
+public sealed class FactoryCombatReplicaBinding : IReplicaMirrorObserver, IReplicaBaselineReadiness
 {
     private sealed class ScopeBinding
     {
         /// <summary>The factory instance the current core was built against, or null until one was seen.</summary>
         public PlanetFactory Factory;
+        public EntityData[] EntityPool;
 
         /// <summary>True once this factory instance's imported references were repaired.</summary>
         public bool ReferencesRepaired;
@@ -57,6 +58,9 @@ public sealed class FactoryCombatReplicaBinding : IReplicaMirrorObserver
 
     /// <summary>Baselines that arrived before the local factory existed. They are deferred, not guessed.</summary>
     public long DeferredBaselines { get; private set; }
+
+    public bool IsReadyForBaseline(ScopeKey scope) => scope.Kind != PoolKind.Entity ||
+        (FactoryFor(scope.Scope)?.planet.factoryLoaded == true && GameMain.spaceSector?.skillSystem != null);
 
     /// <param name="applyWindowOpen">
     /// Injected so tests can drive the guard; production passes the live session's apply context.
@@ -141,6 +145,14 @@ public sealed class FactoryCombatReplicaBinding : IReplicaMirrorObserver
         {
             binding = new ScopeBinding { Core = CreateCore(scope.Scope) };
             scopes.Add(scope.Scope, binding);
+        }
+        var factory = FactoryFor(scope.Scope);
+        if (factory != null && (binding.Factory != factory || binding.EntityPool != factory.entityPool))
+        {
+            binding.Factory = factory;
+            binding.EntityPool = factory.entityPool;
+            binding.Core = CreateCore(scope.Scope);
+            binding.ReferencesRepaired = false;
         }
         return binding;
     }

@@ -14,10 +14,14 @@ namespace NebulaPatcher.Patches.Dynamic;
 internal class EnemyDFGroundSystem_Patch
 {
     [HarmonyPrefix]
+    [HarmonyPatch(nameof(EnemyDFGroundSystem.PostGameTick))]
+    public static bool PostGameTick_Prefix() => !Multiplayer.IsActive || Multiplayer.Session.IsServer;
+
+    [HarmonyPrefix]
     [HarmonyPatch(nameof(EnemyDFGroundSystem.ExecuteDeferredEnemyChange))]
     public static bool ExecuteDeferredEnemyChange_Prefix(EnemyDFGroundSystem __instance)
     {
-        if (!Multiplayer.IsActive) return true;
+        if (!Multiplayer.IsActive || Multiplayer.Session.IsServer) return true;
 
         if (Multiplayer.Session.IsClient)
         {
@@ -50,15 +54,14 @@ internal class EnemyDFGroundSystem_Patch
     [HarmonyPatch(nameof(EnemyDFGroundSystem.InitiateUnitDeferred))]
     public static bool InitiateUnitDeferred_Prefix()
     {
-        // Skip InitiateUnit in multiplayer game
-        return !Multiplayer.IsActive;
+        return !Multiplayer.IsActive || Multiplayer.Session.IsServer;
     }
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(EnemyDFGroundSystem.ExecuteDeferredUnitFormation))]
     public static bool ExecuteDeferredUnitFormation_Prefix(EnemyDFGroundSystem __instance)
     {
-        if (!Multiplayer.IsActive) return true;
+        if (!Multiplayer.IsActive || Multiplayer.Session.IsServer) return true;
         if (Multiplayer.Session.IsClient)
         {
             // Wait for server to authorize
@@ -68,7 +71,6 @@ internal class EnemyDFGroundSystem_Patch
             return false;
         }
 
-        // Skip InitiateUnit in multiplayer game
         __instance._initiate_unit_list?.Clear();
         if (__instance._activate_unit_list?.Count > 0)
         {
@@ -104,7 +106,8 @@ internal class EnemyDFGroundSystem_Patch
     {
         if (!Multiplayer.IsActive || Multiplayer.Session.IsServer) return true;
         // Wait for server to authorize
-        return Multiplayer.Session.Combat.IsIncomingRequest;
+        return Multiplayer.Session.Combat.IsIncomingRequest ||
+               Multiplayer.Session.AuthorityRuntime.ApplyContext.IsActiveOnCurrentThread;
     }
 
     [HarmonyPrefix]
@@ -166,44 +169,29 @@ internal class EnemyDFGroundSystem_Patch
         }
 
         // Client should wait for server to approve the removal of base from the base buffer
-        return Multiplayer.Session.Combat.IsIncomingRequest;
+        return Multiplayer.Session.Combat.IsIncomingRequest ||
+               Multiplayer.Session.AuthorityRuntime.ApplyContext.IsActiveOnCurrentThread;
     }
 
     [HarmonyPrefix]
+    [HarmonyPatch(nameof(EnemyDFGroundSystem.GameTickLogic_Base))]
+    public static bool GameTickLogic_Base_Prefix() => !Multiplayer.IsActive || Multiplayer.Session.IsServer;
+
+    [HarmonyPrefix]
+    [HarmonyPatch(nameof(EnemyDFGroundSystem.ClearReferencesOnEnemyRemove))]
+    public static bool ClearReferencesOnEnemyRemove_Prefix() => !Multiplayer.IsActive || Multiplayer.Session.IsServer;
+
+    [HarmonyPrefix]
     [HarmonyPatch(nameof(EnemyDFGroundSystem.KeyTickLogic))]
-    public static void KeyTickLogic_Prefix(EnemyDFGroundSystem __instance)
+    public static bool KeyTickLogic_Prefix(EnemyDFGroundSystem __instance)
     {
-        if (!Multiplayer.IsActive || Multiplayer.Session.IsServer) return;
-
-        // Fix NRE in EnemyDFGroundSystem.KeyTickLogic (System.Int64 time);(IL_0929)
-        var cursor = __instance.builders.cursor;
-        var buffer = __instance.builders.buffer;
-        var baseBuffer = __instance.bases.buffer;
-        var enemyPool = __instance.factory.enemyPool;
-        for (var builderId = 1; builderId < cursor; builderId++)
-        {
-            ref var builder = ref buffer[builderId];
-            if (builder.id == builderId)
-            {
-                if (baseBuffer[enemyPool[builder.enemyId].owner] == null)
-                {
-                    var msg = string.Format("Remove EnemyDFGroundSystem enemy[{0}]: owner = {1}".Translate(), builder.enemyId, enemyPool[builder.enemyId].owner);
-                    Log.WarnInform(msg);
-
-                    __instance.factory.enemyPool[builder.enemyId].SetEmpty();
-                    __instance.builders.Remove(builderId);
-                }
-            }
-        }
+        return !Multiplayer.IsActive || Multiplayer.Session.IsServer;
     }
 
     [HarmonyPrefix]
     [HarmonyPatch(nameof(EnemyDFGroundSystem.GameTickLogic_Unit))]
     public static bool GameTickLogic_Unit_Prefix()
     {
-        // I01: migrated ground-unit AI (serial). Host runs the real AI; a client outside a replica
-        // apply must not run it at all. Pose/state arrive via the replica instead. Legacy rooms and
-        // single-player run vanilla (the guard allows when not in authority mode).
         return AuthorityRuleGuard.AllowHostRule(
             AuthorityHookLabels.EnemyDFGroundSystemGameTickLogicUnit,
             detail: "ground-unit-ai");

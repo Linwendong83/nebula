@@ -63,7 +63,7 @@ public readonly struct AuthorityLatencySummary
 public sealed class AuthorityPerfMeter
 {
     /// <summary>Families the per-family counters cover; the enum's highest value plus one.</summary>
-    public const int FamilyCount = 12;
+    public const int FamilyCount = 13;
 
     private readonly double[] captureWindow;
     private readonly double[] applyWindow;

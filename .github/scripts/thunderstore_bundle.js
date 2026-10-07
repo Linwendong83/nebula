@@ -20,7 +20,7 @@ import * as core from "@actions/core";
 // Setting it so that it's consistent with installs from thunderstore
 const NEBULA_RELEASE_FOLDER_NAME = "nebula-NebulaMultiplayerMod";
 const NEBULA_API_RELEASE_FOLDER_NAME = "nebula-NebulaMultiplayerModApi";
-const DIST_FOLDER = "dist";
+const DIST_FOLDER = "artifacts";
 const DIST_RELEASE_FOLDER = join(DIST_FOLDER, "release");
 const DIST_NEBULA_FOLDER = join(
   DIST_RELEASE_FOLDER,
@@ -61,7 +61,7 @@ async function main() {
   }
 
   if (!existsSync(DIST_NEBULA_API_FOLDER)) {
-    let err = DIST_NEBUDIST_NEBULA_API_FOLDERLA_FOLDER + " does not exist";
+    let err = DIST_NEBULA_API_FOLDER + " does not exist";
     core.setFailed(err);
     throw err;
   }

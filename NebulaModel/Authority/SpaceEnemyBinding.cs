@@ -93,13 +93,13 @@ public sealed class SpaceEnemyBinding
     {
         if (!bindings.TryGetValue(key, out var kind))
         {
-            bindings[key] = decoded.Kind;
             // A recycled slot arrives as a new key while the old key's despawn may still be in
             // flight (the host publishes Spawn → State → Despawn within one frame). Taking
             // ownership here is what keeps the old generation's trailing despawn from deleting the
             // new generation's shell.
-            slotOwner[key.NativeId] = key;
             pools.CreateEnemyShell(key.NativeId, in decoded);
+            bindings[key] = decoded.Kind;
+            slotOwner[key.NativeId] = key;
             shellsCreated++;
         }
         else

@@ -32,12 +32,14 @@ namespace NebulaWorld.Authority.Adapters;
 /// destruction rule that would generate drops, statistics or refunds.
 /// </para>
 /// </remarks>
-public sealed class CraftReplicaBinding : IReplicaMirrorObserver
+public sealed class CraftReplicaBinding : IReplicaMirrorObserver, IReplicaBaselineReadiness
 {
     private sealed class ScopeBinding
     {
         public PoolKind Kind;
         public PlanetFactory Factory;
+        public CraftData[] CraftPool;
+        public SpaceSector Sector;
         public CraftBinding Core;
     }
 
@@ -47,6 +49,10 @@ public sealed class CraftReplicaBinding : IReplicaMirrorObserver
     public ClientWorldReplica Replica { get; set; }
     public long RefusalsOutsideApplyWindow { get; private set; }
     public long DeferredBaselines { get; private set; }
+
+    public bool IsReadyForBaseline(ScopeKey scope) => scope.Kind == PoolKind.GroundCraft
+        ? FactoryFor(scope.Scope)?.planet.factoryLoaded == true && GameMain.spaceSector?.skillSystem != null
+        : scope.Kind != PoolKind.SpaceCraft || GameMain.spaceSector?.skillSystem != null;
 
     public CraftReplicaBinding(Func<bool> applyWindowOpen = null)
     {
@@ -163,6 +169,18 @@ public sealed class CraftReplicaBinding : IReplicaMirrorObserver
             {
                 binding.Core = CreateCore(scope.Kind, scope.Scope);
             }
+        }
+        if (scope.Kind == PoolKind.GroundCraft && (binding.Factory != FactoryFor(scope.Scope) || binding.CraftPool != FactoryFor(scope.Scope)?.craftPool))
+        {
+            binding.Factory = FactoryFor(scope.Scope);
+            binding.CraftPool = binding.Factory?.craftPool;
+            binding.Core = binding.Factory != null ? CreateCore(scope.Kind, scope.Scope) : null;
+        }
+        if (scope.Kind == PoolKind.SpaceCraft && (binding.Sector != GameMain.spaceSector || binding.CraftPool != GameMain.spaceSector?.craftPool))
+        {
+            binding.Sector = GameMain.spaceSector;
+            binding.CraftPool = binding.Sector?.craftPool;
+            binding.Core = binding.Sector != null ? CreateCore(scope.Kind, scope.Scope) : null;
         }
         return binding;
     }

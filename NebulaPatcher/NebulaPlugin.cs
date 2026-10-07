@@ -67,7 +67,8 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
     private static bool VerifyGameBuild()
     {
         var runningVersion = GameConfig.gameVersion.ToFullString();
-        if (string.Equals(runningVersion, DSPGameVersion.VERSION, StringComparison.Ordinal))
+        if (AuthorityStartup.CanStartMultiplayer(
+                string.Equals(runningVersion, DSPGameVersion.VERSION, StringComparison.Ordinal)))
         {
             Multiplayer.ProtocolReady = true;
             Log.Info($"Verified Dyson Sphere Program {runningVersion}; multiplayer protocol enabled.");
@@ -75,7 +76,8 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
         }
         Multiplayer.ProtocolReady = false;
         new Harmony(PluginInfo.PLUGIN_ID).UnpatchSelf();
-        Log.Error($"Unsupported game version {runningVersion}; expected {DSPGameVersion.VERSION}. Multiplayer is disabled.");
+        Log.Error($"Multiplayer startup refused: game version {runningVersion}, expected {DSPGameVersion.VERSION}; " +
+                  $"world-write guards verified={NebulaModel.Authority.AuthorityRuleGuard.IsLoadVerified}.");
         return false;
     }
 
@@ -211,9 +213,6 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
                 Headless_Steam_Patches.Apply(harmony);
             }
 
-            // A05: the authority mode is only entered when every transformation it depends on really
-            // applied. Registering the check here means the mode refuses to load instead of running a
-            // half-patched rule; legacy rooms never consult it.
             NebulaModel.Authority.AuthorityRuleGuard.RegisterVerifier(
                 AuthorityTranspilerGuard.VerifyRequired);
             if (Log.PatchDiagnosticCount != 0)
@@ -225,9 +224,7 @@ public class NebulaPlugin : BaseUnityPlugin, IMultiplayerMod
             Log.Info("Patching completed successfully. Time cost: " + timer.duration);
             Multiplayer.ProtocolReady = false; // GlobalObject.ReadVersionList loads the exact build later.
 
-            // The authority mode is the only multiplayer mode; entering it is fail-closed on
-            // hook verification here and again at the session gate. No launch flags remain.
-            AuthorityStartup.Apply(NebulaModel.Authority.AuthorityRuleGuard.VerifyLoadOnce);
+            AuthorityStartup.Validate(NebulaModel.Authority.AuthorityRuleGuard.VerifyLoadOnce);
         }
         catch (Exception ex)
         {

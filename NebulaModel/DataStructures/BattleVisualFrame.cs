@@ -8,7 +8,8 @@ namespace NebulaModel.DataStructures;
 public enum BattleEffectKind : byte
 {
     GroundLaser, GroundPlasma, GroundShieldPlasma, SpaceLaser, SpacePlasmaF, SpacePlasmaA,
-    TurretMissile, TurretPlasma, LancerSweep, BomberProjectile, Impact
+    TurretMissile, TurretPlasma, LancerSweep, BomberProjectile, Impact,
+    MechaGroundLaser, MechaGroundGauss, MechaSpaceLaser, MechaSpaceGauss, MechaPlasma, MechaMissile, MechaLocalCannon, MechaSpaceCannon, MechaShieldBurst, ExplosiveBomb, LiquidBomb, EMBomb
 }
 
 public sealed class FleetVisualData
@@ -106,7 +107,7 @@ public sealed class BattleVisualFrame
                 Life = r.ReadInt32()
             };
             var length = r.ReadInt32();
-            if (effect.Kind > BattleEffectKind.Impact || effect.Id <= 0 || effect.Life < 0 || effect.Life > 360000 ||
+            if (effect.Kind > BattleEffectKind.EMBomb || effect.Id <= 0 || effect.Life < 0 || effect.Life > 360000 ||
                 length < 0 || length > 4096 || length > stream.Length - stream.Position)
                 throw new InvalidDataException("Invalid combat effect");
             effect.Payload = r.ReadBytes(length);

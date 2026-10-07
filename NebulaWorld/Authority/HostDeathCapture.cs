@@ -9,36 +9,6 @@ using NebulaModel.Authority;
 
 namespace NebulaWorld.Authority;
 
-/// <summary>
-/// The host's bridge from the vanilla death commit into the death ledger (TASKS.md A22).
-/// </summary>
-/// <remarks>
-/// <para>
-/// Vanilla dies every damage-target class at exactly one place: <c>CombatStat.HandleZeroHp</c>
-/// records the kill statistics and dispatches the per-kind <c>KillXxxFinally</c> (structure removal,
-/// drops). On the host in authority mode that vanilla chain stays the rule — statistics and loot are
-/// vanilla-delegated, executed once by the same call. What the vanilla chain does not do is the
-/// authority bookkeeping: a tombstone per <see cref="ObjectKey"/>, one release of dependent
-/// construction tasks, and dedup across every other source that reports the same death. This capture
-/// supplies exactly that, by observing the death inside the vanilla prefix and committing it to
-/// <see cref="HostDeathLedger"/> at the frame boundary.
-/// </para>
-/// <para>
-/// The split follows DESIGN 6's threading rule. <see cref="Capture"/> runs wherever the vanilla rule
-/// runs, including the parallel ground-unit and turret workers, so it only resolves the object's
-/// identity (the pool slot is provably still occupied at this instant — by the frame boundary the
-/// vanilla path has already removed it) and enqueues into a concurrent queue. <see cref="Drain"/>
-/// runs at the quiescent frame boundary on the host thread, opens the ledger transactions, and
-/// therefore commits the tombstone and the task release before the replicator's scan publishes the
-/// frame's despawn.
-/// </para>
-/// <para>
-/// Failure is counted, never guessed. An identity the resolvers cannot vouch for (unrealized
-/// factory, unknown object type, a pool the key sources do not cover yet) is refused and counted —
-/// the ledger never receives an invented key. A capture beyond the queue capacity is refused
-/// fail-closed: back-pressure is visible, not silent world mutation.
-/// </para>
-/// </remarks>
 public sealed class HostDeathCapture
 {
     /// <summary>

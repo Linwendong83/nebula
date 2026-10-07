@@ -1,4 +1,4 @@
-﻿#region
+#region
 
 using System;
 using System.Collections.Generic;
@@ -124,27 +124,7 @@ public interface IAuthorityFrameCapture
     void Capture(long hostTick);
 }
 
-/// <summary>
-/// The session's authority runtime: identity, the host command inbox, the replica apply window and
-/// the frame boundary that connects them (DESIGN 2 and 6).
-/// </summary>
-/// <remarks>
-/// <para>
-/// This is the object A04 introduces so that "收包只入队、帧边界才执行" is a property of one type
-/// rather than a rule spread across processors. Packet processors hand it validated messages and
-/// return; only <see cref="OnFrameBoundary"/> turns them into work, and it runs on the single thread
-/// A01 proved is quiescent.
-/// </para>
-/// <para>
-/// Identity (<see cref="AuthoritySessionState"/>) is shared with A03 so the packet gate keeps
-/// answering from the same state the runtime uses. The runtime adds no second notion of mode or
-/// epoch: it draws the epoch once per world load and hands the same value to the gate.
-/// </para>
-/// <para>
-/// Everything here is inert while <see cref="AuthorityMode.Legacy"/> is the local mode, which is the
-/// default until A25. That is why A04 changes no existing room's behaviour.
-/// </para>
-/// </remarks>
+/// <summary>Runs host commands and applies client replicas at world-frame boundaries.</summary>
 public sealed class AuthoritySession : IDisposable
 {
     private readonly object gate = new();
@@ -157,6 +137,12 @@ public sealed class AuthoritySession : IDisposable
     // -1 so the first observation after a world begin always plans the initial subscriptions.
     private readonly List<ScopeKey> standingScopes = [];
     private readonly List<ScopeKey> desiredScratch = [];
+    private readonly Dictionary<ScopeKey, object> replicaPools = [];
+    public Func<ScopeKey, object> ReplicaPoolIdentity { get; set; }
+    public DarkFogReplicaBinding DarkFogReplica { get; private set; }
+    public Action<long> BeforeHostFrame { get; set; }
+    public Action<long> AfterHostFrame { get; set; }
+    public bool RequireGamePools { get; set; }
     private int standingPlanetId = -1;
     private bool standingInSector;
     private ulong lastConnectionEpoch;
@@ -259,96 +245,8 @@ public sealed class AuthoritySession : IDisposable
     /// </summary>
     public HostWorldReplicator HostReplicator { get; private set; }
 
-    /// <summary>
-    /// The host's player membership table, or null until a host authority world begins (A09).
-    /// </summary>
-    /// <remarks>
-    /// Host-only. Adapters (A10/A11/A16) register presence and read eligibility through this;
-    /// the ledger holds the balances keyed by the same persistent ids. A client never owns one.
-    /// </remarks>
-    public HostPlayerRegistry HostPlayers { get; private set; }
-
-    /// <summary>
-    /// The host's resource truth, or null until a host authority world begins (A09).
-    /// </summary>
-    /// <remarks>
-    /// Host-only. Seeded at world load/migration; thereafter only frame-boundary transactions
-    /// move balances. No client packet writes through it in A09 — that whitelist is A10.
-    /// </remarks>
-    public HostResourceLedger HostLedger { get; private set; }
-
-    /// <summary>
-    /// The host's per-player combat runtime, or null until a host authority world begins (A11).
-    /// </summary>
-    /// <remarks>
-    /// Host-only. The executor validates intents against the registry and this table, spends
-    /// through <see cref="HostLedger"/>, and records one vanilla-skill intent per applied trigger
-    /// pull for A14/A19 to generate. A client never owns one.
-    /// </remarks>
-    public HostPlayerSimulation HostCombat { get; private set; }
-
-    /// <summary>
-    /// The host's effect publisher, or null until a host authority world begins (A14).
-    /// </summary>
-    /// <remarks>
-    /// Host-only. Drains the combat executor's decided skills into one visual event each at the
-    /// frame boundary. Delivery to clients belongs to A20; until then events queue here instead
-    /// of being invented anywhere else. A client never owns one.
-    /// </remarks>
-    public HostEffectEmitter HostEffects { get; private set; }
-
-    /// <summary>
-    /// The client's visual-event table, or null until a client authority world begins (A14).
-    /// </summary>
-    /// <remarks>
-    /// Client-only. Holds predicted muzzles plus authoritative host events, merged by cause so
-    /// a confirmed shot never shows twice. It carries no HP, shield or ledger reference, so
-    /// rendering cannot move a protected number.
-    /// </remarks>
-    public EffectBinding ClientEffects { get; private set; }
-
-    /// <summary>
-    /// The host's combat executor, or null until a host authority world begins (A11).
-    /// </summary>
-    /// <remarks>
-    /// Installed as <see cref="HostExecutor"/> so combat intents drain at the frame boundary.
-    /// Categories owned by later cards answer <c>NotReady</c> until those cards install their
-    /// executors. Null rules stay fail-closed: fire intents cannot validate a target yet.
-    /// </remarks>
-    public HostPlayerCombatExecutor HostCombatExecutor { get; private set; }
-
-    /// <summary>
-    /// The host's construction task truth, or null until a host authority world begins (A16).
-    /// </summary>
-    /// <remarks>
-    /// Host-only. Per-owner drone budgets plus the task table from A15. No frame work touches it
-    /// in A16 — the candidate service below only evaluates and reserves through it — and the
-    /// vanilla <c>repairerCount</c> writers stay untouched until A17. A client never owns one.
-    /// </remarks>
-    public ConstructionTaskLedger HostConstructionLedger { get; private set; }
-
-    /// <summary>
-    /// The host's repair candidate and scoring runtime, or null until a host authority world begins (A16).
-    /// </summary>
-    /// <remarks>
-    /// Host-only. Evaluates (owner, damage) pairs against registry presence and the ledger above.
-    /// The base source stays null until the production base adapter lands, so every base owner is
-    /// fail-closed Disabled until then. Motion, energy adaptation and the vanilla repair call
-    /// belong to the executor below (A17).
-    /// </remarks>
-    public HostConstructionService HostConstruction { get; private set; }
-
-    /// <summary>
-    /// The host's repair execution runtime, or null until a host authority world begins (A17).
-    /// </summary>
-    /// <remarks>
-    /// Host-only. Advances ledger tasks (Reserved→Launching→Travelling→Working→Returning→Completed),
-    /// spends per-owner real energy through <see cref="HostLedger"/> and performs one validated
-    /// vanilla repair per working drone through <see cref="IHostRepairWriter"/>. A client never
-    /// owns one. Without a damage/owner world view the tick is a no-op (fail-closed); the
-    /// production view that reads the real pools lands with the game harness (A22).
-    /// </remarks>
-    public HostConstructionExecutor HostConstructionExecutor { get; private set; }
+    /// <summary>Reads subscription eligibility directly from the transport's live player data.</summary>
+    public Func<ushort, int?> SubscriptionPlanetProvider { get; set; }
 
     /// <summary>
     /// The host's death transaction ledger, or null until a host authority world begins (A19).
@@ -358,8 +256,7 @@ public sealed class AuthoritySession : IDisposable
     /// which opens the one death transaction per object generation and runs the side-effect binding
     /// (kill statistics, drops, construction-task release) exactly once. A22 wired the vanilla
     /// death commit into it: statistics and drops are vanilla-delegated (the host's own
-    /// HandleZeroHp runs them once), the binding releases construction tasks over
-    /// <see cref="HostConstructionLedger"/>, and <see cref="HostDeathCapture"/> observes the
+    /// HandleZeroHp runs them once), and <see cref="HostDeathCapture"/> observes the
     /// vanilla commit. A client never owns one — a client-visible death is the replica's
     /// tombstone, not a local transaction.
     /// </remarks>
@@ -378,19 +275,6 @@ public sealed class AuthoritySession : IDisposable
 
     /// <summary>Registers the vanilla-death capture. Called once per world by the adapter wiring.</summary>
     public void SetHostDeathCapture(HostDeathCapture capture) => HostDeathCapture = capture;
-
-    /// <summary>
-    /// The fault link between the replicator and the network sink, or null when injection is off (A22).
-    /// </summary>
-    /// <remarks>
-    /// Host-only, set at registration when <see cref="AuthorityFaultControl"/> is armed. The frame
-    /// boundary pumps it after capture and digest publication, so delivery stays deterministic:
-    /// a delayed packet arrives at a later boundary, a paused one when the driver ends the pause.
-    /// </remarks>
-    public FaultyAuthorityLink FaultLink { get; private set; }
-
-    /// <summary>Registers the fault link. Called once per world by the adapter wiring.</summary>
-    public void SetFaultLink(FaultyAuthorityLink link) => FaultLink = link;
 
     /// <summary>True when this session is a host authority world with a live command inbox.</summary>
     public bool IsHostAuthority => identity.IsHost && identity.IsActive && commands != null;
@@ -459,7 +343,7 @@ public sealed class AuthoritySession : IDisposable
     /// <para>
     /// This is also the point the A05 guard policy is verified. Both sides reach it — the host from
     /// its world load and the client from adopting the host's welcome — so a missing required hook
-    /// stops the mode here, on both peers, instead of letting one of them run without its guard.
+    /// stops multiplayer here, on both peers, instead of letting one of them run without its guard.
     /// DESIGN 1.8 requires that failure to be loud rather than a quiet fallback to dual simulation.
     /// </para>
     /// </remarks>
@@ -472,10 +356,10 @@ public sealed class AuthoritySession : IDisposable
         }
 
         // Verified before the identity is adopted, so a failed check leaves the session in whatever
-        // state it was in rather than half-entering a mode it cannot run.
+        // state it was in without installing a runtime that lacks its guards.
         if (!AuthorityRuleGuard.VerifyLoadOnce())
         {
-            Log.Error("[authority] refusing to enter authority mode: " + AuthorityRuleGuard.LoadFailure);
+            Log.Error("[authority] refusing to initialize multiplayer world: " + AuthorityRuleGuard.LoadFailure);
             return;
         }
 
@@ -500,29 +384,18 @@ public sealed class AuthoritySession : IDisposable
             lastConnectionEpoch = 0;
             commands?.Clear();
             scopeControl.Clear();
-            HostPlayers?.Clear();
-            HostPlayers = null;
-            HostLedger = null;
-            HostCombat?.Clear();
-            HostCombat = null;
-            HostCombatExecutor = null;
             hostExecutor = null;
-            HostEffects?.Clear();
-            HostEffects = null;
-            ClientEffects = null;
-            HostConstructionLedger?.Clear();
-            HostConstructionLedger = null;
-            HostConstruction = null;
-            HostConstructionExecutor = null;
+            CommandResultSink = null;
+            SubscriptionPlanetProvider = null;
             HostDeaths?.Clear();
             HostDeaths = null;
             HostDeathCapture?.Clear();
             HostDeathCapture = null;
-            // A22: the new world's registration re-arms the link if fault injection is still on.
-            FaultLink = null;
             // A22: the new world plans its standing subscriptions from scratch; the old world's
             // scopes must not suppress the new world's initial subscribes.
             standingScopes.Clear();
+            standingRetries.Clear();
+            replicaPools.Clear();
             standingPlanetId = -1;
             standingInSector = false;
         }
@@ -534,35 +407,9 @@ public sealed class AuthoritySession : IDisposable
         commands = isHost ? new HostCommandQueue(epoch) : null;
         if (isHost)
         {
-            HostPlayers = new HostPlayerRegistry();
-            HostLedger = new HostResourceLedger(epoch);
-            // A11: per-player combat runtime plus its executor. Target rules stay null until the
-            // game adapter can read the pools (A12/A13); until then fire intents are NotReady
-            // rather than validated against an invented target.
-            HostCombat = new HostPlayerSimulation();
-            HostCombatExecutor = new HostPlayerCombatExecutor(HostPlayers, HostLedger, HostCombat, rules: null);
-            hostExecutor = HostCombatExecutor;
-            // A14: the host publishes one visual event per decided skill. Delivery to clients
-            // belongs to A20; until then events queue here instead of being invented elsewhere.
-            HostEffects = new HostEffectEmitter();
-            ClientEffects = null;
-            // A16: construction task truth plus its candidate service. The base source stays null
-            // until the production base adapter lands, so base owners are fail-closed Disabled.
-            HostConstructionLedger = new ConstructionTaskLedger(epoch);
-            HostConstruction = new HostConstructionService(epoch, HostPlayers, HostConstructionLedger);
-            // A17: repair execution over the ledger above. No damage/owner world view is
-            // installed yet, so the frame tick below is a no-op until the game adapter that
-            // reads the real combat/construct pools and energies lands (harness-verified, A22).
-            HostConstructionExecutor = new HostConstructionExecutor(epoch, HostPlayers,
-                HostConstructionLedger, HostConstruction, HostLedger);
-            // A19: one death ledger per world, bound to the task ledger so a death releases its
-            // dependent construction tasks exactly once. A22 confirmed the statistics/drop side is
-            // vanilla-delegated: the host's vanilla HandleZeroHp records kill statistics and the
-            // per-kind KillXxxFinally drops in the same call the capture observes, so a binding
-            // that ran them too would double them. The ledger's own side is tombstone, dedup and
-            // task release.
-            HostDeaths = new HostDeathLedger(epoch, new ConstructionTaskDeathBinding(HostConstructionLedger));
-            HostCombatExecutor.DeathLedger = HostDeaths;
+            // Native host rules already settle drops and statistics. This ledger observes their
+            // generation-aware deaths without installing a second construction/resource model.
+            HostDeaths = new HostDeathLedger(epoch, binding: null);
         }
 
         // A06 wiring. A client gets a replica and the applier that feeds it inside the A04/A05 apply
@@ -602,10 +449,21 @@ public sealed class AuthoritySession : IDisposable
             {
                 Replica = WorldReplica
             };
-            WorldReplica.MirrorObserver = new CompositeMirrorObserver(factoryBinding, groundBinding, spaceBinding, craftBinding);
+            DarkFogReplica = new DarkFogReplicaBinding();
+            WorldReplica.MirrorObserver = new CompositeMirrorObserver(factoryBinding, groundBinding, spaceBinding, craftBinding, DarkFogReplica)
+            { EnforceReadiness = RequireGamePools };
+            ReplicaPoolIdentity = scope => scope.Kind switch
+            {
+                PoolKind.GroundEnemy => GameMain.galaxy?.PlanetById(scope.Scope)?.factory?.enemyPool,
+                PoolKind.Entity => GameMain.galaxy?.PlanetById(scope.Scope)?.factory?.entityPool,
+                PoolKind.GroundCraft => GameMain.galaxy?.PlanetById(scope.Scope)?.factory?.craftPool,
+                PoolKind.Base => GameMain.galaxy?.PlanetById(scope.Scope)?.factory?.enemySystem?.bases.buffer,
+                PoolKind.SpaceEnemy => GameMain.spaceSector?.enemyPool,
+                PoolKind.SpaceCraft => GameMain.spaceSector?.craftPool,
+                _ => (object)GameMain.spaceSector
+            };
             // A14: the client's visual-event table. Predictions merge by cause when the host
             // event arrives; the table carries no HP/shield/ledger reference by construction.
-            ClientEffects = new EffectBinding(epoch);
         }
 
         Log.Info($"[authority] world epoch {epoch} begun (host={isHost})");
@@ -618,7 +476,7 @@ public sealed class AuthoritySession : IDisposable
     /// Called once per world by the adapter cards that can read the vanilla pools (A08 and later)
     /// and by the tests' fake world. Registering twice would strand two divergent replication
     /// states behind one capture seam, so it is refused instead of replaced. Until this is called,
-    /// a host authority world captures nothing: the mode cannot publish facts it has no source for.
+    /// a host authority world captures nothing: multiplayer cannot publish facts it has no source for.
     /// </remarks>
     public bool RegisterHostReplication(IHostWorldView worldView, IReplicationSink sink)
     {
@@ -690,10 +548,8 @@ public sealed class AuthoritySession : IDisposable
             {
                 connectionEpochs.Remove(playerId);
                 commands?.ForgetConnection(epoch);
-                HostLedger?.ForgetConnection(epoch);
             }
         }
-        HostPlayers?.MarkOfflineBySession(playerId);
         // A22: the replicator's cursors are per connection. A reconnecting client reuses the same
         // session player id with a new connection epoch, so leaving the old cursors in place made
         // its re-subscribe hit the "healthy active cursor" path and return no baseline — the new
@@ -771,33 +627,29 @@ public sealed class AuthoritySession : IDisposable
 
         if (identity.IsHost)
         {
+            BeforeHostFrame?.Invoke(hostTick);
             if (hostExecutor is IHostTickAware tickAware) tickAware.HostTick = hostTick;
-            commands?.Drain(hostExecutor, null);
-            HostCombatExecutor?.TickContinuous();
-            // Construction currently uses server claims and the native drone loops. Empty-input
-            // task ticks do no construction and cancel restored tasks; leave the model dormant
-            // until a real world/energy/presentation adapter is installed.
-            // A14: one visual event per decided skill, published in the same frame work that
-            // spent the cost. Delivery to clients belongs to A20; until then events queue in
-            // the emitter instead of being invented anywhere else.
-            var emitter = HostEffects;
-            var combatExecutor = HostCombatExecutor;
-            if (emitter != null && combatExecutor != null)
-            {
-                while (combatExecutor.TryTakePendingSkill(out var skill))
-                {
-                    emitter.TryEmit(skill, out _);
-                }
-            }
+            commands?.Drain(hostExecutor, CommandResultSink);
             DrainSnapshotAcks();
             // A20: subscription and resync requests join the acks at the frame boundary, where the
             // replicator's cursors may move. The subscription policy is enforced from the host's
-            // own registry facts, never from the packet's claims.
+            // accepted live player data, never from the packet's claims.
             DrainScopeControl();
             return;
         }
 
+        if (ReplicaPoolIdentity != null && WorldReplica != null)
+            foreach (var scope in standingScopes)
+            {
+                if (WorldReplica.MirrorObserver is IReplicaBaselineReadiness readiness && !readiness.IsReadyForBaseline(scope)) continue;
+                var pool = ReplicaPoolIdentity(scope);
+                if (pool == null) continue;
+                if (replicaPools.TryGetValue(scope, out var oldPool) && ReferenceEquals(pool, oldPool)) continue;
+                ApplyContext.Run(new ApplyScope(scope, hostTick: hostTick), () => WorldReplica.ReapplyScope(scope));
+                replicaPools[scope] = pool;
+            }
         DrainReplicaInbox();
+        WorldReplica?.RetryPendingBaselines((scope, apply) => ApplyContext.Run(new ApplyScope(scope, hostTick: hostTick), apply));
     }
 
     /// <summary>
@@ -810,22 +662,21 @@ public sealed class AuthoritySession : IDisposable
     public void OnFrameComplete(long hostTick)
     {
         if (!identity.IsActive || !identity.IsHost) return;
+        AfterHostFrame?.Invoke(hostTick);
         // A22: commit the deaths the frame's rules captured before the scan reads the pools, so a
-        // tombstone and its construction-task release exist by the time the frame's despawn is
+        // generation-aware death observation exists by the time the frame's despawn is
         // published. Drain is a no-op when no capture is registered (fail-closed).
         HostDeathCapture?.Drain(hostTick);
         Capture?.Capture(hostTick);
         // A20: the periodic digest rides the same post-frame safe point as capture, so it observes
         // exactly the member table the frame's scan published.
         HostReplicator?.PublishDigests(hostTick, DigestIntervalTicks);
-        // A22: one deterministic delivery cycle for the fault link, after this frame's facts were
-        // produced. With no link this is nothing; with a delay, packets move one boundary at a time.
-        FaultLink?.Pump();
     }
 
-    /// <summary>
-    /// The executor drained host commands are handed to. Unset in A04, set by A11/A18.
-    /// </summary>
+    /// <summary>Returns command outcomes to the authenticated connection.</summary>
+    public Action<QueuedHostCommand, CommandDrainDisposition, CommandOutcome> CommandResultSink { get; set; }
+
+    /// <summary>Optional command handler; unsupported commands return NotReady.</summary>
     public IHostCommandExecutor HostExecutor
     {
         get => hostExecutor;
@@ -966,7 +817,7 @@ public sealed class AuthoritySession : IDisposable
     /// Applies every queued scope-control request to the replicator (A20).
     /// </summary>
     /// <remarks>
-    /// The host-side eligibility check runs from the registry: an unknown or offline player
+    /// The host-side eligibility check reads the transport's live player data: an unknown player
     /// subscribes to nothing, and a planet pool is only served for the planet the host accepted the
     /// player on. Resync requests are not eligibility-gated — a broken stream is repaired whatever
     /// the player did, because the alternative is a permanently divergent replica.
@@ -989,12 +840,9 @@ public sealed class AuthoritySession : IDisposable
             switch (request.Op)
             {
                 case ScopeControlOp.Subscribe:
-                    var planetId = 0;
-                    if (HostPlayers != null && HostPlayers.TryGetBySession(request.PlayerId, out var state))
-                    {
-                        planetId = state.PlanetId;
-                    }
-                    if (ScopeSubscriptionPolicy.MaySubscribe(request.Scope, planetId != 0, planetId)
+                    var location = SubscriptionPlanetProvider?.Invoke(request.PlayerId);
+                    var planetId = location.GetValueOrDefault();
+                    if (ScopeSubscriptionPolicy.MaySubscribe(request.Scope, location.HasValue, planetId)
                             != ScopeSubscriptionDecision.Allowed)
                     {
                         System.Threading.Interlocked.Increment(ref scopeControlRefused);
@@ -1045,7 +893,8 @@ public sealed class AuthoritySession : IDisposable
     public bool TryUnsubscribeScope(ScopeKey scope)
     {
         if (WorldReplica == null || !scope.IsValid) return false;
-        WorldReplica.Unsubscribe(scope);
+        ApplyContext.Run(new ApplyScope(scope), () => WorldReplica.Unsubscribe(scope));
+        replicaPools.Remove(scope);
         scopeControlSink?.Send(ScopeControlOp.Unsubscribe, scope, ScopeRecoveryReason.None,
             digestOnly: false, subscriptionEpoch: 0, lastAppliedSequence: 0);
         return true;
@@ -1076,7 +925,8 @@ public sealed class AuthoritySession : IDisposable
     {
         // Only a client holds a replica; a host session has nothing to subscribe.
         if (WorldReplica == null) return;
-        if (currentPlanetId == standingPlanetId && isInSector == standingInSector) return;
+        if (currentPlanetId == standingPlanetId && isInSector == standingInSector)
+        { RetryStandingSubscriptions(); return; }
         standingPlanetId = currentPlanetId;
         standingInSector = isInSector;
 
@@ -1106,6 +956,7 @@ public sealed class AuthoritySession : IDisposable
             if (!stillDesired)
             {
                 TryUnsubscribeScope(held);
+                standingRetries.Remove(held);
                 standingScopes.RemoveAt(i);
             }
         }
@@ -1125,12 +976,28 @@ public sealed class AuthoritySession : IDisposable
             if (!alreadyHeld && TrySubscribeScope(scope))
             {
                 standingScopes.Add(scope);
+                standingRetries[scope] = LastFrameTick + 120;
             }
         }
     }
 
     /// <summary>The standing set this client currently holds, as last planned.</summary>
     public IReadOnlyList<ScopeKey> StandingScopes => standingScopes;
+
+    private readonly Dictionary<ScopeKey, long> standingRetries = new();
+    private void RetryStandingSubscriptions()
+    {
+        foreach (var scope in standingScopes)
+        {
+            if (!WorldReplica.Versions.TryGetScope(scope, out var state) || state.Phase != SubscriptionPhase.Snapshotting) continue;
+            if (standingRetries.TryGetValue(scope, out var due) && LastFrameTick < due) continue;
+            standingRetries[scope] = LastFrameTick + 120;
+            // A location packet can arrive after the first subscribe. Repeat the request without
+            // replacing staged data or incrementing identity; the host coalesces in-flight baselines.
+            scopeControlSink?.Send(ScopeControlOp.Subscribe, scope, ScopeRecoveryReason.None, false,
+                state.SubscriptionEpoch, state.LastAppliedSequence);
+        }
+    }
 
     private void DrainSnapshotAcks()
     {
@@ -1154,7 +1021,7 @@ public sealed class AuthoritySession : IDisposable
     }
 
     /// <summary>
-    /// Returns the session to the legacy state and clears every queue.
+    /// Clears the session protocol and world identity and clears every queue.
     /// </summary>
     /// <remarks>
     /// Called on pause, world load and leaving the room. Clearing the epoch is what makes a packet
@@ -1169,26 +1036,16 @@ public sealed class AuthoritySession : IDisposable
             lastConnectionEpoch = 0;
             commands?.Clear();
             commands = null;
-            HostPlayers?.Clear();
-            HostPlayers = null;
-            HostLedger = null;
-            HostCombat?.Clear();
-            HostCombat = null;
-            HostCombatExecutor = null;
             hostExecutor = null;
-            HostEffects?.Clear();
-            HostEffects = null;
-            ClientEffects = null;
-            HostConstructionLedger?.Clear();
-            HostConstructionLedger = null;
-            HostConstruction = null;
-            HostConstructionExecutor = null;
+            CommandResultSink = null;
+            SubscriptionPlanetProvider = null;
             HostDeaths?.Clear();
             HostDeaths = null;
             HostDeathCapture?.Clear();
             HostDeathCapture = null;
-            FaultLink = null;
             standingScopes.Clear();
+            standingRetries.Clear();
+            replicaPools.Clear();
             standingPlanetId = -1;
             standingInSector = false;
             snapshotAcks.Clear();

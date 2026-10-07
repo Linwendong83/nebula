@@ -126,6 +126,7 @@ public class RemotePlayerModel
 
     public void Destroy()
     {
+        Multiplayer.Session.CombatAuthority.PreserveDisconnectedActor(PlayerId);
         using var wreckageScope = new NebulaWorld.Combat.RemoteWreckageScope(this);
         Object.Destroy(PlayerTransform.gameObject);
         PlayerTransform = null;

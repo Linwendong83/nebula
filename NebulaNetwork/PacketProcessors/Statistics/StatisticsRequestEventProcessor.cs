@@ -57,9 +57,12 @@ internal class StatisticsRequestEventProcessor : PacketProcessor<StatisticsReque
         if (astroFilter == 0) return;
         var window = UIRoot.instance.uiGame.statWindow;
         var originalAstroFilter = window.astroFilter;
-        window.astroFilter = astroFilter;
-        window.RefreshProductionExtraInfo(true);
-        window.astroFilter = originalAstroFilter;
+        try
+        {
+            window.astroFilter = astroFilter;
+            window.RefreshProductionExtraInfo(true);
+        }
+        finally { window.astroFilter = originalAstroFilter; }
 
         using var writer = new BinaryUtils.Writer();
         var factoryCount = ExportExtension(writer.BinaryWriter, astroFilter);

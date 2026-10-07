@@ -1,11 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.IO;
 using NebulaModel.DataStructures;
 using NebulaModel.Logger;
 using NebulaModel.Networking.Serialization;
 using NebulaModel.Packets.Combat.Mecha;
-using NebulaModel.Utils;
 using NebulaWorld.GameStates;
 
 namespace NebulaWorld.Combat;
@@ -14,6 +12,7 @@ public sealed class PlayerLifeManager : IDisposable
 {
     private PlayerLifePacket pending;
     private long lastSend;
+    private long lastCheckpoint;
     private int lastStage = -1;
     private readonly Dictionary<ushort, long> received = new();
     private readonly HashSet<ushort> refusedSnapshotPlayers = new();
@@ -25,9 +24,15 @@ public sealed class PlayerLifeManager : IDisposable
         if (!Multiplayer.Session.IsGameLoaded || Multiplayer.Session.IsDedicated) return;
         var bytes = MetadataTransactionManager.CapturePlayer();
         var data = (PlayerData)Multiplayer.Session.LocalPlayer.Data;
-        AtomicFile.Write(LocalPath(), bytes);
+        Multiplayer.Session.CombatAuthority.RememberPersonalCheckpoint(data.Life.Revision);
+        lastCheckpoint = DateTime.UtcNow.Ticks;
         pending = new PlayerLifePacket
-        { PlayerId = data.PlayerId, Life = data.Life, PlayerSnapshot = bytes };
+        { PlayerId = data.PlayerId, Life = data.Life, PlayerSnapshot = bytes,
+            CombatRevision = Multiplayer.Session.CombatAuthority.LastAppliedRevision,
+            CoreEnergyDebitAcknowledged = Multiplayer.Session.CombatAuthority.CoreDebitAcknowledged,
+            LastCombatCommand = Multiplayer.Session.CombatAuthority.LastAppliedCommand,
+            DebitItemsAcknowledged = Multiplayer.Session.CombatAuthority.DebitItemsAcknowledged,
+            DebitTotalsAcknowledged = Multiplayer.Session.CombatAuthority.DebitTotalsAcknowledged };
         lastStage = data.Life.RespawnStage;
         Send();
     }
@@ -57,26 +62,33 @@ public sealed class PlayerLifeManager : IDisposable
         var action = GameMain.mainPlayer.controller.actionDeath;
         if (!GameMain.mainPlayer.isAlive && action.respawning && action.respawnStage != lastStage) Publish();
         else if (pending != null && DateTime.UtcNow.Ticks - lastSend > TimeSpan.TicksPerSecond * 2) Send();
+        else if (DateTime.UtcNow.Ticks - lastCheckpoint >= TimeSpan.TicksPerSecond * 5) Publish();
     }
 
-    public static void StoreServer(PlayerData player, byte[] snapshot)
+    public static bool StoreServer(PlayerData player, byte[] snapshot, long commandAck = 0, double debitAck = 0,
+        int[] itemAcks = null, int[] debitAcks = null, long combatRevision = 0)
     {
-        // Retired: snapshots no longer overwrite host state. Player balances live in the host
-        // ledger and persistence moves through the authority sidecar (A21). Kept as a no-op so
-        // the life broadcast path still compiles; a stale or forged snapshot restores nothing.
+        // Only the processor for an authenticated connection may call this. Personal inventory,
+        // energy and life still have a local game adapter; the authority sidecar stores none of
+        // them. Persist their latest checkpoint in the same .server save as the world.
+        var checkpoint = TryReadSnapshot(snapshot);
+        itemAcks ??= Array.Empty<int>(); debitAcks ??= Array.Empty<int>();
+        if (Multiplayer.Session?.IsServer == true &&
+            !Multiplayer.Session.CombatAuthority.ValidateCheckpoint(player.PlayerId, commandAck, debitAck, itemAcks, debitAcks)) return false;
+        var requestedRespawn = checkpoint?.Life?.IsAlive == true;
+        var personalFight = checkpoint?.Mecha?.FightData;
+        if (player.CombatAuthoritative && !Multiplayer.Session.CombatAuthority.ValidatePersonalStocks(player.PlayerId, combatRevision, personalFight)) return false;
+        if (!player.TryApplyPersonalSnapshot(checkpoint)) return false;
+        if (Multiplayer.Session?.IsServer == true && player.CombatAuthoritative)
+            Multiplayer.Session.CombatAuthority.AcceptCheckpoint(player.PlayerId, player, checkpoint, commandAck, debitAck,
+                itemAcks, debitAcks, requestedRespawn, personalFight, combatRevision);
+        return true;
     }
 
     public static void RestoreServer(PlayerData player)
     {
-        var path = ServerPath(player.PersistentId);
-        if (!File.Exists(path)) return;
-        var snapshot = TryReadSnapshot(File.ReadAllBytes(path));
-        if (snapshot == null || snapshot.Life.Revision <= player.Life.Revision) return;
-        player.Mecha = snapshot.Mecha;
-        player.Life = snapshot.Life;
-        player.LocalPlanetId = snapshot.LocalPlanetId;
-        player.LocalPlanetPosition = snapshot.LocalPlanetPosition;
-        player.UPosition = snapshot.UPosition;
+        // The loaded .server file is the recovery point. Older per-player .bin files belong
+        // to a different world save moment and must not replace its inventory or life.
     }
 
     /// <summary>
@@ -86,7 +98,7 @@ public sealed class PlayerLifeManager : IDisposable
     /// </summary>
     private static PlayerData TryReadSnapshot(byte[] bytes)
     {
-        if (bytes == null || bytes.Length == 0) return null;
+        if (bytes == null || bytes.Length == 0 || bytes.Length > 4 * 1024 * 1024) return null;
         try
         {
             var snapshot = new PlayerData();
@@ -102,18 +114,8 @@ public sealed class PlayerLifeManager : IDisposable
 
     public void RestoreLocal(PlayerData data)
     {
-        var path = LocalPath();
-        if (File.Exists(path))
-        {
-            var snapshot = TryReadSnapshot(File.ReadAllBytes(path));
-            if (snapshot != null && snapshot.Life.Revision > data.Life.Revision &&
-                (snapshot.Life.DeathCount > data.Life.DeathCount || !snapshot.Life.IsAlive))
-            {
-                data.Life = snapshot.Life;
-                snapshot.Mecha.UpdateMech(GameMain.mainPlayer);
-                SimulatedWorld.FixPlayerAfterImport();
-            }
-        }
+        // A cached local death is not evidence that the player is still dead. The server's
+        // selected save already supplied the matching inventory and latest life state.
         var life = data.Life;
         PlayerLifeData.NextRevision(life.Revision);
         PlayerLifeData.CurrentTransactionId = life.TransactionId;
@@ -182,10 +184,6 @@ public sealed class PlayerLifeManager : IDisposable
     }
 
     public void Remove(ushort playerId) => received.Remove(playerId);
-    private static string LocalPath() => Path.Combine(GameConfig.propertyFolder, "Nebula",
-        AtomicFile.IdentityFileName(MetadataManager.LocalIdentity), SaveManager.WorldId + ".life");
-    private static string ServerPath(string identity) => Path.Combine(GameConfig.gameSaveFolder, "Nebula",
-        SaveManager.WorldId, "players", AtomicFile.IdentityFileName(identity) + ".bin");
     public void Dispose()
     {
         pending = null; received.Clear();
